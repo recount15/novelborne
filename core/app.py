@@ -100,6 +100,35 @@ def _progress_html(state):
 _token_md = status_bar._token_md
 _token_title_md = status_bar._token_title_md
 
+
+# ---------- 统一输出构造：yield 元组形状的唯一定义点 ----------
+# on_start 输出 11 元组（contracts.py 取 state@[1]、status@[2]）、on_send 输出 7 元组
+# （state@[2]）。u1-u4 为 Gradio 遗留 UI 对象，FastAPI 路径经 contracts 过滤。
+# 显式参数未传时按主流路径计算默认值；错误分支显式传自己的常量。
+def _out_start(chat, state, status, progress=None, token=None, title=None, panel=None,
+               u1=None, u2=None, u3=None, u4=None):
+    st = state if state is not None else {}
+    return (chat, state, status,
+            progress if progress is not None else _progress_html(st),
+            token if token is not None else _token_md(st),
+            title if title is not None else _token_title_md(st),
+            panel if panel is not None else st.get("state_panel", ""),
+            u1 if u1 is not None else gr.update(),
+            u2 if u2 is not None else gr.update(),
+            u3 if u3 is not None else gr.update(),
+            u4 if u4 is not None else gr.update())
+
+
+def _out_send(chat, state, msg_update=None, progress=None, token=None, title=None, panel=None):
+    st = state if state is not None else {}
+    return (chat,
+            msg_update if msg_update is not None else gr.update(),
+            state,
+            progress if progress is not None else _progress_html(st),
+            token if token is not None else _token_md(st),
+            title if title is not None else _token_title_md(st),
+            panel if panel is not None else st.get("state_panel", ""))
+
 # 配置档状态和兼容导出统一来自 ui.profiles_panel。
 PROFILES = profiles_panel.PROFILES
 ACTIVE_PROFILE = profiles_panel.ACTIVE_PROFILE
@@ -1308,10 +1337,12 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
     chat_off = gr.update(visible=False)
     api_key = (api_key or "").strip() or _provider_key(provider)
     if not api_key:
-        yield [], {"system": "", "history": [], "plot_ready": False,
-                    "gf_stage": "pending", "gf_confirmed": False, "chapter_index": None}, \
-            "⚠️ 请先填入 API Key。", \
-            _progress_html(None), _token_md(None), "### 命运引擎", "### 状态记忆面板", gr.update(), gr.update(), chat_off, gr.update(visible=False)
+        yield _out_start([], {"system": "", "history": [], "plot_ready": False,
+                              "gf_stage": "pending", "gf_confirmed": False, "chapter_index": None},
+                         "⚠️ 请先填入 API Key。",
+                         progress=_progress_html(None), token=_token_md(None),
+                         title="### 命运引擎", panel="### 状态记忆面板",
+                         u3=chat_off, u4=gr.update(visible=False))
         return
     base_url = (base_url or "").strip() or fe.provider_config(provider)["base_url"]
     if mode and mode.startswith("强化"):
@@ -1319,10 +1350,11 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
     # 金手指：推荐项直接生效；自定义必须已确认；选“无”则阻断其他角色金手指。
     gf_decision = engine.resolve(gf, gf_custom if isinstance(gf_custom, dict) else None)
     if not gf_decision["ready"]:
-        yield [], {"system": "", "history": []}, \
-            "⚠️ 自定义金手指尚未确认：请先生成提案并点击『确认采用』。", \
-            _progress_html(None), _token_md(None), "### 命运引擎", "### 状态记忆面板", \
-            gr.update(), gr.update(), chat_off, gr.update(visible=False)
+        yield _out_start([], {"system": "", "history": []},
+                         "⚠️ 自定义金手指尚未确认：请先生成提案并点击『确认采用』。",
+                         progress=_progress_html(None), token=_token_md(None),
+                         title="### 命运引擎", panel="### 状态记忆面板",
+                         u3=chat_off, u4=gr.update(visible=False))
         return
     gf = gf_decision["label"]
     gf_blocked = bool(gf_decision["blocked"])
@@ -1336,22 +1368,24 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
     chapter_index = None
     uploaded_path = fe._to_path(novel_file) if novel_file else None
     if enhanced and (not uploaded_path or not str(uploaded_path).lower().endswith(".txt")):
-        yield [], {"system": "", "history": [], "plot_ready": False,
-                    "gf_stage": "pending", "gf_confirmed": bool(gf_decision["ready"]),
-                    "chapter_index": None}, \
-            "⚠️ 强化模式必须上传 TXT 原著，不能使用作品库；当前未检测到有效上传文件。", \
-            _progress_html(None), _token_md(None), "### 命运引擎", "### 状态记忆面板", \
-            gr.update(), gr.update(), chat_off, gr.update(visible=False)
+        yield _out_start([], {"system": "", "history": [], "plot_ready": False,
+                              "gf_stage": "pending", "gf_confirmed": bool(gf_decision["ready"]),
+                              "chapter_index": None},
+                         "⚠️ 强化模式必须上传 TXT 原著，不能使用作品库；当前未检测到有效上传文件。",
+                         progress=_progress_html(None), token=_token_md(None),
+                         title="### 命运引擎", panel="### 状态记忆面板",
+                         u3=chat_off, u4=gr.update(visible=False))
         return
     if novel_file:
         chapter_index = _split_uploaded_book(novel_file)
         if enhanced and (not chapter_index or not chapter_index.get("chapters")):
-            yield [], {"system": "", "history": [], "plot_ready": False,
-                        "gf_stage": "pending", "gf_confirmed": bool(gf_decision["ready"]),
-                        "chapter_index": chapter_index}, \
-                "⚠️ 强化模式 TXT 切章失败，无法完成剧情准备，请检查章节标题和文本编码。", \
-                _progress_html(None), _token_md(None), "### 命运引擎", "### 状态记忆面板", \
-                gr.update(), gr.update(), chat_off, gr.update(visible=False)
+            yield _out_start([], {"system": "", "history": [], "plot_ready": False,
+                                  "gf_stage": "pending", "gf_confirmed": bool(gf_decision["ready"]),
+                                  "chapter_index": chapter_index},
+                             "⚠️ 强化模式 TXT 切章失败，无法完成剧情准备，请检查章节标题和文本编码。",
+                             progress=_progress_html(None), token=_token_md(None),
+                             title="### 命运引擎", panel="### 状态记忆面板",
+                             u3=chat_off, u4=gr.update(visible=False))
             return
         excerpt = fe.read_upload_text(novel_file, fe.MAX_NOVEL_EXCERPT)
         if excerpt:
@@ -1363,16 +1397,20 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
     if not novel_name:
         work_label = work
         if enhanced:
-            yield [], {"system": "", "history": [], "plot_ready": False,
-                       "gf_stage": "pending", "gf_confirmed": bool(gf_decision["ready"]),
-                       "chapter_index": chapter_index}, \
-                "⚠️ 强化模式必须上传 TXT 原著，不能使用作品库；上传内容为空或不可读取。", \
-                _progress_html(None), _token_md(None), "### 命运引擎", "### 状态记忆面板", \
-                gr.update(), gr.update(), chat_off, gr.update(visible=False)
+            yield _out_start([], {"system": "", "history": [], "plot_ready": False,
+                                  "gf_stage": "pending", "gf_confirmed": bool(gf_decision["ready"]),
+                                  "chapter_index": chapter_index},
+                             "⚠️ 强化模式必须上传 TXT 原著，不能使用作品库；上传内容为空或不可读取。",
+                             progress=_progress_html(None), token=_token_md(None),
+                             title="### 命运引擎", panel="### 状态记忆面板",
+                             u3=chat_off, u4=gr.update(visible=False))
             return
         if not work_label:
-            yield [], {"system": "", "history": []}, "⚠️ 请选择作品库作品，或上传 TXT 原著。", \
-                _progress_html(None), _token_md(None), "### 命运引擎", "### 状态记忆面板", gr.update(), gr.update(), chat_off, gr.update(visible=False)
+            yield _out_start([], {"system": "", "history": []},
+                             "⚠️ 请选择作品库作品，或上传 TXT 原著。",
+                             progress=_progress_html(None), token=_token_md(None),
+                             title="### 命运引擎", panel="### 状态记忆面板",
+                             u3=chat_off, u4=gr.update(visible=False))
             return
 
     # —— 性格来源：上传 MD ＞ 角色模型 ＞ 自定义文本 ＞ 预设 ——
@@ -1791,10 +1829,12 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
             except Exception as summary_exc:  # noqa: BLE001
                 st0["distill"] = {"plot_summary": None, "error": str(summary_exc)}
                 st0["plot_ready"] = False
-                yield [], dict(st0, system="", history=[]), \
-                    f"⚠️ 强化模式剧情提取未完成，禁止正式开局：{summary_exc}", \
-                    _progress_html(st0), _token_md(st0), _token_title_md(st0), \
-                    st0.get("state_panel", ""), gr.update(visible=True), gr.update(visible=False), chat_off, gr.update(visible=False)
+                yield _out_start([], dict(st0, system="", history=[]),
+                                 f"⚠️ 强化模式剧情提取未完成，禁止正式开局：{summary_exc}",
+                                 progress=_progress_html(st0), token=_token_md(st0),
+                                 title=_token_title_md(st0), panel=st0.get("state_panel", ""),
+                                 u1=gr.update(visible=True), u2=gr.update(visible=False),
+                                 u3=chat_off, u4=gr.update(visible=False))
                 return
             _start_background_distillation(st0, client, model, sync_first=True)
             # 强化模式在此只完成剧情准备；正式第一幕必须由聊天框两步确认后触发。
@@ -1840,9 +1880,9 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
                 pass
             engine.persistence.save_state(st0, root=fe.WRITABLE_DIR, start_params=st0.get("start_params"),
                            session_id=str(st0.get("session_id") or "") or None)
-            yield [{"role": "assistant", "content": st0["history"][0]["content"]}], st0, \
-                "✅ 剧情准备完成，等待聊天框确认金手指与开局。", _progress_html(st0), _token_md(st0), \
-                _token_title_md(st0), st0.get("state_panel", ""), hide, show, chat_on, gr.update(visible=True)
+            yield _out_start([{"role": "assistant", "content": st0["history"][0]["content"]}], st0,
+                             "✅ 剧情准备完成，等待聊天框确认金手指与开局。",
+                             u1=hide, u2=show, u3=chat_on, u4=gr.update(visible=True))
             return
         # 基础模式同样先给玩家一份玩法速览（进持久历史，加载存档后仍可回看）。
         opening_msgs = [{"role": "assistant", "content": _gameplay_briefing(mode, nemesis_on)}]
@@ -1850,16 +1890,17 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
             opening_msgs.append({"role": "assistant", "content": st0["traverse_receipt"]})
         history = history + opening_msgs
         st0["history"] = history
-        yield opening_msgs + [
-               {"role": "assistant", "content": "…正在唤醒命运引擎，生成开场…"}], st0, status, \
-            _progress_html(st0), _token_md(st0), _token_title_md(st0), st0.get("state_panel", ""), hide, show, chat_on, gr.update(visible=True)
+        yield _out_start(opening_msgs + [
+               {"role": "assistant", "content": "…正在唤醒命运引擎，生成开场…"}], st0, status,
+            u1=hide, u2=show, u3=chat_on, u4=gr.update(visible=True))
         acc = ""
         ub = {}
         for acc in fe.stream_reply_with_retry(client, model, st0["system"], history, usage_box=ub,
                                                extra_kwargs=request_kwargs, provider=provider,
                                                thinking_mode=thinking_mode, thinking_param=thinking_param):
-            yield [{"role": "assistant", "content": fe.strip_hidden(acc) or "…"}], \
-                dict(st0, history=history), status, _progress_html(st0), _token_md(st0), _token_title_md(st0), st0.get("state_panel", ""), hide, show, chat_on, gr.update(visible=True)
+            yield _out_start([{"role": "assistant", "content": fe.strip_hidden(acc) or "…"}],
+                             dict(st0, history=history), status,
+                             u1=hide, u2=show, u3=chat_on, u4=gr.update(visible=True))
         _accum_tokens(st0, ub, est_in=int((len(system) + len(fe.opening_user_message())) / 1.5),
                       est_out=int(len(acc) / 1.5))
         history = history + [{"role": "assistant", "content": acc}]
@@ -1870,12 +1911,14 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
         opening_display, opening_options_block = _finalize_options(st0, acc)
         opening_content = (opening_display + "\n\n" + opening_options_block).strip() \
             if opening_options_block else opening_display
-        yield [{"role": "assistant", "content": opening_content}], \
-            dict(st0, history=history), status, _progress_html(st0), _token_md(st0), _token_title_md(st0), st0.get("state_panel", ""), hide, show, chat_on, gr.update(visible=True)
+        yield _out_start([{"role": "assistant", "content": opening_content}],
+                         dict(st0, history=history), status,
+                         u1=hide, u2=show, u3=chat_on, u4=gr.update(visible=True))
     except Exception as e:  # noqa: BLE001
-        yield [{"role": "assistant", "content": f"⚠️ 调用模型服务失败：{e}"}], \
-            dict(st0, history=[]), "调用失败，请检查 Key 与网络。", \
-            _progress_html(st0), _token_md(st0), _token_title_md(st0), st0.get("state_panel", ""), gr.update(visible=True), gr.update(visible=False), chat_on, gr.update(visible=False)
+        yield _out_start([{"role": "assistant", "content": f"⚠️ 调用模型服务失败：{e}"}],
+                         dict(st0, history=[]), "调用失败，请检查 Key 与网络。",
+                         u1=gr.update(visible=True), u2=gr.update(visible=False),
+                         u3=chat_on, u4=gr.update(visible=False))
 
 
 def _chat_opening_confirmation(message):
@@ -1969,40 +2012,35 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
     """发送玩家行动，流式续写；允许在不重置历史的情况下切换模型参数。"""
     message = (message or "").strip()
     if not message:
-        yield chatbot, gr.update(), state, _progress_html(state), _token_md(state), _token_title_md(state), (state or {}).get("state_panel", "")
+        yield _out_send(chatbot, state)
         return
     if not state or not state.get("system"):
-        yield chatbot + [{"role": "assistant", "content": "⚠️ 请先点击『开始模拟』完成开局。"}], gr.update(), state, \
-            _progress_html(state), _token_md(state), _token_title_md(state), (state or {}).get("state_panel", "")
+        yield _out_send(chatbot + [{"role": "assistant", "content": "⚠️ 请先点击『开始模拟』完成开局。"}], state)
         return
     if str(state.get("mode") or "").startswith("强化"):
         flow = _opening_flow_state(state)
         state["opening_state"] = flow
         if not flow.get("txt_uploaded"):
-            yield chatbot + [{"role": "assistant", "content": "⚠️ 强化模式必须先上传 TXT 原著。"}], gr.update(), state, \
-                _progress_html(state), _token_md(state), _token_title_md(state), (state or {}).get("state_panel", "")
+            yield _out_send(chatbot + [{"role": "assistant", "content": "⚠️ 强化模式必须先上传 TXT 原著。"}], state)
             return
         if not flow.get("plot_ready"):
-            yield chatbot + [{"role": "assistant", "content": "⚠️ 剧情提取尚未完成，当前不能进入正式游戏。"}], gr.update(), state, \
-                _progress_html(state), _token_md(state), _token_title_md(state), (state or {}).get("state_panel", "")
+            yield _out_send(chatbot + [{"role": "assistant", "content": "⚠️ 剧情提取尚未完成，当前不能进入正式游戏。"}], state)
             return
         confirmation = _chat_opening_confirmation(message)
         if not flow.get("gf_confirmed"):
             if confirmation != "gf":
-                yield chatbot + [{"role": "assistant", "content": "⚠️ 请在正式游戏聊天框输入“确认金手指”或“确认无金手指”，完成剧情准备后的金手指确认。"}], gr.update(), state, \
-                    _progress_html(state), _token_md(state), _token_title_md(state), (state or {}).get("state_panel", "")
+                yield _out_send(chatbot + [{"role": "assistant", "content": "⚠️ 请在正式游戏聊天框输入“确认金手指”或“确认无金手指”，完成剧情准备后的金手指确认。"}], state)
                 return
             result = opening_flow.confirm_golden_finger(flow, True, state.get("gf_decision") or {"label": state.get("start_params", {}).get("golden_finger")})
             state["opening_state"] = result["state"]
             state["gf_confirmed"] = True
             state["gf_stage"] = "confirmed"
             chatbot = chatbot + [{"role": "user", "content": message}, {"role": "assistant", "content": "✅ 金手指已在正式游戏聊天框确认。请继续输入“确认开局”，我才会生成第一幕。"}]
-            yield chatbot, gr.update(value=""), state, _progress_html(state), _token_md(state), _token_title_md(state), state.get("state_panel", "")
+            yield _out_send(chatbot, state, msg_update=gr.update(value=""))
             return
         if not flow.get("opening_confirmed"):
             if confirmation != "opening":
-                yield chatbot + [{"role": "assistant", "content": "⚠️ 金手指已确认，请在正式游戏聊天框输入“确认开局”后再开始第一幕。"}], gr.update(), state, \
-                    _progress_html(state), _token_md(state), _token_title_md(state), (state or {}).get("state_panel", "")
+                yield _out_send(chatbot + [{"role": "assistant", "content": "⚠️ 金手指已确认，请在正式游戏聊天框输入“确认开局”后再开始第一幕。"}], state)
                 return
             opening_anchor = _current_anchor_text(state, state.get("current_chapter", 1))
             if not opening_anchor:
@@ -2015,15 +2053,14 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
                 state["scene_gate_reason"] = "首章缺少已验证剧情锚点，无法确认开局。"
                 distill_error = ((state.get("distill") or {}).get("error") or "").strip()
                 detail = f"（{distill_error}，系统稍后会自动重试）" if distill_error else ""
-                yield chatbot + [{"role": "assistant", "content": "⚠️ 首章剧情锚点尚未准备完成，暂不能确认开局；请稍候，待右侧锚点蒸馏进度显示当前章已完成后重试。" + detail}], gr.update(), state, \
-                    _progress_html(state), _token_md(state), _token_title_md(state), state.get("state_panel", "")
+                yield _out_send(chatbot + [{"role": "assistant", "content": "⚠️ 首章剧情锚点尚未准备完成，暂不能确认开局；请稍候，待右侧锚点蒸馏进度显示当前章已完成后重试。" + detail}], state)
                 return
             result = opening_flow.confirm_opening(flow, True)
             state["opening_state"] = result["state"]
             state["opening_confirmed"] = True
             state["opening_phase"] = opening_flow.PHASE_OPENING_CONFIRMED
             chatbot = chatbot + [{"role": "user", "content": message}, {"role": "assistant", "content": "✅ 开局设定已确认，正在生成第一幕。"}]
-            yield chatbot, gr.update(value=""), state, _progress_html(state), _token_md(state), _token_title_md(state), state.get("state_panel", "")
+            yield _out_send(chatbot, state, msg_update=gr.update(value=""))
             message = "开始第一幕。请依据已确认设定生成正式开场。"
         provider = (provider or state.get("provider") or "deepseek").strip()
     base_url = (base_url or state.get("base_url") or fe.provider_config(provider)["base_url"]).strip()
@@ -2061,7 +2098,7 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
         state["scene_gate"] = False
         state["scene_gate_reason"] = f"目标章节第 {target_chapter} 章缺少已验证剧情锚点，无法提交回合。"
         chatbot = chatbot + [{"role": "user", "content": message}, {"role": "assistant", "content": f"⚠️ 目标章节第 {target_chapter} 章缺少已验证剧情锚点，已阻断本回合；请等待锚点准备完成后重试。"}]
-        yield chatbot, gr.update(value=""), state, _progress_html(state), _token_md(state), _token_title_md(state), state.get("state_panel", "")
+        yield _out_send(chatbot, state, msg_update=gr.update(value=""))
         return
     transaction_keys = (
         "round", "current_chapter", "chapter_round", "turn_budget", "total_chapters",
@@ -2149,7 +2186,7 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
     history = state["history"] + [{"role": "user", "content": llm_msg}]
     chatbot = chatbot + [{"role": "user", "content": message},
                          {"role": "assistant", "content": "…"}]
-    yield chatbot, gr.update(), dict(state, history=history), _progress_html(state), _token_md(state), _token_title_md(state), state.get("state_panel", "")
+    yield _out_send(chatbot, dict(state, history=history))
     try:
         client = fe.make_client(api_key, provider, base_url)
         # 铁律注入（代码级保证）：三愿产物 + 永久增补通路的内容，
@@ -2167,7 +2204,7 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
                                                thinking_mode=state["thinking_mode"],
                                                thinking_param=state["thinking_param"]):
             chatbot[-1] = {"role": "assistant", "content": fe.strip_hidden(acc) or "…"}
-            yield chatbot, gr.update(), dict(state, history=history), _progress_html(state), _token_md(state), _token_title_md(state), state.get("state_panel", "")
+            yield _out_send(chatbot, dict(state, history=history))
         _accum_tokens(state, ub,
                       est_in=int((len(state["system"]) + sum(len(h["content"]) for h in history)) / 1.5),
                       est_out=int(len(acc) / 1.5))
@@ -2212,7 +2249,7 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
                 rev_history = history + [{"role": "assistant", "content": acc},
                                          {"role": "user", "content": revise_msg}]
                 chatbot[-1] = {"role": "assistant", "content": fe.strip_hidden(acc) + "\n\n（质检发现问题，正在定向修订…）"}
-                yield chatbot, gr.update(), dict(state, history=rev_history), _progress_html(state), _token_md(state), _token_title_md(state), state.get("state_panel", "")
+                yield _out_send(chatbot, dict(state, history=rev_history))
                 acc = ""
                 ub = {}
                 for acc in fe.stream_reply_with_retry(client, model, turn_system, rev_history, usage_box=ub,
@@ -2220,7 +2257,7 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
                                                       thinking_mode=state["thinking_mode"],
                                                       thinking_param=state["thinking_param"]):
                     chatbot[-1] = {"role": "assistant", "content": fe.strip_hidden(acc) or "…"}
-                    yield chatbot, gr.update(), dict(state, history=rev_history), _progress_html(state), _token_md(state), _token_title_md(state), state.get("state_panel", "")
+                    yield _out_send(chatbot, dict(state, history=rev_history))
                 _accum_tokens(state, ub,
                               est_in=int((len(state["system"]) + sum(len(h["content"]) for h in rev_history)) / 1.5),
                               est_out=int(len(acc) / 1.5))
@@ -2281,7 +2318,7 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
                     {"role": "user", "content": regen_prompt}]
                 chatbot[-1] = {"role": "assistant",
                                "content": fe.strip_hidden(acc) + "\n\n（未过机械门禁，正在按约束自动重写…）"}
-                yield chatbot, gr.update(), dict(state, history=rev_history), _progress_html(state), _token_md(state), _token_title_md(state), state.get("state_panel", "")
+                yield _out_send(chatbot, dict(state, history=rev_history))
                 acc = ""
                 ub = {}
                 for acc in fe.stream_reply_with_retry(client, model, turn_system, rev_history, usage_box=ub,
@@ -2289,7 +2326,7 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
                                                       thinking_mode=state["thinking_mode"],
                                                       thinking_param=state["thinking_param"]):
                     chatbot[-1] = {"role": "assistant", "content": fe.strip_hidden(acc) or "…"}
-                    yield chatbot, gr.update(), dict(state, history=rev_history), _progress_html(state), _token_md(state), _token_title_md(state), state.get("state_panel", "")
+                    yield _out_send(chatbot, dict(state, history=rev_history))
                 _accum_tokens(state, ub,
                               est_in=int((len(state["system"]) + sum(len(h["content"]) for h in rev_history)) / 1.5),
                               est_out=int(len(acc) / 1.5))
@@ -2343,7 +2380,7 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
                 reason = _scene_gate_reasons(budget_check, interaction_check, anchor_check)
                 state["scene_gate_reason"] = "；".join(reason)
                 chatbot[-1] = {"role": "assistant", "content": "⚠️ 本回合未通过机械门禁：" + state["scene_gate_reason"] + "。已自动重写一稿仍未达标，未提交状态、未推进章节；请换个行动再试。"}
-                yield chatbot, gr.update(value=""), dict(state, history=state.get("history", [])), _progress_html(state), _token_md(state), _token_title_md(state), state.get("state_panel", "")
+                yield _out_send(chatbot, dict(state, history=state.get("history", [])), msg_update=gr.update(value=""))
                 return
         if enhanced:
             if (state.get("scene_validation") or {}).get("anchor", {}).get("status") == "fulfilled":
@@ -2386,7 +2423,7 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
                 state["opening_started"] = True
                 state["opening_confirmed"] = True
         chatbot[-1] = {"role": "assistant", "content": fe.strip_hidden(acc)}
-        yield chatbot, gr.update(), dict(state, history=history), _progress_html(state), _token_md(state), _token_title_md(state), state.get("state_panel", "")
+        yield _out_send(chatbot, dict(state, history=history))
 
         # —— 运行日志：提取引擎日志段写入临时文件；缺失则程序补记（代码级保证不漏回合）——
         if enhanced:
@@ -2452,7 +2489,7 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
         if not engine.options_ok(final_display):
             base = engine.truncate_partial_options(final_display)
             history = history + [{"role": "user", "content": fe.OPTION_REPAIR_MESSAGE}]
-            yield chatbot, gr.update(), dict(state, history=history), _progress_html(state), _token_md(state), _token_title_md(state), state.get("state_panel", "")
+            yield _out_send(chatbot, dict(state, history=history))
             acc2 = ""
             ub2 = {}
             for acc2 in fe.stream_reply(client, model, state["system"], history, usage_box=ub2,
@@ -2460,14 +2497,14 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
                                         thinking_param=state.get("thinking_param", "")):
                 merged = (base + "\n\n" + fe.strip_hidden(acc2)).strip()
                 chatbot[-1] = {"role": "assistant", "content": merged or "…"}
-                yield chatbot, gr.update(), dict(state, history=history), _progress_html(state), _token_md(state), _token_title_md(state), state.get("state_panel", "")
+                yield _out_send(chatbot, dict(state, history=history))
             _accum_tokens(state, ub2,
                           est_in=int((len(state["system"]) + sum(len(h["content"]) for h in history)) / 1.5),
                           est_out=int(len(acc2) / 1.5))
             history = history + [{"role": "assistant", "content": acc2}]
             final_display = (base + "\n\n" + fe.strip_hidden(acc2)).strip()
             chatbot[-1] = {"role": "assistant", "content": final_display}
-            yield chatbot, gr.update(), dict(state, history=history), _progress_html(state), _token_md(state), _token_title_md(state), state.get("state_panel", "")
+            yield _out_send(chatbot, dict(state, history=history))
         # —— 选项结构化：选项块从叙事正文剥离写入 state["options"]，由前端按钮渲染；
         #    旧界面在正文末尾重挂规范化文本选项，保持可读。——
         narrative, options_block = _finalize_options(state, final_display)
@@ -2475,7 +2512,7 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
                        "content": (narrative + "\n\n" + options_block).strip() if options_block else narrative}
         engine.persistence.save_state(state, root=fe.WRITABLE_DIR, start_params=state.get("start_params"),
                            session_id=str(state.get("session_id") or "") or None)
-        yield chatbot, gr.update(), dict(state, history=history), _progress_html(state), _token_md(state), _token_title_md(state), state.get("state_panel", "")
+        yield _out_send(chatbot, dict(state, history=history))
     except Exception as e:  # noqa: BLE001
         if enhanced:
             for key, value in transaction_snapshot.items():
@@ -2483,7 +2520,7 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
             state["scene_gate"] = False
             state["scene_gate_reason"] = "模型服务调用失败，已回滚本回合运行状态。"
         chatbot[-1] = {"role": "assistant", "content": f"⚠️ 调用模型服务失败：{e}"}
-        yield chatbot, gr.update(), state, _progress_html(state), _token_md(state), _token_title_md(state), state.get("state_panel", "")
+        yield _out_send(chatbot, state)
 
 
 _fetch_models_ui = golden_finger_panel._fetch_models_ui
