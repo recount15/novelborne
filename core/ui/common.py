@@ -13,8 +13,10 @@ import core.engine.runtime_mechanics
 from core.lore import LoreInjector, load_entries
 
 LOG_DIR = os.path.join(fe.WRITABLE_DIR, "logs")
-WORLD_BOOK_PATH = os.path.join(fe.BASE_DIR, "lore", "default_worldbook.json")
-DATA_DIR = os.path.join(fe.BASE_DIR, "data")
+# 资源路径：assets 布局（源码与 PyInstaller 捆绑一致）。
+# 旧路径 BASE_DIR/lore、BASE_DIR/data 不存在，曾致世界书与桥段库静默加载为空。
+WORLD_BOOK_PATH = os.path.join(fe.BASE_DIR, "assets", "lore", "default_worldbook.json")
+DATA_DIR = os.path.join(fe.BASE_DIR, "assets", "data")
 
 # ---------- 会话日志 ----------
 

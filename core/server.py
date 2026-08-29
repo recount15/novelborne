@@ -897,10 +897,15 @@ def gf_designer_load_spec(spec_id: str) -> dict[str, Any]:
 
 @app.post("/api/models/fetch")
 def fetch_models(request: ModelFetchRequest) -> dict[str, Any]:
-    """拉取可用模型列表；凭据只在本次请求内存中使用，不写入会话或磁盘。"""
+    """拉取可用模型列表；凭据只在本次请求内存中使用，不写入会话或磁盘。
+
+    base_url 为空时按 provider 预设兜底（与 models/test 同规则）。
+    """
+    provider = request.provider or "deepseek"
+    config = fe.provider_config(provider, request.base_url or None)
     try:
         models = fe.fetch_models(
-            request.api_key.strip(), request.provider or "deepseek", request.base_url)
+            request.api_key.strip(), provider, config["base_url"])
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=f"拉取模型列表失败：{exc}") from exc
     return {"models": list(models)}
@@ -908,11 +913,17 @@ def fetch_models(request: ModelFetchRequest) -> dict[str, Any]:
 
 @app.post("/api/models/test")
 def test_model_connection(request: ModelTestRequest) -> dict[str, Any]:
-    """测试模型服务连通性；失败只回错误消息，不回显凭据。"""
+    """测试模型服务连通性；失败只回错误消息，不回显凭据。
+
+    base_url 为空时按 provider 预设兜底（与开局/gf-designer 同规则），
+    已知提供商无需手填即可测通。
+    """
+    provider = request.provider or "deepseek"
+    config = fe.provider_config(provider, request.base_url or None)
     try:
         ok, message = fe.test_connection(
-            request.api_key.strip(), request.provider or "deepseek",
-            request.base_url, request.model)
+            request.api_key.strip(), provider,
+            config["base_url"], request.model)
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "message": str(exc)}
     return {"ok": bool(ok), "message": str(message)}
@@ -1130,7 +1141,7 @@ def character_library_export(id: str | None = None) -> FileResponse:
     except engine.character_library.LibraryError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     count = len(payload["characters"])
-    target_dir = fe.WRITABLE_DIR / "outputs"
+    target_dir = Path(fe.WRITABLE_DIR) / "outputs"
     target_dir.mkdir(parents=True, exist_ok=True)
     suffix = f"-{len(ids)}张" if ids else "-全部"
     path = target_dir / f"character-library-export{suffix}.json"
@@ -2332,4 +2343,5 @@ def frontend_route(path: str) -> FileResponse:
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("api_server:app", host=os.getenv("FATE_API_HOST", "127.0.0.1"), port=int(os.getenv("FATE_API_PORT", "8000")))
+    # 直接以 app 对象启动（老写法 "api_server:app" 引用不存在的模块名，直跑必失败）
+    uvicorn.run(app, host=os.getenv("FATE_API_HOST", "127.0.0.1"), port=int(os.getenv("FATE_API_PORT", "8000")))

@@ -13,8 +13,11 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from core.engine.golden_finger import GoldenFingerSpec, _difficulty_num
+from core import fate_engine as _fe
 
-PROJECT_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+# 用户自定义金手指规格目录：assets 布局（与源码/PyInstaller 捆绑一致）。
+# 旧路径 core/data 不存在，保存的规格对金手指库（bootstrap golden_finger_library）不可见。
+PROJECT_DATA_DIR = Path(_fe.BASE_DIR) / "assets" / "data"
 USER_SPECS_DIR = PROJECT_DATA_DIR / "golden_fingers" / "user"
 
 _LOCK = threading.Lock()

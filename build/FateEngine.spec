@@ -1,9 +1,13 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 datas = [('assets', 'assets'), ('frontend/dist', 'frontend/dist')]
 binaries = []
-hiddenimports = ['core', 'core.server', 'core.app', 'core.fate_engine', 'core.engine', 'core.api', 'core.ui', 'core.memory', 'core.lore', 'core.prompts', 'core.engine.chapter_tools', 'core.engine.plot_summary', 'core.engine.anchor_distiller', 'core.engine.ledger', 'core.engine.persistence', 'core.engine.runtime_mechanics']
+hiddenimports = ['core', 'core.server', 'core.app', 'core.fate_engine']
+# core.engine 等子包使用 __getattr__ 惰性导入，静态分析追踪不到，
+# 必须用 collect_submodules 全量收编，否则运行到对应机制才报缺模块。
+for _pkg in ('core.engine', 'core.api', 'core.ui', 'core.memory', 'core.lore', 'core.prompts'):
+    hiddenimports += collect_submodules(_pkg)
 tmp_ret = collect_all('gradio')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('gradio_client')

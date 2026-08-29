@@ -17,17 +17,19 @@ REM 先手动清理旧产物（避免 --clean 在某些环境下触发删改问�
 if exist build\pkg rmdir /s /q build\pkg
 if exist dist rmdir /s /q dist
 
+REM core.engine 等子包用 __getattr__ 惰性导入，静态分析追踪不到，
+REM 必须 collect-submodules 全量收编，否则运行到对应机制才报缺模块。
 pyinstaller --noconfirm --onedir --name FateEngine ^
   --collect-all gradio --collect-all gradio_client ^
   --collect-all openai --collect-all fastapi --collect-all uvicorn --collect-all multipart ^
   --collect-all httpx --collect-all pydantic ^
   --collect-all safehttpx --collect-all groovy ^
+  --collect-submodules core.engine --collect-submodules core.api ^
+  --collect-submodules core.ui --collect-submodules core.memory ^
+  --collect-submodules core.lore --collect-submodules core.prompts ^
   --add-data "assets;assets" ^
   --add-data "frontend/dist;frontend/dist" ^
   --hidden-import core --hidden-import core.server --hidden-import core.app --hidden-import core.fate_engine ^
-  --hidden-import core.engine --hidden-import core.api --hidden-import core.ui --hidden-import core.memory --hidden-import core.lore --hidden-import core.prompts ^
-  --hidden-import core.engine.chapter_tools --hidden-import core.engine.plot_summary --hidden-import core.engine.anchor_distiller ^
-  --hidden-import core.engine.ledger --hidden-import core.engine.persistence --hidden-import core.engine.runtime_mechanics ^
   --workpath build\pkg --distpath dist ^
   run_app.py
 
