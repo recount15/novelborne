@@ -85,19 +85,18 @@ novelborne/
 │   └── prompts/        # 提示词加载器
 ├── assets/             # 全部静态数据
 │   ├── rules/          # 运行时规则与作品库（原创示例 + 上传蒸馏条目）
-│   ├── data/           # 角色卡、桥段库、技能目录等 JSON
+│   ├── data/           # 角色卡、桥段库、技能目录等 JSON（含 samples/ 原创样书）
 │   ├── personas/       # 性格模型目录（standard / enhanced；当前为空，可自行扩充）
 │   ├── prompts/        # 提示词文案
-│   ├── lore/           # 默认世界书
-│   └── samples/        # 原创样书（强化模式试玩用）
+│   └── lore/           # 默认世界书
 ├── var/                # 全部运行数据（程序自动创建，勿提交）
 │   ├── db/ books/ saves/ sessions/ logs/ outputs/ uploads/
 ├── docs/               # 架构地图 / 接手手册 / 文档规范
 ├── tools/              # 试玩流水线与维护脚本
-├── build/              # exe 构建脚本与 PyInstaller spec
+├── scripts/            # 一次性数据迁移脚本（历史 data/ 布局时代产物）
+├── build/              # exe 构建脚本与 PyInstaller spec（产物在根 dist\）
 ├── frontend/           # Vue 3 + TypeScript + Tailwind 前端
-├── standards/          # 项目规范（AI 协作宪法：架构/代码/数据/接口/测试/提交/文件）
-└── examples/           # API 调用示例
+└── standards/          # 项目规范（AI 协作宪法：架构/代码/数据/接口/测试/提交/文件）
 ```
 
 ## 五、构建可执行版

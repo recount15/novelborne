@@ -1,10 +1,8 @@
 # -*- coding: utf-8 -*-
-"""书中行 · 命运引擎 — 用户界面（Gradio）。
+"""对局编排层：on_start（开局装配+开场生成）与 on_send（回合主流程）。
 
-运行：
-    pip install -r requirements.txt
-    python app.py
-然后在浏览器打开提示的本地地址，选择模型提供商并填入 API Key 即可开始。
+不直接运行本文件：进程入口是根目录 run_app.py（FastAPI 见 core/server.py）。
+历史上曾是 Gradio 单文件应用，模块内仍保留部分 gr.update 兼容构造。
 """
 import os
 import json

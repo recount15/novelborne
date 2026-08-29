@@ -21,13 +21,13 @@ from core import prompts
 def _resource_dir():
     """只读资源（规则、角色模型）所在目录。
     PyInstaller 打包后取捆绑目录（_MEIPASS 或 exe 同级），源码运行取本文件目录。
-    结构整理后本文件位于 legacy/，资源仍在项目根：向上回退查找。"""
+    本文件位于 core/，资源在项目根 assets/：向上回退一级查找。"""
     if getattr(sys, "frozen", False):
         return getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
     here = os.path.dirname(os.path.abspath(__file__))
     if os.path.isdir(os.path.join(here, "assets", "rules")):
         return here
-    parent = os.path.dirname(here)  # 项目根（legacy/ 的上一级）
+    parent = os.path.dirname(here)  # 项目根（core/ 的上一级）
     if os.path.isdir(os.path.join(parent, "assets", "rules")):
         return parent
     return here
