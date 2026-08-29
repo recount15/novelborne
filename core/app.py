@@ -16,7 +16,7 @@ import gradio as gr
 from core import fate_engine as fe
 from core import state_schema
 from core.state_schema import start_setting
-from core.services import registries
+from core.services import game_setup, registries
 import core.engine.plot_summary
 import core.engine.anchor_distiller
 import core.engine.work_distiller
@@ -51,7 +51,6 @@ _new_session_log = ui_common._new_session_log
 _append_log = ui_common._append_log
 _accum_tokens = ui_common._accum_tokens
 _mechanical_progress = ui_common._mechanical_progress
-_split_uploaded_book = ui_common._split_uploaded_book
 _book_dir = ui_common._book_dir
 _chapter_text = ui_common._chapter_text
 _chapter_state = ui_common._chapter_state
@@ -146,60 +145,6 @@ _load_saved_key = profiles_panel._load_saved_key
 _save_profile = profiles_panel._save_profile
 _provider_defaults = profiles_panel._provider_defaults
 _thinking_kwargs = profiles_panel._thinking_kwargs
-
-
-def _nemesis_card_power(nemesis_card: dict) -> int:
-    """按宿敌卡的 original_position 推断其原型强度（与前端实时估算一致）。
-
-    反派=4（远强），主角/男主/女主=3（准远强），配角=2（相当），其余=2。
-    """
-    position = str((nemesis_card or {}).get("original_position") or "").strip()
-    if position == "反派":
-        return 4
-    if position in ("主角", "男主", "女主"):
-        return 3
-    return 2
-
-
-def _member_pack(name, skill, background, power=-1, custom_skill="", participation=1, slot_id="", skill_upload=""):
-    if not name:
-        return None
-    # skill 支持预设下拉、上传文件、skill_source 映射和自定义文本，最终只写一行字段。
-    upload_path = str(skill_upload or "").strip()
-    if isinstance(skill, dict):
-        source = str(skill.get("source", skill.get("type", "preset"))).lower()
-        value = skill.get("value", "")
-        if source == "upload":
-            if isinstance(value, str):
-                upload_path = upload_path or value
-            skill = ""
-        elif source == "custom":
-            custom_skill = str(value or "")
-            skill = ""
-        else:
-            skill = str(value or "")
-    if upload_path and os.path.isfile(upload_path):
-        skill_text = skill_value(fe.read_upload_text(upload_path), custom_skill)
-    elif isinstance(skill, str) and not os.path.isfile(skill):
-        skill_text = skill_value(skill, custom_skill)
-    else:
-        skill_text = fe.read_upload_text(skill) if skill else ""
-        skill_text = skill_value(skill_text, custom_skill)
-    item = {"name": str(name).strip(), "skill": skill_text,
-            "background": background or "", "participation": max(1, min(9, int(participation or 1)))}
-    if slot_id:
-        item["slot_id"] = str(slot_id)
-    labels = {label: value for label, value in POWER_CHOICES}
-    if power in labels:
-        level = labels[power]
-    else:
-        try:
-            level = int(power)
-        except (TypeError, ValueError):
-            level = -1
-    if level >= 0:
-        item["power"] = level
-    return item
 
 
 def _ripple_block(state, message):
@@ -1364,54 +1309,15 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
 
     # —— 作品来源：强化模式严格要求完整 TXT；作品库档案只服务基础模式 ——
     enhanced = bool(mode and str(mode).startswith("强化"))
-    novel_name, novel_excerpt, work_label = None, None, None
-    chapter_index = None
     uploaded_path = fe._to_path(novel_file) if novel_file else None
-    if enhanced and (not uploaded_path or not str(uploaded_path).lower().endswith(".txt")):
-        yield _out_start([], {"system": "", "history": [], "plot_ready": False,
-                              "gf_stage": "pending", "gf_confirmed": bool(gf_decision["ready"]),
-                              "chapter_index": None},
-                         "⚠️ 强化模式必须上传 TXT 原著，不能使用作品库；当前未检测到有效上传文件。",
-                         progress=_progress_html(None), token=_token_md(None),
-                         title="### 命运引擎", panel="### 状态记忆面板",
-                         u3=chat_off, u4=gr.update(visible=False))
+    try:
+        chapter_index, novel_excerpt, novel_name, work_label = game_setup.resolve_work_source(
+            mode, work, novel_file, fragment, novel_display_name,
+            gf_confirmed=bool(gf_decision["ready"]))
+    except game_setup.WorkSourceError as exc:
+        yield _out_start([], exc.state, str(exc), progress=_progress_html(None), token=_token_md(None),
+                         title="### 命运引擎", panel="### 状态记忆面板", u3=chat_off, u4=gr.update(visible=False))
         return
-    if novel_file:
-        chapter_index = _split_uploaded_book(novel_file)
-        if enhanced and (not chapter_index or not chapter_index.get("chapters")):
-            yield _out_start([], {"system": "", "history": [], "plot_ready": False,
-                                  "gf_stage": "pending", "gf_confirmed": bool(gf_decision["ready"]),
-                                  "chapter_index": chapter_index},
-                             "⚠️ 强化模式 TXT 切章失败，无法完成剧情准备，请检查章节标题和文本编码。",
-                             progress=_progress_html(None), token=_token_md(None),
-                             title="### 命运引擎", panel="### 状态记忆面板",
-                             u3=chat_off, u4=gr.update(visible=False))
-            return
-        excerpt = fe.read_upload_text(novel_file, fe.MAX_NOVEL_EXCERPT)
-        if excerpt:
-            novel_excerpt = excerpt
-            novel_name = (novel_display_name or "").strip() or os.path.splitext(os.path.basename(uploaded_path or novel_file))[0]
-            if chapter_index and chapter_index.get("chapters"):
-                first = chapter_index["chapters"][0]
-                novel_excerpt = excerpt[: min(len(excerpt), max(2000, first.get("chars", 2000)))]
-    if not novel_name:
-        work_label = work
-        if enhanced:
-            yield _out_start([], {"system": "", "history": [], "plot_ready": False,
-                                  "gf_stage": "pending", "gf_confirmed": bool(gf_decision["ready"]),
-                                  "chapter_index": chapter_index},
-                             "⚠️ 强化模式必须上传 TXT 原著，不能使用作品库；上传内容为空或不可读取。",
-                             progress=_progress_html(None), token=_token_md(None),
-                             title="### 命运引擎", panel="### 状态记忆面板",
-                             u3=chat_off, u4=gr.update(visible=False))
-            return
-        if not work_label:
-            yield _out_start([], {"system": "", "history": []},
-                             "⚠️ 请选择作品库作品，或上传 TXT 原著。",
-                             progress=_progress_html(None), token=_token_md(None),
-                             title="### 命运引擎", panel="### 状态记忆面板",
-                             u3=chat_off, u4=gr.update(visible=False))
-            return
 
     # —— 性格来源：上传 MD ＞ 角色模型 ＞ 自定义文本 ＞ 预设 ——
     if persona_file:
@@ -1433,64 +1339,12 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
     story_richness = engine.normalize_richness(story_richness)
 
     # —— 宿敌机制（可选）：上传 MD ＞ 角色模型 ＞ 自定义文本 ——
-    enable_nemesis = bool(enable_nemesis and mode.startswith("强化"))
-    nemesis_label, nemesis_persona = None, None
-    if enable_nemesis:
-        if nemesis_file:
-            nemesis_persona = fe.read_upload_text(nemesis_file)
-            display = (nemesis_display_name or "").strip() or os.path.splitext(os.path.basename(nemesis_file))[0]
-            nemesis_label = display + "（上传宿敌）"
-        elif nemesis_select in CHAR_PATH:
-            nemesis_persona = fe.read_character_model(CHAR_PATH[nemesis_select])
-            nemesis_label = nemesis_select
-        else:
-            nemesis_persona = (nemesis_select or "").strip()
-            nemesis_label = "自定义宿敌"
+    nemesis_label, nemesis_persona = game_setup.resolve_nemesis(
+        enable_nemesis, mode, nemesis_file, nemesis_select, nemesis_display_name, CHAR_PATH)
 
     # UI 的动态 roster 为唯一名册来源。
-    companion_rows = list(companion_roster or [])
-    companions = []
-    companion_limit = normalize_count(companion_count, None)
-    for row in companion_rows[:companion_limit or len(companion_rows)]:
-        row = row if isinstance(row, dict) else {}
-        # 无名行保留名额：卡和性格都只是「魂」，名字开局由模型分配（占位名穿越落定后写回）。
-        _row_name = str(row.get("name") or "").strip()
-        _name_pending = not _row_name
-        if _name_pending:
-            _row_name = f"伙伴{len(companions) + 1}"
-        skill_input = row.get("skill_source") if isinstance(row.get("skill_source"), dict) else row.get("skill")
-        packed = _member_pack(_row_name, skill_input, row.get("background"), row.get("power", -1), custom_skill=row.get("custom_skill", ""), participation=row.get("participation", 1), slot_id=row.get("slot_id", ""), skill_upload=row.get("skill_upload", ""))
-        if packed:
-            packed["roster_index"] = len(companions) + 1
-            packed["roster_total"] = companion_limit or len(companion_rows)
-            packed["character_model"] = row.get("character_model", "")
-            packed["character_model_source"] = row.get("character_model_source", "")
-            packed["character_card"] = dict(row.get("character_card") or {})
-            packed["persona_preset"] = str(row.get("persona_preset") or "").strip()
-            if _name_pending:
-                packed["name_pending"] = True
-            companions.append(packed)
-    heroine_rows = list(heroine_roster or [])
-    heroines = []
-    heroine_limit = normalize_count(heroine_count, None)
-    for row in heroine_rows[:heroine_limit or len(heroine_rows)]:
-        row = row if isinstance(row, dict) else {}
-        _row_name = str(row.get("name") or "").strip()
-        _name_pending = not _row_name
-        if _name_pending:
-            _row_name = f"伴侣{len(heroines) + 1}"
-        skill_input = row.get("skill_source") if isinstance(row.get("skill_source"), dict) else row.get("skill")
-        packed = _member_pack(_row_name, skill_input, row.get("background"), row.get("power", -1), custom_skill=row.get("custom_skill", ""), participation=row.get("participation", 1), slot_id=row.get("slot_id", ""), skill_upload=row.get("skill_upload", ""))
-        if packed:
-            packed["roster_index"] = len(heroines) + 1
-            packed["roster_total"] = heroine_limit or len(heroine_rows)
-            packed["character_model"] = row.get("character_model", "")
-            packed["character_model_source"] = row.get("character_model_source", "")
-            packed["character_card"] = dict(row.get("character_card") or {})
-            packed["persona_preset"] = str(row.get("persona_preset") or "").strip()
-            if _name_pending:
-                packed["name_pending"] = True
-            heroines.append(packed)
+    companions = game_setup.assemble_roster(companion_roster, companion_count, "伙伴", "伙伴")
+    heroines = game_setup.assemble_roster(heroine_roster, heroine_count, "主线", "伴侣")
 
     # —— 同名监测与世界观测名（规格 §7）：四栏实际选中卡，同卡重复也算冲突 ——
     # roster_card_ids: [{"slot": "主角|主线|伙伴|宿敌", "card_id": ...}]；纯字符串按伙伴栏处理。
@@ -1534,26 +1388,9 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
     # 选择“无金手指”时，代码层抹除伙伴/女主/宿敌的金手指配置。
     companions = engine.apply_block(companions, gf_blocked)
     heroines = engine.apply_block(heroines, gf_blocked)
-    faction_members = companions + heroines
-    # 宿敌方成员：宿敌卡（original_position 反映其原型强度）+ 自定义宿敌文本。
-    opposing_members = []
-    if nemesis_card:
-        opposing_members.append({
-            "name": nemesis_card.get("name") or "宿敌",
-            "power": _nemesis_card_power(nemesis_card),
-            "skill": nemesis_card.get("persona") or "",
-            "background": nemesis_card.get("work") or "",
-        })
-    elif nemesis_persona:
-        opposing_members.append({"name": nemesis_label or "宿敌", "skill": nemesis_persona})
-    faction_gap = engine.runtime_mechanics.assess_faction_gap(
-        faction_members, protagonist_power=2, genre=work_label or novel_name or "",
-        opposing_members=opposing_members)
-    computed_nemesis_difficulty = engine.runtime_mechanics.nemesis_difficulty(
-        difficulty, faction_members, protagonist_power=2, genre=work_label or novel_name or "",
-        opposing_members=opposing_members)
-    if not mode.startswith("强化") and fragment:
-        novel_excerpt = (novel_excerpt or "") + "\n\n# 普通模式指定片段\n" + str(fragment).strip()
+    faction_gap, computed_nemesis_difficulty = game_setup.compute_faction(
+        nemesis_card, nemesis_label, nemesis_persona, companions, heroines,
+        difficulty, work_label, novel_name)
     if gf_blocked:
         gf = (gf + "（本局全员无金手指：宿敌、伙伴、女主同样不得拥有金手指或等效超常能力）")
 

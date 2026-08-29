@@ -23,7 +23,7 @@ core/server.py ──────────── API 层（54 路由）：参
     │       registries.py    DistillerRegistry + 角色池缓存（中立注册表，
     │                        断 app↔server↔engine 三方循环）
     │       ask_service.py   问答/作弊码状态机（ask 端点业务全量内聚）
-    │       game_setup.py    开局装配纯函数（名册/作品/宿敌/阵营）〔Phase 3c 落地中〕
+    │       game_setup.py    开局装配纯函数（作品来源/宿敌/名册/阵营势差）
     │
     ├── core/state_schema.py 状态契约：TRANSACTIONAL_KEYS（回合事务键唯一来源）
     │                        + start_setting()（顶层键优先、start_params 兜底）
@@ -84,7 +84,7 @@ var/ ─────── 全部运行数据（自动创建，git 忽略）：d
 | 2 | state 事务键注册表 + 双读收敛 | ✅ |
 | 3a | 全局注册表中立化（三方循环断根） | ✅ |
 | 3b | ask 端点服务化（219→37 行） | ✅ |
-| 3c | on_start 装配段 → game_setup | 🔄 |
+| 3c | on_start 装配段 → game_setup | ✅ |
 | 3d/e | 穿越落定段 / on_send 回合管线拆分 | ⏳ |
 | 4 | fate_engine 拆分 + engine 门面收编 + paths 统一 | ⏳ |
 | 5 | 前端 composables（删 TS 复刻公式） | ⏳ |
