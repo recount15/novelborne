@@ -126,7 +126,7 @@ def _nemesis_card_power(nemesis_card: dict) -> int:
     return 2
 
 
-def _member_pack(name, skill, background, power=-1, golden_finger=None, custom_skill="", participation=1, slot_id="", skill_upload=""):
+def _member_pack(name, skill, background, power=-1, custom_skill="", participation=1, slot_id="", skill_upload=""):
     if not name:
         return None
     # skill 支持预设下拉、上传文件、skill_source 映射和自定义文本，最终只写一行字段。
@@ -154,8 +154,6 @@ def _member_pack(name, skill, background, power=-1, golden_finger=None, custom_s
             "background": background or "", "participation": max(1, min(9, int(participation or 1)))}
     if slot_id:
         item["slot_id"] = str(slot_id)
-    if golden_finger:
-        item["golden_finger"] = golden_finger
     labels = {label: value for label, value in POWER_CHOICES}
     if power in labels:
         level = labels[power]
@@ -1018,19 +1016,6 @@ def _compress_context(state, client, model, request_kwargs, provider, history, r
 _on_provider_change = golden_finger_panel._on_provider_change
 
 
-def _slot_updates(count, *components):
-    """逐个显示名单槽位；数量由玩家填写，不限制为固定三个。"""
-    visible_count = normalize_count(count, MAX_ROSTER)
-    per = 4 if len(components) % 4 == 0 else 3
-    return [gr.update(visible=(i // per) < visible_count) for i in range(len(components))]
-
-
-def _heroine_pool_updates(mode):
-    """女主池切换时返回对应默认模板；多余行保持空。"""
-    rows = heroine_pool(mode)
-    return rows, len(rows)
-
-
 _CHARACTER_POOL_CACHE = None
 
 
@@ -1158,13 +1143,6 @@ def _roster_target_updates(target, rows, role="伙伴", heroine_mode="单女主"
     )
 
 
-def _add_roster_row(rows, label="角色"):
-    """兼容旧版表格调用；新版 UI 通过单编辑行顺序加入名册。"""
-    current = [dict(row) if isinstance(row, dict) else row for row in (rows or [])]
-    current.append({"name": "", "skill": "按设定推断", "background": ""})
-    return current, len(current), f"已添加{label} {len(current)}，可继续添加或编辑本行。"
-
-
 def _card_html(name, role, skill, background, participation, power, scope="", cost="", cooldown="", limits=""):
     """返回当前编辑角色卡；文本全部转义，避免上传内容注入页面。
 
@@ -1244,8 +1222,6 @@ def _append_roster_slot_ui(rows, target, model_name, name, skill, custom_skill,
             editor_update, button_update)
 
 
-ENV_KEY = _provider_key("deepseek")
-
 WORKS = fe.list_works()
 DEFAULT_WORK = WORKS[0] if WORKS else None
 
@@ -1323,32 +1299,11 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
              nemesis_select="", nemesis_file=None, convergence="较高", novel_display_name=None,
              nemesis_display_name=None, story_richness=None, story_agent_mode=False,
              roster_card_ids=None, protagonist_gender="unknown", **legacy):
-    # 旧三槽参数只从兼容调用方接收；新版 UI 直接传入动态名册 State。
-    companion_1 = legacy.get("companion_1")
-    companion_1_skill = legacy.get("companion_1_skill")
-    companion_1_background = legacy.get("companion_1_background")
-    companion_1_power = legacy.get("companion_1_power", -1)
-    companion_2 = legacy.get("companion_2")
-    companion_2_skill = legacy.get("companion_2_skill")
-    companion_2_background = legacy.get("companion_2_background")
-    companion_2_power = legacy.get("companion_2_power", -1)
-    companion_3 = legacy.get("companion_3")
-    companion_3_skill = legacy.get("companion_3_skill")
-    companion_3_background = legacy.get("companion_3_background")
-    companion_3_power = legacy.get("companion_3_power", -1)
-    heroine_1 = legacy.get("heroine_1")
-    heroine_1_skill = legacy.get("heroine_1_skill")
-    heroine_1_background = legacy.get("heroine_1_background")
-    heroine_1_power = legacy.get("heroine_1_power", -1)
-    heroine_2 = legacy.get("heroine_2")
-    heroine_2_skill = legacy.get("heroine_2_skill")
-    heroine_2_background = legacy.get("heroine_2_background")
-    heroine_2_power = legacy.get("heroine_2_power", -1)
-    heroine_3 = legacy.get("heroine_3")
-    heroine_3_skill = legacy.get("heroine_3_skill")
-    heroine_3_background = legacy.get("heroine_3_background")
-    heroine_3_power = legacy.get("heroine_3_power", -1)
-    """开始 / 重置：装配规则并生成开场。生成器，流式更新聊天窗。"""
+    """开始 / 重置：装配规则并生成开场。生成器，流式更新聊天窗。
+
+    旧三槽参数（companion_1..3 / heroine_1..3）已下线：全项目无调用方传入，
+    名册一律走 companion_roster / heroine_roster 动态行。**legacy 仅吸收未知 kwargs。
+    """
     hide, show, chat_on = gr.update(visible=False), gr.update(visible=True), gr.update(visible=True)
     chat_off = gr.update(visible=False)
     api_key = (api_key or "").strip() or _provider_key(provider)
@@ -1454,24 +1409,14 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
             nemesis_persona = (nemesis_select or "").strip()
             nemesis_label = "自定义宿敌"
 
-    # UI 的动态 roster 优先；保留旧三槽参数作为兼容输入和源码断言入口。
+    # UI 的动态 roster 为唯一名册来源。
     companion_rows = list(companion_roster or [])
-    if not companion_rows:
-        companion_rows = [
-            {"name": companion_1, "skill": companion_1_skill, "background": companion_1_background, "power": companion_1_power},
-            {"name": companion_2, "skill": companion_2_skill, "background": companion_2_background, "power": companion_2_power},
-            {"name": companion_3, "skill": companion_3_skill, "background": companion_3_background, "power": companion_3_power},
-        ]
     companions = []
     companion_limit = normalize_count(companion_count, None)
-    _ui_companion_roster = bool(companion_roster)
     for row in companion_rows[:companion_limit or len(companion_rows)]:
         row = row if isinstance(row, dict) else {}
-        # 无名行保留名额（仅 UI 动态名册）：卡和性格都只是「魂」，名字开局由模型分配；
-        # 兼容旧三槽调用（companion_1..3 全空）不产生幽灵成员。
+        # 无名行保留名额：卡和性格都只是「魂」，名字开局由模型分配（占位名穿越落定后写回）。
         _row_name = str(row.get("name") or "").strip()
-        if not _row_name and not _ui_companion_roster:
-            continue
         _name_pending = not _row_name
         if _name_pending:
             _row_name = f"伙伴{len(companions) + 1}"
@@ -1488,20 +1433,11 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
                 packed["name_pending"] = True
             companions.append(packed)
     heroine_rows = list(heroine_roster or [])
-    if not heroine_rows:
-        heroine_rows = [
-            {"name": heroine_1, "skill": heroine_1_skill, "background": heroine_1_background, "power": heroine_1_power},
-            {"name": heroine_2, "skill": heroine_2_skill, "background": heroine_2_background, "power": heroine_2_power},
-            {"name": heroine_3, "skill": heroine_3_skill, "background": heroine_3_background, "power": heroine_3_power},
-        ]
     heroines = []
     heroine_limit = normalize_count(heroine_count, None)
-    _ui_heroine_roster = bool(heroine_roster)
     for row in heroine_rows[:heroine_limit or len(heroine_rows)]:
         row = row if isinstance(row, dict) else {}
         _row_name = str(row.get("name") or "").strip()
-        if not _row_name and not _ui_heroine_roster:
-            continue
         _name_pending = not _row_name
         if _name_pending:
             _row_name = f"伴侣{len(heroines) + 1}"
@@ -1907,12 +1843,6 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
             yield [{"role": "assistant", "content": st0["history"][0]["content"]}], st0, \
                 "✅ 剧情准备完成，等待聊天框确认金手指与开局。", _progress_html(st0), _token_md(st0), \
                 _token_title_md(st0), st0.get("state_panel", ""), hide, show, chat_on, gr.update(visible=True)
-            return
-        if enhanced and not st0.get("plot_ready"):
-            yield [], dict(st0, system="", history=[]), \
-                "⚠️ 强化模式剧情准备未完成，禁止正式开局。", \
-                _progress_html(st0), _token_md(st0), _token_title_md(st0), \
-                st0.get("state_panel", ""), gr.update(visible=True), gr.update(visible=False), chat_off, gr.update(visible=False)
             return
         # 基础模式同样先给玩家一份玩法速览（进持久历史，加载存档后仍可回看）。
         opening_msgs = [{"role": "assistant", "content": _gameplay_briefing(mode, nemesis_on)}]

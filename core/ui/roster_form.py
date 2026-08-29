@@ -40,7 +40,3 @@ def heroine_pool(mode: str):
     return [dict(item) for item in HEROINE_POOLS.get(mode, [])]
 
 
-def slot_updates(count, components, maximum: int = MAX_ROSTER):
-    """按数量逐个显示槽位，不会渲染多余空框。"""
-    visible = normalize_count(count, maximum)
-    return [ {"visible": index < visible} for index in range(len(components)) ]

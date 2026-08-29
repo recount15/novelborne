@@ -1,0 +1,38 @@
+{
+  "id": "user-林秋",
+  "role": "伙伴",
+  "name": "林秋",
+  "work": "《book》",
+  "archetype": "冷静医者探路者",
+  "desire": "救治伤员并查明药粉来源",
+  "fear": "伤员无药可救",
+  "abilities": [],
+  "relationship_vector": {
+    "阿岚": "同伴，共同探查",
+    "沈砚": "同伴，协同查证"
+  },
+  "knowledge_scope": [],
+  "voice": "沉稳少言，重实证",
+  "unacceptable_actions": [],
+  "background": "参与北墙水道探查，能辨认伤口药粉来自城外而非边城药铺配方。在水道中安置伤员、守住退路，并准备应急药物。",
+  "skill_ids": [],
+  "source": "用户上传蒸馏",
+  "gender": "unknown",
+  "original_position": "配角",
+  "source_medium": "上传作品",
+  "source_region": "",
+  "slot_keys": {
+    "主角栏": [
+      "通用"
+    ],
+    "伴侣栏": [
+      "通用"
+    ],
+    "伙伴栏": [
+      "技术支援"
+    ],
+    "宿敌栏": [
+      "通用"
+    ]
+  }
+}
