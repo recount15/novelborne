@@ -68,29 +68,31 @@ python run_app.py
 ## 四、项目结构
 
 ```
-fate-engine/
+novelborne/
 ├── run_app.py          # 唯一入口：启动服务 + 打开浏览器
 ├── requirements.txt
-├── core/               # 全部引擎代码
-│   ├── server.py       # FastAPI 后端（/api 接口 + 托管前端）
-│   ├── app.py          # 对局流程编排（on_start/on_send）
-│   ├── fate_engine.py  # 模型接入与规则装配
-│   ├── engine/         # 机制层（涟漪/锚点/名册/金手指/蒸馏等 30+ 模块）
-│   ├── api/            # API 契约与会话管理
-│   ├── ui/             # 界面辅助模块
+├── core/               # 全部引擎代码（分层与数据流详见 docs/ARCHITECTURE.md）
+│   ├── server.py       # FastAPI 路由层（薄编排）
+│   ├── app.py          # 对局编排（on_start/on_send）
+│   ├── services/       # 服务层（注册表/问答/开局装配，重构渐进沉淀）
+│   ├── state_schema.py # 回合事务键与设定读取的单一来源
+│   ├── fate_engine.py  # 模型接入门面
+│   ├── engine/         # 机制层（涟漪/锚点/名册/金手指/蒸馏等，惰性加载）
+│   ├── api/            # 流式契约与会话管理
+│   ├── ui/             # 展示辅助模块
 │   ├── lore/           # 动态世界书
 │   ├── memory/         # 结构化状态记忆
 │   └── prompts/        # 提示词加载器
-├── assets/             # 全部数据
+├── assets/             # 全部静态数据
 │   ├── rules/          # 运行时规则与作品库（原创示例 + 上传蒸馏条目）
 │   ├── data/           # 角色卡、桥段库、技能目录等 JSON
 │   ├── personas/       # 性格模型目录（standard / enhanced；当前为空，可自行扩充）
 │   ├── prompts/        # 提示词文案
-│   └── lore/           # 默认世界书
+│   ├── lore/           # 默认世界书
+│   └── samples/        # 原创样书（强化模式试玩用）
 ├── var/                # 全部运行数据（程序自动创建，勿提交）
-│   ├── db/             # SQLite 角色库
-│   ├── books/          # 切章后书库
-│   ├── saves/ sessions/ logs/ outputs/ uploads/
+│   ├── db/ books/ saves/ sessions/ logs/ outputs/ uploads/
+├── docs/               # 架构地图 / 接手手册 / 文档规范
 ├── tools/              # 试玩流水线与维护脚本
 ├── build/              # exe 构建脚本与 PyInstaller spec
 ├── frontend/           # Vue 3 + TypeScript + Tailwind 前端
@@ -108,8 +110,10 @@ build\build_windows.bat
 
 ## 六、测试
 
-旧版单元测试套件（tests/）已于 2026-08-29 按用户指示整体删除，不再维护；
-改动以实机冒烟与按需新建的最小测试验证。
+回归采用**实机三件套闸门**（真实模型驱动的 API 级测试：只读面 15 项 /
+基础模式 14 项 / 强化模式 8 项，任何代码改动需全绿后才提交），脚本与
+纪律见《docs/HANDBOOK.md》；旧版单元测试套件（tests/）已于 2026-08-29
+整体删除。
 
 ---
 
