@@ -1,0 +1,39 @@
+{
+  "id": "user-沈砚",
+  "role": "主角",
+  "name": "沈砚",
+  "work": "《book》",
+  "archetype": "记录员·档案师",
+  "desire": "查明军械去向与旧军府线索真相",
+  "fear": "暗处之人察觉后反扑",
+  "abilities": [],
+  "relationship_vector": {
+    "阿岚": "搭档，提供情报支持",
+    "林秋": "共同探查的同伴",
+    "老兵": "委托查档的协作方"
+  },
+  "knowledge_scope": [],
+  "voice": "谨慎理性，善用旧册对照",
+  "unacceptable_actions": [],
+  "background": "边城记录员，持旧册巡查。发现印记异常与铜扣，用旧册日期对照粮仓记录确认军械失踪路线。建议只换暗号不封城以免惊动暗处之人，承诺查明军械去向。",
+  "skill_ids": [],
+  "source": "用户上传蒸馏",
+  "gender": "male",
+  "original_position": "主角",
+  "source_medium": "上传作品",
+  "source_region": "",
+  "slot_keys": {
+    "主角栏": [
+      "逆袭成长型"
+    ],
+    "伴侣栏": [
+      "通用"
+    ],
+    "伙伴栏": [
+      "军师智囊"
+    ],
+    "宿敌栏": [
+      "智斗博弈型"
+    ]
+  }
+}

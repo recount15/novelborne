@@ -1,0 +1,38 @@
+{
+  "id": "user-老兵",
+  "role": "伙伴",
+  "name": "老兵",
+  "work": "《book》",
+  "archetype": "值夜守档人",
+  "desire": "从旧档中为年轻人找到线索",
+  "fear": "旧档缺失无法还原真相",
+  "abilities": [],
+  "relationship_vector": {
+    "阿岚": "受托查档的后辈",
+    "沈砚": "委托查档的记录员"
+  },
+  "knowledge_scope": [],
+  "voice": "沉稳寡言",
+  "unacceptable_actions": [],
+  "background": "值夜老兵，受阿岚与沈砚委托保管铜扣等证物，并从旧档中寻找旧军府线索。是守城方可信赖的档案后援。",
+  "skill_ids": [],
+  "source": "用户上传蒸馏",
+  "gender": "male",
+  "original_position": "配角",
+  "source_medium": "上传作品",
+  "source_region": "",
+  "slot_keys": {
+    "主角栏": [
+      "通用"
+    ],
+    "伴侣栏": [
+      "通用"
+    ],
+    "伙伴栏": [
+      "守护护卫"
+    ],
+    "宿敌栏": [
+      "通用"
+    ]
+  }
+}

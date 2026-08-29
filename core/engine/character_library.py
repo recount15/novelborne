@@ -285,11 +285,16 @@ def merged_pool() -> tuple[tuple[CharacterCard, ...], set[str]]:
 
 
 def refresh_game_cache() -> None:
-    """让 app.py 的内置池缓存失效，下一次开局立即看到新卡。"""
-    try:
-        from core import app as gradio_app
+    """让内置池缓存失效，下一次开局立即看到新卡。
 
-        gradio_app._CHARACTER_POOL_CACHE = None
+    缓存本体在 core.services.registries（中立层）；engine 不再反向写
+    app 模块全局，app↔engine 循环依赖断根。延迟 import 保留（中立模块
+    无循环风险），仅防御早期初始化阶段。
+    """
+    try:
+        from core.services import registries
+
+        registries.invalidate_character_pool_cache()
     except Exception:  # noqa: BLE001  缓存失效是尽力而为
         pass
 

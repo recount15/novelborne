@@ -16,6 +16,7 @@ import gradio as gr
 from core import fate_engine as fe
 from core import state_schema
 from core.state_schema import start_setting
+from core.services import registries
 import core.engine.plot_summary
 import core.engine.anchor_distiller
 import core.engine.work_distiller
@@ -40,7 +41,10 @@ from core.engine import opening_flow
 from core.engine.roster_schema import normalize_roster
 
 # 后台蒸馏器与会话解耦，避免线程对象进入 Gradio State 或存档。
-_DISTILLERS = {}
+# 注册表本体收编在 core.services.registries（中立层），server/engine 直接
+# 读写该层；此处保留原名称作为兼容别名（注册表实现完整 dict 协议，
+# 历史读写方式全部可用）。
+_DISTILLERS = registries.distillers
 
 # 稳定的纯助手由 ui 子模块维护；这里保留原名称作为兼容导出。
 _new_session_log = ui_common._new_session_log
@@ -321,14 +325,7 @@ def _trope_hint(message):
 
 
 def _stop_distillers(except_key=None):
-    for key, distiller in list(_DISTILLERS.items()):
-        if except_key and key == except_key:
-            continue
-        try:
-            distiller.stop(join=False)
-        except Exception:
-            pass
-        _DISTILLERS.pop(key, None)
+    registries.distillers.stop_all(except_key=except_key)
 
 
 def stop_all_distillers():
@@ -1047,14 +1044,14 @@ def _compress_context(state, client, model, request_kwargs, provider, history, r
 _on_provider_change = golden_finger_panel._on_provider_change
 
 
-_CHARACTER_POOL_CACHE = None
-
-
 def _character_pool_cards():
-    """加载合并角色池（内置 + 用户自定义 + 用户替换版），失败回落纯内置。"""
-    global _CHARACTER_POOL_CACHE
-    if _CHARACTER_POOL_CACHE is None:
-        cards = ()
+    """加载合并角色池（内置 + 用户自定义 + 用户替换版），失败回落纯内置。
+
+    缓存本体收编在 core.services.registries（中立层）；engine 的
+    character_library 改动角色库后直接失效该缓存，不再反向写 app 全局。
+    """
+    cards = registries.get_character_pool_cache()
+    if cards is None:
         try:
             from core.engine import character_library
 
@@ -1067,8 +1064,9 @@ def _character_pool_cards():
                 cards = tuple(catalog.load_character_pool())
             except (OSError, ValueError, ImportError):
                 cards = ()
-        _CHARACTER_POOL_CACHE = tuple(cards)
-    return _CHARACTER_POOL_CACHE
+        cards = tuple(cards)
+        registries.set_character_pool_cache(cards)
+    return cards
 
 
 def _character_pool_choices(role="伙伴", heroine_mode="单女主", limit=400):

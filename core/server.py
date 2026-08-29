@@ -35,6 +35,7 @@ import core.engine.work_distiller  # noqa: E402
 from core import app as gradio_app  # noqa: E402  (老版对局流程)
 from core import fate_engine as fe  # noqa: E402  (模型接入层)
 from core import engine  # noqa: E402
+from core.services import registries  # noqa: E402  (跨层共享注册表，中立层)
 from core.engine.distill import distill_model  # noqa: E402  (从老版 app._distill_model 提炼)
 from core.api.contracts import gradio_state_from_output, public_state, stream_event_from_gradio  # noqa: E402
 from core.api.sessions import SessionManager, read_upload  # noqa: E402
@@ -1496,7 +1497,7 @@ def ask(session_id: str, request: AskRequest) -> dict[str, Any]:
                 engine.cheat_code.relay_activate(state)
                 _shatter = engine.break_anchor.shatter_now(state)
                 try:
-                    gradio_app.stop_all_distillers()
+                    registries.distillers.stop_all()
                 except Exception:  # noqa: BLE001  蒸馏停止失败不阻断通路激活
                     pass
                 state["distill_status"] = "锚点已全部失效，后续蒸馏停止"
@@ -1950,7 +1951,7 @@ def distill_progress(session_id: str) -> dict[str, Any]:
     chapter_index = state.get("chapter_index") or {}
     total = int(state.get("total_chapters") or len((chapter_index or {}).get("chapters") or []) or 0)
     current = int(state.get("current_chapter") or 1)
-    distiller = (gradio_app._DISTILLERS or {}).get(state.get("distill_key"))
+    distiller = registries.distillers.get(state.get("distill_key"))
     per_chapter = {}
     if distiller is not None:
         try:
