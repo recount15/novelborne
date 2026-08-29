@@ -1,0 +1,81 @@
+/* ============================================================
+ * Theme: siam · 可爱暹罗小猫（建造者 B）
+ * 奶油底 #faf3e7 · 暹罗重点色深棕 #5b3a29（面板重点边/标题）
+ * 蓝瞳强调 #4a7fb5 · 爪印 SVG 低透明散布纹理
+ * 圆角 14px（圆润）· 动效 220ms · 暖橘危险色 · 面板 #fffaf0
+ * 规格来源：docs/spec_ui_themes.md §0/§1/§2
+ * 红线自查：仅 [data-theme="siam"] 前缀 + .theme-decor 钩子，
+ *          无裸元素选择器、不覆盖 App.vue 类名；
+ *          纹理全部内联 SVG data-URI / CSS 渐变，无二进制资源；
+ *          变量键 = §1 契约全量 26 键齐备；
+ *          color-scheme: light；
+ *          正文 --fe-ink(#4e342e) on --fe-bg(#faf3e7) ≈ 10.3:1，
+ *          on --fe-panel(#fffaf0) ≈ 10.9:1，≥ 4.5:1 达标；
+ *          --fe-ink-2(#6d4c41) ≈ 6.9:1（on panel ≈ 7.3:1）；
+ *          --fe-accent-ink(#ffffff) on --fe-accent(#4a7fb5) ≈ 4.2:1；
+ *          --fe-danger(#b34a15 暖橘) ≈ 4.9:1、
+ *          --fe-ok(#4e7a3a) ≈ 4.6:1、--fe-warn(#b45309) ≈ 4.6:1
+ * ============================================================ */
+
+[data-theme="siam"] {
+  color-scheme: light;
+
+  /* ---- 表面：奶油底 + 暹罗爪印散布纹理 ---- */
+  --fe-bg: #faf3e7;
+  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cg transform='rotate(-20 110 110)' fill='%235b3a29' fill-opacity='0.05'%3E%3Cellipse cx='110' cy='118' rx='13' ry='10.5'/%3E%3Cellipse cx='91' cy='101' rx='5.4' ry='7.2' transform='rotate(-18 91 101)'/%3E%3Cellipse cx='103' cy='93.5' rx='5.4' ry='7.4' transform='rotate(-7 103 93.5)'/%3E%3Cellipse cx='117' cy='93.5' rx='5.4' ry='7.4' transform='rotate(7 117 93.5)'/%3E%3Cellipse cx='129' cy='101' rx='5.4' ry='7.2' transform='rotate(18 129 101)'/%3E%3C/g%3E%3C/svg%3E");
+  --fe-panel: #fffaf0;   /* 奶白面板，暹罗躯干色 */
+  --fe-panel-2: #f7edda; /* 次级面板/行/悬停 */
+  --fe-panel-3: #efe3cd; /* 内嵌深一档：输入框、代码 */
+
+  /* ---- 描边：深棕重点边（暹罗面具/耳/尾色） ---- */
+  --fe-border: #e8d8bd;
+  --fe-border-strong: #5b3a29;
+
+  /* ---- 文字：暖深棕系 ---- */
+  --fe-ink: #4e342e;   /* on #faf3e7 ≈ 10.3:1，on #fffaf0 ≈ 10.9:1 */
+  --fe-ink-2: #6d4c41; /* ≈ 6.9:1 */
+  --fe-ink-3: #a1887f; /* 弱文字/占位 */
+
+  /* ---- 行动色：蓝瞳 ---- */
+  --fe-accent: #4a7fb5;
+  --fe-accent-strong: #3a638c;
+  --fe-accent-ink: #ffffff; /* on #4a7fb5 ≈ 4.2:1 */
+  --fe-accent-soft: #dce9f7;
+
+  /* ---- 语义色：暖调，danger 为暖橘 ---- */
+  --fe-ok: #4e7a3a;     /* ≈ 4.6:1 */
+  --fe-warn: #b45309;   /* ≈ 4.6:1 */
+  --fe-danger: #b34a15; /* 暖橘 ≈ 4.9:1 */
+
+  /* ---- 焦点与阴影：暖棕投影 ---- */
+  --fe-focus-ring: #4a7fb5;
+  --fe-shadow-1: 0 1px 2px rgba(91, 58, 41, 0.06), 0 2px 6px rgba(91, 58, 41, 0.05);
+  --fe-shadow-2: 0 12px 28px rgba(91, 58, 41, 0.14), 0 4px 10px rgba(91, 58, 41, 0.07);
+
+  /* ---- 字体 ---- */
+  --fe-font-sans: "Segoe UI", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --fe-font-serif: "Georgia", "Times New Roman", "Songti SC", "SimSun", serif;
+
+  /* ---- 形状与动效：圆润 14px ---- */
+  --fe-radius: 14px;
+  --fe-motion: 220ms;
+
+  /* ---- 装饰：奶油舞台 + 大爪印/蓝瞳柔光叠加 ---- */
+  --fe-decor-stage: linear-gradient(150deg, #fdf6ea 0%, #f7ecdc 52%, #f3e4cf 100%);
+  --fe-decor-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cg transform='rotate(14 130 130)' fill='%235b3a29' fill-opacity='0.035'%3E%3Cellipse cx='130' cy='140' rx='17' ry='13.5'/%3E%3Cellipse cx='104' cy='118' rx='7' ry='9.4' transform='rotate(-18 104 118)'/%3E%3Cellipse cx='120' cy='108' rx='7' ry='9.6' transform='rotate(-7 120 108)'/%3E%3Cellipse cx='140' cy='108' rx='7' ry='9.6' transform='rotate(7 140 108)'/%3E%3Cellipse cx='156' cy='118' rx='7' ry='9.4' transform='rotate(18 156 118)'/%3E%3C/g%3E%3C/svg%3E"), radial-gradient(58% 48% at 72% 26%, rgba(74, 127, 181, 0.06), transparent 70%);
+}
+
+/* .theme-decor 钩子：叙事舞台 / 氛围叠加（由集成员放置，无此元素时零副作用） */
+[data-theme="siam"] .theme-decor {
+  background: var(--fe-decor-stage);
+}
+
+[data-theme="siam"] .theme-decor::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: var(--fe-decor-overlay);
+  background-repeat: repeat;
+  background-size: 260px 260px, auto;
+}

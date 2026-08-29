@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>书中行 · 真实检验监控台</title>
+<style>
+:root {
+  --paper: #f3edde; --ink: #2c2925; --vermilion: #b63a2b; --jade: #137c6c;
+  --gold: #a87516; --line: #ddd2bc;
+}
+* { box-sizing: border-box; margin: 0; }
+html, body { height: 100%; }
+body {
+  font-family: "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  color: var(--ink); background-color: var(--paper);
+  background-image:
+    repeating-linear-gradient(0deg, rgb(122 98 56 / 1.8%) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgb(122 98 56 / 1.4%) 0 1px, transparent 1px 4px),
+    radial-gradient(ellipse 120% 70% at 50% -10%, rgb(255 250 236 / 55%), transparent 60%),
+    radial-gradient(ellipse 90% 60% at 8% 100%, rgb(168 138 84 / 9%), transparent 58%);
+}
+header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 20px; border-bottom: 1px solid var(--line); background: #fdfaf2ee;
+}
+.seal {
+  width: 40px; height: 40px; border-radius: 999px; display: grid; place-items: center;
+  color: #fff; font-weight: 800; font-size: 15px; user-select: none;
+  background: radial-gradient(circle at 34% 30%, #d05a48, #b63a2b 55%, #8d2c20);
+  box-shadow: inset 0 0 0 2.5px rgb(255 255 255 / 16%), inset 0 -3px 6px rgb(90 20 10 / 25%), 0 1px 4px rgb(90 30 20 / 30%);
+}
+h1 { font-size: 17px; font-family: "Noto Serif SC", serif; }
+.sub { font-size: 11px; color: #7d7461; }
+.status-pill {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px;
+  font-size: 12px; font-weight: 700; background: #f3ecdc;
+}
+.dot { width: 9px; height: 9px; border-radius: 999px; background: #b0a48e; }
+.status-pill.running .dot { background: var(--gold); animation: pulse 1.4s ease-in-out infinite; }
+.status-pill.done .dot { background: var(--jade); }
+.status-pill.error .dot { background: var(--vermilion); }
+@keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
+
+main { max-width: 1180px; margin: 0 auto; padding: 18px 20px 60px; display: grid; gap: 16px; }
+.grid { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+.card {
+  border: 1px solid var(--line); border-radius: 8px; background: #fdfaf2f2; overflow: hidden;
+  box-shadow: 0 1px 3px rgb(60 50 32 / 6%);
+}
+.card > h2 {
+  display: flex; align-items: center; gap: 8px; font-size: 13px;
+  padding: 10px 14px; border-bottom: 1px solid #e8e0cd; background: #f6f1e3;
+}
+.card > h2 small { margin-left: auto; font-weight: 400; color: #948a76; }
+.card .body { padding: 12px 14px; max-height: 380px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #c8bda6 transparent; }
+
+/* 启动面板 */
+.launch { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; padding: 14px; }
+.launch label { display: block; font-size: 11px; color: #6f6758; font-weight: 650; }
+.launch input {
+  width: 240px; height: 34px; padding: 0 10px; font-size: 13px;
+  border: 1px solid #d9cfba; border-radius: 6px; background:
+    repeating-linear-gradient(0deg, rgb(120 96 54 / 1.6%) 0 1px, transparent 1px 3px), #fdfaf2;
+}
+.launch button {
+  height: 36px; padding: 0 18px; border-radius: 6px; border: none;
+  background: var(--vermilion); color: #fff; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.launch button:hover { background: #9f2f22; }
+.launch button.ghost { background: #f3ecdc; color: #544d3f; border: 1px solid #ddd2bc; }
+.hint { flex-basis: 100%; font-size: 11px; color: #948a76; line-height: 1.6; }
+
+/* 指标 */
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; padding: 12px 14px; }
+.metric { border: 1px solid #e8e0cd; border-radius: 6px; padding: 8px 10px; background: #faf6ec; }
+.metric span { display: block; font-size: 10px; color: #877d69; }
+.metric strong { font-size: 19px; }
+.metric.pass strong { color: var(--jade); }
+.metric.fail strong { color: var(--vermilion); }
+
+/* 阶段时间线 */
+.phase { position: relative; padding: 3px 0 3px 20px; font-size: 12.5px; }
+.phase::before {
+  content: ''; position: absolute; left: 5px; top: 9px; width: 7px; height: 7px;
+  transform: rotate(45deg); background: var(--vermilion);
+}
+.phase time { color: #948a76; font-size: 10px; margin-right: 6px; }
+
+/* 检查项 */
+.check { display: flex; gap: 8px; align-items: baseline; padding: 3.5px 0; font-size: 12px; border-bottom: 1px dashed #eee6d4; }
+.check .mark { flex: 0 0 auto; width: 30px; text-align: center; font-size: 10px; font-weight: 800; border-radius: 4px; padding: 1px 0; }
+.check.ok .mark { background: #e5efe7; color: var(--jade); }
+.check.bad .mark { background: #faece8; color: var(--vermilion); }
+.check .detail { margin-left: auto; color: #948a76; font-size: 11px; max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 回合表 */
+table.rounds { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+table.rounds th { text-align: left; font-size: 10px; color: #877d69; padding: 4px 6px; border-bottom: 1px solid #e8e0cd; white-space: nowrap; }
+table.rounds td { padding: 5px 6px; border-bottom: 1px dashed #eee6d4; vertical-align: top; }
+.tag-pass { color: var(--jade); font-weight: 700; }
+.tag-fail { color: var(--vermilion); font-weight: 700; }
+.bar { display: inline-block; width: 74px; height: 7px; border-radius: 99px; background: #e9e1cd; overflow: hidden; vertical-align: middle; }
+.bar i { display: block; height: 100%; background: linear-gradient(90deg,#b63a2b,#c8a24a); }
+.note { padding: 4px 0; font-size: 12px; color: #7c5b12; }
+.fatal { color: var(--vermilion); font-weight: 700; }
+footer { text-align: center; font-size: 10px; color: #a39a86; padding-bottom: 24px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="seal">书</div>
+  <div>
+    <h1>书中行 · 真实检验监控台</h1>
+    <div class="sub">多供应商 · 强化模式全流程真实检验 —— 所有事件实时推送，无需刷新</div>
+  </div>
+  <span class="status-pill" id="pill"><span class="dot"></span><span id="pillText">未连接</span></span>
+</header>
+
+<main>
+  <section class="card" id="launchCard">
+    <h2>启动检验 <small>供应商/模型与主程序同源 · Key 只在内存中传给后端，不写日志</small></h2>
+    <div class="launch">
+      <label>供应商<select id="provider" style="width:160px;height:34px;border:1px solid #d9cfba;border-radius:6px;background:#fdfaf2;font-size:13px"></select></label>
+      <label>Base URL（自定义时填写）<input type="text" id="baseUrl" placeholder="留空用预设"></label>
+      <label>API Key<input type="password" id="apiKey" placeholder="粘贴 API Key（必填）" autocomplete="new-password"></label>
+      <label>模型<input list="modelList" id="model" style="width:170px;height:34px;border:1px solid #d9cfba;border-radius:6px;background:#fdfaf2;font-size:13px" placeholder="选择或输入"><datalist id="modelList"></datalist></label>
+      <label>思考模式
+        <select id="thinkingMode" style="width:100px;height:34px;border:1px solid #d9cfba;border-radius:6px;background:#fdfaf2;font-size:13px">
+          <option value="auto">自动</option><option value="on">开启</option>
+          <option value="off">关闭</option><option value="low">低</option><option value="mid">中</option>
+        </select></label>
+      <label>回合数<input type="number" id="rounds" value="30" min="1" max="100" style="width:80px"></label>
+      <label>故事丰富度<input type="number" id="richness" value="700" min="300" max="1000" step="50" style="width:90px"></label>
+      <button id="btnStart">▶ 开始检验</button>
+      <button class="ghost" id="btnStop">■ 停止</button>
+      <p class="hint">覆盖机制：开局蒸馏与锚点 → 金手指/开局两步确认 → 三重机械门禁（体量·交互·锚点收束）→ 动态收束力 → 任务（短中长动态时限、奖励与结算）→ 托管 → 作弊码许愿 → 存读档一致性 → 上下文压缩 → 小说导出。检验使用与主程序完全一致的思考参数映射（fate_engine.thinking_kwargs）。另开标签页进入 <a href="/" target="_blank">游戏主界面</a> 可读档观看已生成剧情。</p>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>总览 <small id="elapsed"></small></h2>
+    <div class="metrics">
+      <div class="metric"><span>当前阶段</span><strong id="mPhase" style="font-size:13px">—</strong></div>
+      <div class="metric"><span>回合进度</span><strong id="mRound">—</strong></div>
+      <div class="metric pass"><span>通过项</span><strong id="mPass">0</strong></div>
+      <div class="metric fail"><span>失败项</span><strong id="mFail">0</strong></div>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <h2>阶段推进 <small>phase stream</small></h2>
+      <div class="body" id="phases"><p class="note">等待事件…</p></div>
+    </section>
+    <section class="card">
+      <h2>运行备注 / 异常 <small>notes &amp; errors</small></h2>
+      <div class="body" id="notes"><p class="note">—</p></div>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>检查点流水 <small>PASS / FAIL 实时滚动 · 只保留最近 200 条</small></h2>
+    <div class="body" id="checks" style="max-height:420px"><p class="note">等待事件…</p></div>
+  </section>
+
+  <section class="card">
+    <h2>回合明细 <small>字数区间来自当回合场景预算，与故事丰富度联动</small></h2>
+    <div class="body" style="max-height:420px">
+      <table class="rounds">
+        <thead><tr><th>回合</th><th>章/章内</th><th>门禁</th><th>正文/预算</th><th></th><th>收束力</th><th>任务</th><th>行动</th><th>耗时</th><th>剧情预览</th></tr></thead>
+        <tbody id="roundsBody"><tr><td colspan="10" style="color:#948a76">—</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+<footer>书中行 fate-engine · 真实模型检验管线 · 报告落盘 outputs/playtest_monitor_report.json</footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const pill = $('pill'), pillText = $('pillText');
+let lastRound = null;
+
+function setPill(status) {
+  const map = { running: ['running','进行中'], done: ['done','已完成'], error: ['error','异常中断'],
+                stopped: ['done','已停止'], pending: ['running','排队中'], idle: ['','空闲'], '': ['','未连接'] };
+  const [cls, txt] = map[status] ?? map[''];
+  pill.className = 'status-pill ' + cls;
+  pillText.textContent = txt;
+}
+
+function addCheck(c) {
+  const box = $('checks');
+  if (box.querySelector('.note')) box.innerHTML = '';
+  const row = document.createElement('div');
+  row.className = 'check ' + (c.ok ? 'ok' : 'bad');
+  row.innerHTML = `<span class="mark">${c.ok ? 'PASS' : 'FAIL'}</span>
+    <span>${escapeHtml(c.step)}</span><span class="detail" title="${escapeHtml(c.detail)}">${escapeHtml(c.detail)}</span>`;
+  box.prepend(row);
+  while (box.children.length > 200) box.removeChild(box.lastChild);
+  bump('mPass', c.ok); bump('mFail', !c.ok);
+}
+
+function addPhase(p) {
+  const box = $('phases');
+  if (box.querySelector('.note')) box.innerHTML = '';
+  const row = document.createElement('div');
+  row.className = 'phase';
+  row.innerHTML = `<time>${p.t || ''}</time>${escapeHtml(p.name)} ${escapeHtml(p.detail || '')}`;
+  box.appendChild(row);
+  $('mPhase').textContent = p.name;
+}
+
+function renderRound(r) {
+  const body = $('roundsBody');
+  if (r && r.round != null) { $('mRound').textContent = `${r.round}`; lastRound = r; }
+  else { return; }
+  if (body.querySelector('td') && body.rows[0] && body.rows[0].cells.length === 1) body.innerHTML = '';
+  const tr = document.createElement('tr');
+  const chars = r.chars ?? '?';
+  const [lo, hi] = (r.budget || '').split('–');
+  let ratio = null;
+  if (Number.isFinite(+chars) && +lo > 0 && +hi > 0) ratio = Math.max(0, Math.min(1, (+chars - +lo) / (+hi - +lo) * .7 + .15));
+  tr.innerHTML = `
+    <td><b>${r.round ?? ''}</b></td>
+    <td>${r.chapter ?? ''} 章 ${r.chapter_round != null ? '· ' + r.chapter_round + '/' + (r.turn_budget ?? '?') : ''}</td>
+    <td class="${r.gate === 'PASS' ? 'tag-pass' : 'tag-fail'}">${r.gate || ''}</td>
+    <td>${chars} 字 / ${r.budget || ''}</td>
+    <td><span class="bar"><i style="width:${ratio == null ? 0 : ratio * 100}%"></i></span></td>
+    <td>${fmtNum(r.convergence)}${r.drift ? ` <small style="color:#948a76">${escapeHtml(r.drift)}</small>` : ''}</td>
+    <td>${escapeHtml(r.quest || '—')}</td>
+    <td title="${escapeHtml(r.action || '')}">${escapeHtml(short(r.action))}</td>
+    <td>${r.took_sec != null ? r.took_sec + 's' : ''}</td>
+    <td style="max-width:220px;color:#655c4c">${escapeHtml(r.preview || '')}</td>`;
+  body.prepend(tr);
+}
+
+function applySnapshot(s) {
+  setPill(s.status);
+  if (!s || !s.checks_total) return;
+  $('checks').innerHTML = ''; $('phases').innerHTML = ''; $('roundsBody').innerHTML = '';
+  let pass = s.passed_total || 0, fail = s.failed_total || 0;
+  $('mPass').textContent = pass; $('mFail').textContent = fail;
+  [...s.checks_tail].reverse().forEach(c => { addCheckSilent(c); });
+  s.phases.forEach(addPhase);
+  if (s.config) {
+    $('mPhase').textContent = (s.phases.at(-1) || {}).name || '—';
+  }
+  if (s.notes) s.notes.forEach(n => addNote(n, false));
+  if (s.error) addNote({ text: '⚠️ ' + s.error, t: '' }, true);
+}
+
+let silentPass = 0, silentFail = 0;
+function addCheckSilent(c) {
+  const box = $('checks');
+  if (box.querySelector('.note')) box.innerHTML = '';
+  const row = document.createElement('div');
+  row.className = 'check ' + (c.ok ? 'ok' : 'bad');
+  row.innerHTML = `<span class="mark">${c.ok ? 'PASS' : 'FAIL'}</span>
+    <span>${escapeHtml(c.step)}</span><span class="detail" title="${escapeHtml(c.detail)}">${escapeHtml(c.detail)}</span>`;
+  box.prepend(row);
+}
+
+function bump(id, cond) {
+  const el = $(id);
+  el.textContent = Number(el.textContent || 0) + (cond ? 1 : 0);
+}
+function addNote(n, isError) {
+  const box = $('notes');
+  if (box.querySelector('.note') && box.children.length === 1) box.innerHTML = '';
+  const p = document.createElement('p');
+  p.className = 'note' + (isError ? ' fatal' : '');
+  p.textContent = `[${n.t || ''}] ${n.text || ''}`;
+  box.prepend(p);
+}
+function fmtNum(v){ return typeof v === 'number' ? v.toFixed(3) : '—'; }
+function short(s){ return (s||'').split('|')[0]; }
+function escapeHtml(s){ return String(s??'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+async function refreshStatus() {
+  try {
+    const r = await fetch('/api/playtest/status');
+    const s = await r.json();
+    if (s.status === 'idle') { setPill('idle'); return; }
+    setPill(s.status);
+    // 快照节流：仅作为 SSE 断线兜底
+    if ($('checks').querySelector('.note') && s.checks_total) applySnapshot(s);
+    $('mPass').textContent = s.passed_total || 0;
+    $('mFail').textContent = s.failed_total || 0;
+  } catch {}
+}
+
+$('btnStart').onclick = async () => {
+  const key = $('apiKey').value.trim();
+  if (!key) { alert('请先粘贴 API Key'); return; }
+  const body = {
+    api_key: key,
+    provider: $('provider').value,
+    base_url: $('baseUrl').value.trim() || null,
+    model: $('model').value,
+    thinking_mode: $('thinkingMode').value,
+    rounds: +$('rounds').value || 30,
+    story_richness: +$('richness').value || 700,
+    force: true,
+  };
+  const res = await fetch('/api/playtest/start', { method:'POST',
+    headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  if (!res.ok) { alert('启动失败：' + ((await res.json()).detail || res.status)); return; }
+  connectStream(); pollTimer();
+};
+$('btnStop').onclick = async () => {
+  await fetch('/api/playtest/stop', { method:'POST' });
+};
+
+// —— 启动面板：供应商与模型随主程序 bootstrap 动态加载 ——
+async function loadProviders() {
+  try {
+    const boot = await (await fetch('/api/bootstrap')).json();
+    const sel = $('provider'), msel = $('model');
+    sel.innerHTML = '';
+    (boot.providers || []).forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id; opt.textContent = p.label; opt.dataset.models = JSON.stringify(p.models || []);
+      sel.appendChild(opt);
+    });
+    fillModels();
+    sel.onchange = fillModels;
+    function fillModels() {
+      const cur = sel.selectedOptions[0];
+      const models = JSON.parse(cur?.dataset.models || '[]');
+      const list = document.getElementById('modelList');
+      list.innerHTML = '';
+      models.forEach(m => { const o = document.createElement('option'); o.value = m; list.appendChild(o); });
+      if (models.length) $('model').value = models[0];
+    }
+  } catch {}
+}
+loadProviders();
+
+let es = null;
+function connectStream() {
+  if (es) es.close();
+  es = new EventSource('/api/playtest/stream');
+  es.addEventListener('snapshot', e => applySnapshot(JSON.parse(e.data)));
+  es.addEventListener('phase', e => addPhase(JSON.parse(e.data)));
+  es.addEventListener('phase_live', e => { $('mPhase').textContent = JSON.parse(e.data).text; });
+  es.addEventListener('check', e => addCheck(JSON.parse(e.data)));
+  es.addEventListener('round', e => renderRound(JSON.parse(e.data)));
+  es.addEventListener('note', e => addNote(JSON.parse(e.data), false));
+  es.addEventListener('fatal', e => addNote({ t:'', text:'💥 ' + JSON.parse(e.data).error }, true));
+  es.addEventListener('end', e => {
+    const d = JSON.parse(e.data);
+    setPill(d.status === 'stopped' ? 'stopped' : d.status || 'done');
+    addNote({ t:'', text:`🏁 检验结束：${d.passed} 通过 / ${d.failed} 失败 · 用时 ${Math.round((d.elapsed_sec||0)/60)} 分钟` }, false);
+    es.close(); es = null;
+  });
+  es.onerror = () => { /* 由 status 轮询兜底 */ };
+}
+
+let timer = null;
+function pollTimer() { if (timer) clearInterval(timer); timer = setInterval(refreshStatus, 5000); }
+refreshStatus();
+</script>
+</body>
+</html>

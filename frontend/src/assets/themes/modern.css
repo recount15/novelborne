@@ -1,0 +1,72 @@
+/* ============================================================
+ * Theme: modern · 现代简约（建造者 A）
+ * 白块为主 · 中性灰阶 · 单一克制强调色 #2563eb
+ * 圆角 10px · 动效 120ms · 阴影极轻
+ * 规格来源：docs/spec_ui_themes.md §0/§1/§2
+ * 红线自查：仅 [data-theme="modern"] 前缀 + .theme-decor 钩子；
+ *          纹理全部内联 SVG data-URI / CSS 渐变；
+ *          正文 --fe-ink(#1f2937) on --fe-bg(#fafafa) ≈ 13.5:1 ≥ 4.5:1
+ * ============================================================ */
+
+[data-theme="modern"] {
+  color-scheme: light;
+
+  /* ---- 表面 ---- */
+  --fe-bg: #fafafa;
+  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Ccircle cx='2' cy='2' r='1' fill='%232563eb' fill-opacity='0.04'/%3E%3C/svg%3E");
+  --fe-panel: #ffffff;
+  --fe-panel-2: #f3f4f6;
+  --fe-panel-3: #e9ebef;
+
+  /* ---- 描边 ---- */
+  --fe-border: #e4e7ec;
+  --fe-border-strong: #b3bac6;
+
+  /* ---- 文字 ---- */
+  --fe-ink: #1f2937;   /* on #fafafa ≈ 13.5:1 */
+  --fe-ink-2: #4b5563; /* ≈ 7.2:1 */
+  --fe-ink-3: #96a0af; /* 弱文字/占位 */
+
+  /* ---- 行动色 ---- */
+  --fe-accent: #2563eb;
+  --fe-accent-strong: #1d4ed8;
+  --fe-accent-ink: #ffffff; /* on #2563eb ≈ 5.2:1 */
+  --fe-accent-soft: #e3ecfe;
+
+  /* ---- 语义色 ---- */
+  --fe-ok: #157347;     /* on #fafafa ≈ 5.6:1 */
+  --fe-warn: #b45309;   /* ≈ 4.8:1 */
+  --fe-danger: #b91c1c; /* ≈ 6.2:1 */
+
+  /* ---- 焦点与阴影 ---- */
+  --fe-focus-ring: #2563eb;
+  --fe-shadow-1: 0 1px 2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.04);
+  --fe-shadow-2: 0 12px 32px rgba(15, 23, 42, 0.10), 0 4px 12px rgba(15, 23, 42, 0.06);
+
+  /* ---- 字体 ---- */
+  --fe-font-sans: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --fe-font-serif: "Georgia", "Times New Roman", "Songti SC", "SimSun", serif;
+
+  /* ---- 形状与动效 ---- */
+  --fe-radius: 10px;
+  --fe-motion: 120ms;
+
+  /* ---- 装饰 ---- */
+  --fe-decor-stage: linear-gradient(140deg, #f7f9fc 0%, #eef1f6 100%);
+  --fe-decor-overlay: linear-gradient(115deg, transparent 42%, rgba(37, 99, 235, 0.05) 50%, transparent 58%);
+}
+
+/* .theme-decor 钩子：叙事舞台 / 氛围叠加（由集成员放置，无此元素时零副作用） */
+[data-theme="modern"] .theme-decor {
+  background: var(--fe-decor-stage);
+}
+
+[data-theme="modern"] .theme-decor::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: var(--fe-decor-overlay);
+  background-repeat: no-repeat;
+  background-size: cover;
+}
