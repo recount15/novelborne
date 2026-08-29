@@ -365,11 +365,25 @@ def _read_json_save(path: Path) -> Optional[dict[str, Any]]:
     return payload if _valid_payload(payload) else None
 
 
+#: 本进程已完成旧档导入的 var 根集合（按 root 区分，多实例各自独立）。
+#: 导入只需一次：saves/ 目录此后只由 save_state 增加，而 save_state 同时双写
+#: 数据库，无需重复扫描。外部手工拷入 saves/ 的档需重启进程才可见（恢复手段）。
+_LEGACY_IMPORTED: set[str] = set()
+
+
 def _import_legacy_saves(root: Optional[PathLike], conn: sqlite3.Connection) -> None:
-    """把旧的 saves/*.json 一次性导入数据库（幂等，不覆盖已有同名行）。"""
+    """把旧的 saves/*.json 一次性导入数据库（幂等，不覆盖已有同名行）。
+
+    每个 var 根在本进程内只扫描一次：原先每次 list/读档都 glob 全目录并逐个
+    全文解析，存档多时是 O(档数×档大小) 的重复磁盘读。
+    """
     saves_dir = _root(root) / "saves"
     if not saves_dir.is_dir():
         return
+    marker = str(saves_dir)
+    if marker in _LEGACY_IMPORTED:
+        return
+    _LEGACY_IMPORTED.add(marker)
     for path in sorted(saves_dir.glob("*.json")):
         payload = _read_json_save(path)
         if payload is None:
@@ -415,6 +429,33 @@ def list_saves(root: Optional[PathLike] = None, session_id: Optional[str] = None
     keys = ("session_id", "save_id", "saved_at", "mode", "work", "novel", "role",
             "persona", "difficulty", "round", "chapter")
     return [dict(zip(keys, row, strict=True)) for row in rows]
+
+
+_SAVE_META_KEYS = ("session_id", "save_id", "saved_at", "mode", "work", "novel",
+                   "role", "persona", "difficulty", "round", "chapter")
+
+
+def save_metadata(save_id: str, root: Optional[PathLike] = None,
+                  session_id: Optional[str] = None) -> Optional[dict[str, Any]]:
+    """单条存档的描述信息（存/读档端点用，替代拉全表再 next() 过滤）。
+
+    session_id 为空时按「自由读档」语义在全库取同名存档的最新一条，与
+    ``load_state_strict`` 的选取口径一致。返回 None 表示库中无此存档。
+    """
+    conn = _db_connect(root)
+    try:
+        with conn:
+            _import_legacy_saves(root, conn)
+        query = f"SELECT {', '.join(_SAVE_META_KEYS)} FROM saves WHERE save_id=?"
+        args: tuple[Any, ...] = (save_id,)
+        if session_id:
+            query += " AND session_id=?"
+            args = (save_id, session_id)
+        query += " ORDER BY saved_at DESC, rowid DESC LIMIT 1"
+        row = conn.execute(query, args).fetchone()
+    finally:
+        conn.close()
+    return dict(zip(_SAVE_META_KEYS, row, strict=True)) if row else None
 
 
 def load_state_strict(save_id: str, root: Optional[PathLike] = None,

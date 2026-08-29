@@ -405,15 +405,19 @@ def new_offer(state: dict[str, Any], offer: Mapping[str, Any],
 
 
 def _deduct_if_needed(state: dict[str, Any], box: dict[str, Any]) -> None:
-    if box.get("momentum_deducted"):
-        return
-    spent = max(0, _int(box.get("momentum_spent"), 0))
-    _write_momentum(state, _momentum_total(state) - spent)
-    box["momentum_deducted"] = True
+    """碎锚不再扣除积势（2026-08-30 设计变更）。
+
+    碎锚现在是**全局碎锚**：成功后该章及之后的主线锚点全部失效，不存在
+    「下一次碎锚」，积势因此不再是碎锚的消耗品，只为剧情推进服务。积势达标
+    仍是 ``can_offer`` 的发起门禁（未变），但接受/推进不再扣势，失败也无从
+    退还。``momentum_spent`` 归零仅保留字段供前端展示与存档兼容。
+    """
+    box["momentum_spent"] = 0
+    box["momentum_deducted"] = False
 
 
 def accept(state: dict[str, Any]) -> dict[str, Any]:
-    """接受当前 offer：offered -> active，扣下本次积势，记下时限。"""
+    """接受当前 offer：offered -> active，记下时限（不扣积势，见 _deduct_if_needed）。"""
     if not isinstance(state, dict):
         raise ValueError("state 必须是字典")
     box = _box(state)
@@ -480,13 +484,18 @@ def apply_success(state: dict[str, Any], current_round: int | None = None) -> di
 
 
 def apply_fail(state: dict[str, Any], current_round: int | None = None) -> dict[str, Any]:
-    """碎锚失败：已扣积势退 50%（尚未扣则不扣），进入 cooldown。"""
+    """碎锚失败：进入 cooldown（不涉及积势——碎锚已不扣势，无从退还）。
+
+    旧档兼容：历史存档里 momentum_deducted=True 的会话仍退还其记账的一半，
+    避免玩家在版本切换点白扣一次。
+    """
     if not isinstance(state, dict):
         raise ValueError("state 必须是字典")
     box = _box(state) or idle_box()
     if box.get("status") in ("failed", "cooldown") and box.get("cooldown_until"):
         return box
     if box.get("momentum_deducted"):
+        # 仅旧档路径：新流程 _deduct_if_needed 不再置 True。
         spent = max(0, _int(box.get("momentum_spent"), 0))
         refund = spent // 2
         if refund:

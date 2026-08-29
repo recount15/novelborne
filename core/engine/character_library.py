@@ -284,6 +284,33 @@ def merged_pool() -> tuple[tuple[CharacterCard, ...], set[str]]:
     return tuple(result), shadowed
 
 
+def merged_pool_cached() -> tuple[tuple[CharacterCard, ...], set[str]]:
+    """``merged_pool`` 的读缓存版（HTTP 端点用）。
+
+    未缓存时算一次并存入 registries 缓存，命中则直接返回。写路径
+    （save_card/delete_card/导入/换库）全部经 ``refresh_game_cache`` 失效，
+    所以新增卡片刷新页面即可见——与直算版语义一致。
+
+    为什么需要：``merged_pool`` 内部对每张卡调 ``get_character_by_id``，
+    而后者每次新开 SQLite 连接执行数组查询；数百张卡时单个 HTTP 请求会产生
+    数百次建连。前端角色四栏下拉与悬停详情都打这些端点。
+
+    返回的 shadowed 是缓存集合的拷贝，调用方就地修改不会污染缓存。
+    """
+    try:
+        from core.services import registries
+
+        cached = registries.get_character_pool_cache()
+        if isinstance(cached, tuple) and len(cached) == 2:
+            cards, shadowed = cached
+            return cards, set(shadowed)
+        cards, shadowed = merged_pool()
+        registries.set_character_pool_cache((cards, frozenset(shadowed)))
+        return cards, shadowed
+    except Exception:  # noqa: BLE001  缓存层故障不得影响功能
+        return merged_pool()
+
+
 def refresh_game_cache() -> None:
     """让内置池缓存失效，下一次开局立即看到新卡。
 

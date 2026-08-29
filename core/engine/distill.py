@@ -9,6 +9,13 @@ from __future__ import annotations
 from typing import Any
 
 
+#: 内部子调用的单请求读超时（秒）。客户端级默认 300s 对子调用过长：
+#: 这些调用多在持会话锁状态下发生（托管选线、任务/碎锚结算、宿敌回合、
+#: 压缩、蒸馏），慢响应会让其他端点一直 409；且降级阶梯会把等待放大数倍。
+#: 调用方显式传 timeout 的（quest_offer 120s、break_anchor_offer 30s）不受影响。
+DEFAULT_SUBCALL_TIMEOUT = 120.0
+
+
 def distill_model(client, model: str, prompt: str,
                   extra_kwargs: dict | None = None,
                   provider: str = "deepseek") -> str:
@@ -19,6 +26,8 @@ def distill_model(client, model: str, prompt: str,
     在 max_tokens 预算内思考链耗尽 tokens，正文一个字没写）视为本级失败，
     继续降级到下一级；级别 2 的裸参数用提供商默认输出预算，天然不受影响。
     全部失败才向上抛错（调用方自行降级处理）。
+
+    每级请求都带 ``DEFAULT_SUBCALL_TIMEOUT`` 读超时（调用方已指定则沿用其值）。
     """
     # 延迟导入：fate_engine 属于老版接入层，仅在源码运行时位于项目根或 legacy/ 下。
     from core import fate_engine as fe
@@ -31,6 +40,8 @@ def distill_model(client, model: str, prompt: str,
         thinking["thinking"] = {"type": "enabled"}
     # 输出预算：九字段锚点 JSON 等结构化输出 2000 tokens 偏紧（思考型模型
     # 还会占用思考链），放宽到 4000；空正文仍会降级到无预算的裸参数级。
+    timeout = thinking.get("timeout", DEFAULT_SUBCALL_TIMEOUT)
+    thinking.pop("timeout", None)
     full = dict(model=model, messages=[{"role": "user", "content": prompt}],
                 temperature=0.1, max_tokens=4000)
     # 级别 1：剥思考参数；级别 2：连 temperature/max_tokens 也剥掉。
@@ -41,7 +52,7 @@ def distill_model(client, model: str, prompt: str,
         {"model": model, "messages": [{"role": "user", "content": prompt}]},
     ):
         try:
-            response = client.chat.completions.create(**kwargs)
+            response = client.chat.completions.create(timeout=timeout, **kwargs)
             content = response.choices[0].message.content if getattr(response, "choices", None) else ""
             if str(content or "").strip():
                 return str(content)
@@ -59,9 +70,12 @@ def distill_model(client, model: str, prompt: str,
     # stream_reply 的 yield 是累积缓冲，最后一个 yield 即全文。
     try:
         acc = ""
+        # 流式级同样带读超时：extra_kwargs 会被 stream_reply 展开进 create 调用。
+        stream_kwargs = dict(extra_kwargs or fe.thinking_kwargs(provider))
+        stream_kwargs.setdefault("timeout", timeout)
         for acc in fe.stream_reply(client, model,
                                    "", [{"role": "user", "content": prompt}],
-                                   extra_kwargs=extra_kwargs, provider=provider):
+                                   extra_kwargs=stream_kwargs, provider=provider):
             pass
         if str(acc or "").strip():
             return str(acc)

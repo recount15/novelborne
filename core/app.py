@@ -178,7 +178,11 @@ def _ripple_block(state, message):
     record = ledger.transparent()[-1]
     record["step"] = len(previous) + 1
     previous.append(record)
-    state["ripples"] = previous
+    # 截尾 50 条：读取侧只用最近一条（播种/碎锚）与最近 3 条（压缩摘要）、
+    # 最近 12 条（ledger.ripples），长对局中更早的记录无人消费，却要参与
+    # 每回合存档序列化、每个流式 chunk 的 public_state 深拷贝与前端全量替换。
+    # step 字段仍按真实累计序号递增，不受截尾影响。
+    state["ripples"] = previous[-50:]
     state["last_ripple"] = {
         "raw_level": entry.raw_level.name,
         "effective_level": entry.effective_level.name,
@@ -993,22 +997,28 @@ def _character_pool_cards():
     缓存本体收编在 core.services.registries（中立层）；engine 的
     character_library 改动角色库后直接失效该缓存，不再反向写 app 全局。
     """
-    cards = registries.get_character_pool_cache()
-    if cards is None:
-        try:
-            from core.engine import character_library
+    # 缓存值统一为 (cards, shadowed) 二元组——与 character_library.merged_pool_cached
+    # 共用同一份缓存，两处写入格式必须一致。
+    cached = registries.get_character_pool_cache()
+    if isinstance(cached, tuple) and len(cached) == 2:
+        return cached[0]
+    cards: tuple = ()
+    shadowed: frozenset = frozenset()
+    try:
+        from core.engine import character_library
 
-            cards, _shadowed = character_library.merged_pool()
-        except ImportError:
+        cards, _shadowed = character_library.merged_pool()
+        shadowed = frozenset(_shadowed)
+    except ImportError:
+        cards = ()
+    if not cards:
+        try:
+            from core.engine import catalog
+            cards = tuple(catalog.load_character_pool())
+        except (OSError, ValueError, ImportError):
             cards = ()
-        if not cards:
-            try:
-                from core.engine import catalog
-                cards = tuple(catalog.load_character_pool())
-            except (OSError, ValueError, ImportError):
-                cards = ()
-        cards = tuple(cards)
-        registries.set_character_pool_cache(cards)
+    cards = tuple(cards)
+    registries.set_character_pool_cache((cards, shadowed))
     return cards
 
 

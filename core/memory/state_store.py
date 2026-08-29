@@ -39,7 +39,10 @@ def apply_turn(state: Mapping[str, Any] | None, patch: Mapping[str, Any] | None 
         updated["scene"]["round"] = max(0, int(round_no))
     updated["flags"]["last_update"] = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
     changes = diff_state(current, updated)
-    updated["history"] = list(current.get("history", []))[-99:]
+    # 保留最近 29 条（+本回合 1 条 = 30）：history 纯审计用途，面板与 prompt
+    # 装配都不读全量，而每条含 before/after 双份 diff，会随 state 进入每回合
+    # 存档序列化、流式 public_state 深拷贝与前端全量替换。
+    updated["history"] = list(current.get("history", []))[-29:]
     if changes:
         updated["history"].append({"round": updated["scene"].get("round", 0), "source": source,
                                     "changes": changes, "at": updated["flags"]["last_update"]})

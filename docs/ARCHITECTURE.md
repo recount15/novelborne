@@ -129,7 +129,7 @@ map_server/map_engine/map_periph.md）。
 | agent_mode.py | 类Agent 自检提示词装配/问题清单解析/修订指令 | app |
 | anchor_distiller.py | 后台单章锚点蒸馏线程：九字段解析/引文对齐/校验落盘 | app、tools |
 | autoplay.py | 托管子智能体：性格驱动选线（单回合、不改状态） | server |
-| break_anchor.py | 碎锚：积势进度、多阶段任务、成功降锚/失败冷却 | app、server、ask_service |
+| break_anchor.py | 全局碎锚：积势进度与发起门禁、多阶段任务、成功降锚（不扣积势）/失败冷却 | app、server、ask_service |
 | budget.py | 章节回合预算转发口（实现在 chapter_tools） | engine 门面 |
 | catalog.py | 伙伴/女主预设目录 schema、去重、assets/data 加载 | server、character_db/library、name_collision、scripts |
 | chapter_tools.py | 本地切章与索引（编码回退、标题模式库），含 CLI | server、ui/common、budget、tools |

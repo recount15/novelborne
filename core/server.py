@@ -308,7 +308,7 @@ def bootstrap_payload() -> dict[str, Any]:
         {"label": label, "path": path}
         for label, path in fe.list_character_models()
     ]
-    pool, shadowed = engine.character_library.merged_pool()
+    pool, shadowed = engine.character_library.merged_pool_cached()
     return {
         "providers": _provider_payload(),
         "works": list(fe.list_works()),
@@ -471,7 +471,7 @@ def characters_pool(slot: str = "宿敌栏", gender: str | None = None,
     gender_value = (gender or "").strip().lower()
     if gender_value and gender_value not in ("male", "female"):
         raise HTTPException(status_code=400, detail="gender 只支持 male 或 female")
-    pool, _shadowed = engine.character_library.merged_pool()
+    pool, _shadowed = engine.character_library.merged_pool_cached()
     cards = list(pool) or list(catalog.load_character_pool())
     rows = _slot_candidates(cards, slot_name, gender_value)
     keyword = (q or "").strip().lower()
@@ -494,7 +494,7 @@ def characters_pool_detail(card_id: str, slot: str = "宿敌栏") -> dict[str, A
     返回原型、出处、定位、适配类型与简介；卡不存在返回 404。
     """
     slot_name = _normalize_pool_slot(slot)
-    pool, _shadowed = engine.character_library.merged_pool()
+    pool, _shadowed = engine.character_library.merged_pool_cached()
     cards = list(pool) or list(catalog.load_character_pool())
     card = next((item for item in cards if item.id == card_id), None)
     if card is None:
@@ -1089,7 +1089,7 @@ def _library_card_payload(card, *, shadowed: set[str] | None = None) -> dict[str
 @app.get("/api/character-library")
 def character_library_list() -> dict[str, Any]:
     """全量角色池：内置 + 用户卡 + 替换版合并视图。"""
-    pool, shadowed = engine.character_library.merged_pool()
+    pool, shadowed = engine.character_library.merged_pool_cached()
     cards = [_library_card_payload(card, shadowed=shadowed) for card in pool]
     # relationship_vector 若为字符串形态，前端以纯文本展示即可。
     return {"cards": cards, "shadowed_built_in": sorted(shadowed)}
@@ -1772,11 +1772,8 @@ def save(session_id: str, request: SaveRequest) -> dict[str, Any]:
             start_params=state.get("start_params"),
             session_id=session.session_id,
         )
-        metadata = next(
-            (item for item in engine.persistence.list_saves(root=fe.WRITABLE_DIR, session_id=session.session_id)
-             if item["save_id"] == request.save_id),
-            None,
-        )
+        metadata = engine.persistence.save_metadata(
+            request.save_id, root=fe.WRITABLE_DIR, session_id=session.session_id)
         return {
             "session_id": session.session_id,
             "save_id": request.save_id,
@@ -1805,11 +1802,7 @@ def load_any_save(request: LoadRequest) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     restored["game_ready"] = True
     session.state = restored
-    metadata = next(
-        (item for item in engine.persistence.list_saves(root=fe.WRITABLE_DIR)
-         if item["save_id"] == request.save_id),
-        None,
-    )
+    metadata = engine.persistence.save_metadata(request.save_id, root=fe.WRITABLE_DIR)
     return {
         "session_id": session.session_id,
         "save_id": request.save_id,
@@ -1830,11 +1823,7 @@ def load(session_id: str, request: LoadRequest) -> dict[str, Any]:
             raise HTTPException(status_code=404, detail="未找到可恢复的存档")
         restored["game_ready"] = True
         session.state = restored
-        metadata = next(
-            (item for item in engine.persistence.list_saves(root=fe.WRITABLE_DIR)
-             if item["save_id"] == request.save_id),
-            None,
-        )
+        metadata = engine.persistence.save_metadata(request.save_id, root=fe.WRITABLE_DIR)
         return {
             "session_id": session.session_id,
             "save_id": request.save_id,

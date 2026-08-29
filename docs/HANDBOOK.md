@@ -44,8 +44,9 @@
 
 ## 4. 已知问题与设计备忘
 
-- **quick_distill 无独立超时**：模型慢调用会撞 openai 客户端默认 10 分钟
-  超时，期间 work_distill 停留 running——待办：蒸馏通道加 120s 超时
+- ~~quick_distill 无独立超时~~ **已解决（2026-08-30）**：`engine/distill.py`
+  的 `distill_model` 统一 `DEFAULT_SUBCALL_TIMEOUT=120s`，覆盖全部内部子调用
+  （蒸馏/托管/任务与碎锚结算/宿敌回合/压缩）；调用方显式传 timeout 的沿用其值
 - **glm-5.2 合规性**：正文超体量 ~10% 且未收锚时机械门禁会拒绝（引擎按
   设计工作）；提示词对体量/锚点的引导可继续调优
 - **sessions 无淘汰**：/api/saves/load 每次新建会话，内存只增不减——

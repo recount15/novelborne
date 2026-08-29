@@ -403,6 +403,23 @@ def _model_label(head, fallback):
     return fallback
 
 
+def _read_head(path, size=4096):
+    """只读文件头部若干字符（编码回退顺序与 read_upload_text 一致）。
+
+    用于只需要 frontmatter / 首个 H1 的场景（如 _scan_models 取展示标签）：
+    性格模型单文件可达数十 KB，bootstrap 每次实时扫描全部文件时全文读入是
+    纯浪费。不缓存，保留「保存后立即可见」语义。
+    """
+    for enc in ("utf-8", "gbk", "utf-16"):
+        try:
+            with open(path, encoding=enc) as fh:
+                return fh.read(size)
+        except (UnicodeDecodeError, UnicodeError):
+            continue
+    with open(path, encoding="utf-8", errors="ignore") as fh:
+        return fh.read(size)
+
+
 def _scan_models(dirpath, suffix=""):
     out = []
     if not os.path.isdir(dirpath):
@@ -412,7 +429,7 @@ def _scan_models(dirpath, suffix=""):
             continue
         path = os.path.join(dirpath, fn)
         try:
-            head = read_upload_text(path)[:2500]
+            head = _read_head(path, 4096)
         except Exception:
             continue
         label = _model_label(head, os.path.splitext(fn)[0].replace("_SKILL", ""))
