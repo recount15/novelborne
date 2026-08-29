@@ -441,7 +441,7 @@ async function saveCardToCharacterLibrary(): Promise<void> {
         <ArrowLeft :size="14" /> 返回
       </button>
       <div class="designer-title">
-        <Wand2 :size="16" class="text-[#b63a2b]" />
+        <Wand2 :size="16" class="text-(--fe-accent)" />
         <h1>角色设计器</h1>
       </div>
       <ol class="step-bar" aria-label="设计步骤">
@@ -461,7 +461,7 @@ async function saveCardToCharacterLibrary(): Promise<void> {
     </header>
 
     <div class="designer-scroll scrollbar">
-      <div v-if="schemaLoading" class="grid place-items-center py-24 text-[#948a76]">
+      <div v-if="schemaLoading" class="grid place-items-center py-24 text-(--fe-ink-3)">
         <LoaderCircle class="animate-spin" :size="22" />
       </div>
 
@@ -510,14 +510,14 @@ async function saveCardToCharacterLibrary(): Promise<void> {
                 <select v-model="item.kind" class="field h-8 w-36 shrink-0 px-2 text-[12px]">
                   <option v-for="kind in corpusKinds" :key="kind.id" :value="kind.id">{{ kind.label }}</option>
                 </select>
-                <span class="ml-auto shrink-0 text-[10px]" :class="corpusCount(item) >= MAX_CORPUS_CHARS ? 'text-[#8d2c20]' : 'text-[#948a76]'">
+                <span class="ml-auto shrink-0 text-[10px]" :class="corpusCount(item) >= MAX_CORPUS_CHARS ? 'text-(--fe-danger)' : 'text-(--fe-ink-3)'">
                   {{ corpusCount(item) }}/{{ MAX_CORPUS_CHARS }}
                 </span>
                 <button type="button" class="icon-mini" title="删除该条" @click="removeCorpus(index)">
                   <Trash2 :size="13" />
                 </button>
               </div>
-              <p v-if="corpusHint(item.kind)" class="mt-1 text-[10px] leading-4 text-[#a89a7c]">{{ corpusHint(item.kind) }}</p>
+              <p v-if="corpusHint(item.kind)" class="mt-1 text-[10px] leading-4 text-(--fe-border-strong)">{{ corpusHint(item.kind) }}</p>
               <textarea
                 v-model="item.text"
                 class="field mt-2 h-28 p-2 text-[12.5px] leading-6"
@@ -563,17 +563,17 @@ async function saveCardToCharacterLibrary(): Promise<void> {
         <section v-else>
           <h2 class="page-heading">生成</h2>
           <div class="richness-card">
-            <Sparkles :size="15" class="mt-0.5 shrink-0 text-[#a87516]" />
+            <Sparkles :size="15" class="mt-0.5 shrink-0 text-(--fe-warn)" />
             <div class="min-w-0 flex-1 text-[12px] leading-6">
               <p>
                 输入充实度：语料 {{ corpusFilledCount }} 条 · 已答 {{ answeredCount }}/{{ questions.length }} 题
               </p>
-              <p class="text-[#877d69]">输入越少角色越接近及格线，越多越有灵魂。</p>
+              <p class="text-(--fe-ink-3)">输入越少角色越接近及格线，越多越有灵魂。</p>
             </div>
           </div>
 
           <div v-if="generating" class="generating-box">
-            <LoaderCircle class="animate-spin text-[#b63a2b]" :size="22" />
+            <LoaderCircle class="animate-spin text-(--fe-accent)" :size="22" />
             <p>正在融合角色灵魂…</p>
           </div>
 
@@ -586,8 +586,8 @@ async function saveCardToCharacterLibrary(): Promise<void> {
           <div v-if="result && !generating" class="mt-4">
             <div v-if="quality" class="quality-row">
               <span class="quality-badge" :class="qualityBadgeClass">{{ qualityLabel }}</span>
-              <span v-if="qualityScore !== null" class="text-[12px] font-bold text-[#544d3f]">评分 {{ qualityScore }}</span>
-              <p v-if="qualityMissing.length" class="w-full text-[11px] leading-5 text-[#877d69]">
+              <span v-if="qualityScore !== null" class="text-[12px] font-bold text-(--fe-ink-2)">评分 {{ qualityScore }}</span>
+              <p v-if="qualityMissing.length" class="w-full text-[11px] leading-5 text-(--fe-ink-3)">
                 补料提示：{{ qualityMissing.join('、') }}
               </p>
             </div>
@@ -604,7 +604,7 @@ async function saveCardToCharacterLibrary(): Promise<void> {
             <template v-if="personaMarkdown">
               <button type="button" class="persona-toggle" @click="personaOpen = !personaOpen">
                 <FileText :size="13" /> Persona Markdown 预览
-                <span class="ml-auto text-[10px] text-[#948a76]">{{ personaOpen ? '收起' : '展开' }}</span>
+                <span class="ml-auto text-[10px] text-(--fe-ink-3)">{{ personaOpen ? '收起' : '展开' }}</span>
               </button>
               <pre v-if="personaOpen" class="persona-block scrollbar">{{ personaMarkdown }}</pre>
             </template>
@@ -628,8 +628,8 @@ async function saveCardToCharacterLibrary(): Promise<void> {
                 <option value="宿敌">宿敌（存为反派）</option>
               </select>
             </div>
-            <p v-if="saveError" class="mt-2 text-[11px] text-[#8d2c20]">{{ saveError }}</p>
-            <p v-if="saveDone" class="mt-2 text-[11px] font-bold text-[#137c6c]">{{ saveDone }}</p>
+            <p v-if="saveError" class="mt-2 text-[11px] text-(--fe-danger)">{{ saveError }}</p>
+            <p v-if="saveDone" class="mt-2 text-[11px] font-bold text-(--fe-ok)">{{ saveDone }}</p>
           </div>
         </section>
       </div>
@@ -657,8 +657,8 @@ async function saveCardToCharacterLibrary(): Promise<void> {
   z-index: 50;
   display: flex;
   flex-direction: column;
-  background: #f3edde;
-  color: #2c2925;
+  background: var(--fe-bg);
+  color: var(--fe-ink);
 }
 .designer-header {
   display: flex;
@@ -666,28 +666,28 @@ async function saveCardToCharacterLibrary(): Promise<void> {
   flex-shrink: 0;
   align-items: center;
   gap: 14px;
-  border-bottom: 1px solid #ddd2bc;
-  background: #fdfaf2;
+  border-bottom: 1px solid var(--fe-border);
+  background: var(--fe-panel);
   padding: 0 14px;
 }
 .designer-title { display: flex; align-items: center; gap: 7px; }
 .designer-title h1 { font-size: 14px; font-weight: 800; letter-spacing: .04em; }
 .step-bar { display: flex; align-items: center; gap: 4px; margin-left: auto; }
-.step-item { display: flex; align-items: center; gap: 5px; padding: 3px 6px; color: #948a76; font-size: 11px; font-weight: 700; }
+.step-item { display: flex; align-items: center; gap: 5px; padding: 3px 6px; color: var(--fe-ink-3); font-size: 11px; font-weight: 700; }
 .step-dot {
   display: grid;
   width: 18px;
   height: 18px;
   place-items: center;
-  border: 1.5px solid #d9cfba;
+  border: 1.5px solid var(--fe-border);
   border-radius: 999px;
-  background: #fdfaf2;
+  background: var(--fe-panel);
   font-size: 10px;
 }
-.step-item.active { color: #b63a2b; }
-.step-item.active .step-dot { border-color: #b63a2b; color: #b63a2b; }
-.step-item.done { color: #137c6c; }
-.step-item.done .step-dot { border-color: #137c6c; background: #137c6c; color: #fff; }
+.step-item.active { color: var(--fe-accent); }
+.step-item.active .step-dot { border-color: var(--fe-accent); color: var(--fe-accent); }
+.step-item.done { color: var(--fe-ok); }
+.step-item.done .step-dot { border-color: var(--fe-ok); background: var(--fe-ok); color: var(--fe-accent-ink); }
 @media (max-width: 640px) {
   .step-label { display: none; }
 }
@@ -704,10 +704,10 @@ async function saveCardToCharacterLibrary(): Promise<void> {
   font-size: 21px;
   font-weight: 700;
   letter-spacing: .1em;
-  color: #3a332a;
+  color: var(--fe-ink);
   text-align: center;
 }
-.page-note { margin-top: 8px; text-align: center; font-size: 12px; line-height: 1.8; color: #877d69; }
+.page-note { margin-top: 8px; text-align: center; font-size: 12px; line-height: 1.8; color: var(--fe-ink-3); }
 
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
 .form-grid .span-2 { grid-column: span 2; }
@@ -715,50 +715,50 @@ async function saveCardToCharacterLibrary(): Promise<void> {
   .form-grid { grid-template-columns: 1fr; }
   .form-grid .span-2 { grid-column: span 1; }
 }
-.required { margin-left: 6px; font-size: 10px; font-style: normal; font-weight: 400; color: #b63a2b; }
+.required { margin-left: 6px; font-size: 10px; font-style: normal; font-weight: 400; color: var(--fe-accent); }
 
-.corpus-card { border: 1px solid #ddd2bc; border-radius: 6px; background: #faf6ec; padding: 10px; }
-.question-card { border: 1px solid #ddd2bc; border-radius: 6px; background: #faf6ec; padding: 12px; }
-.skip-btn { flex-shrink: 0; border: 1px solid #ddd2bc; border-radius: 6px; background: #fdfaf2; padding: 3px 9px; font-size: 10px; font-weight: 700; color: #877d69; }
-.skip-btn:hover { border-color: #b63a2b; color: #b63a2b; }
+.corpus-card { border: 1px solid var(--fe-border); border-radius: var(--fe-radius); background: var(--fe-panel); padding: 10px; }
+.question-card { border: 1px solid var(--fe-border); border-radius: var(--fe-radius); background: var(--fe-panel); padding: 12px; }
+.skip-btn { flex-shrink: 0; border: 1px solid var(--fe-border); border-radius: var(--fe-radius); background: var(--fe-panel); padding: 3px 9px; font-size: 10px; font-weight: 700; color: var(--fe-ink-3); }
+.skip-btn:hover { border-color: var(--fe-accent); color: var(--fe-accent); }
 .choice-card {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  border: 1px solid #ddd2bc;
-  border-radius: 6px;
-  background: #fdfaf2;
+  border: 1px solid var(--fe-border);
+  border-radius: var(--fe-radius);
+  background: var(--fe-panel);
   padding: 8px 10px;
   font-size: 12px;
   line-height: 1.6;
-  color: #3d382e;
+  color: var(--fe-ink);
   transition: border-color 140ms ease, background-color 140ms ease;
 }
-.choice-card:hover { border-color: #c2b6a0; }
-.choice-card.selected { border-color: #b63a2b; background: #fdf3ef; }
+.choice-card:hover { border-color: var(--fe-border-strong); }
+.choice-card.selected { border-color: var(--fe-accent); background: color-mix(in srgb, var(--fe-accent) 8%, var(--fe-panel)); }
 .choice-key {
   display: grid;
   width: 20px;
   height: 20px;
   flex: 0 0 auto;
   place-items: center;
-  border: 1.5px solid #c8bda6;
+  border: 1.5px solid var(--fe-border-strong);
   border-radius: 5px;
   font-size: 10px;
   font-weight: 800;
-  color: #877d69;
+  color: var(--fe-ink-3);
 }
-.choice-card.selected .choice-key { border-color: #b63a2b; color: #b63a2b; }
+.choice-card.selected .choice-key { border-color: var(--fe-accent); color: var(--fe-accent); }
 
 .richness-card {
   display: flex;
   gap: 9px;
   margin-top: 16px;
-  border: 1px solid #e3d3a8;
-  border-radius: 6px;
-  background: #faf3e3;
+  border: 1px solid color-mix(in srgb, var(--fe-warn) 32%, var(--fe-panel));
+  border-radius: var(--fe-radius);
+  background: color-mix(in srgb, var(--fe-warn) 10%, var(--fe-panel));
   padding: 10px 12px;
-  color: #544d3f;
+  color: var(--fe-ink-2);
 }
 .generating-box {
   display: flex;
@@ -766,50 +766,50 @@ async function saveCardToCharacterLibrary(): Promise<void> {
   align-items: center;
   gap: 10px;
   padding: 44px 0;
-  color: #877d69;
+  color: var(--fe-ink-3);
   font-family: var(--font-serif);
   font-size: 14px;
   letter-spacing: .12em;
 }
 .quality-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .quality-badge { border-radius: 4px; padding: 3px 10px; font-size: 12px; font-weight: 800; }
-.quality-badge.pass { border: 1px solid #d9b08a; background: #faf0e4; color: #9c5a1e; }
-.quality-badge.soul { border: 1px solid #b63a2b; background: #b63a2b; color: #fff; }
-.quality-badge.flat { border: 1px solid #cfc3ab; background: #f3ecdc; color: #877d69; }
+.quality-badge.pass { border: 1px solid color-mix(in srgb, var(--fe-warn) 45%, var(--fe-panel)); background: color-mix(in srgb, var(--fe-accent) 6%, var(--fe-panel)); color: color-mix(in srgb, var(--fe-warn) 78%, var(--fe-ink)); }
+.quality-badge.soul { border: 1px solid var(--fe-accent); background: var(--fe-accent); color: var(--fe-accent-ink); }
+.quality-badge.flat { border: 1px solid var(--fe-border); background: var(--fe-panel-2); color: var(--fe-ink-3); }
 .result-heading { margin-top: 16px; margin-bottom: 8px; font-size: 13px; font-weight: 800; }
-.card-list { overflow: hidden; border: 1px solid #ddd2bc; border-radius: 6px; background: #fdfaf2; }
-.card-list > div { display: grid; grid-template-columns: minmax(90px, .8fr) minmax(0, 1.6fr); gap: 10px; border-bottom: 1px solid #e8e0cd; padding: 8px 11px; font-size: 12px; }
+.card-list { overflow: hidden; border: 1px solid var(--fe-border); border-radius: var(--fe-radius); background: var(--fe-panel); }
+.card-list > div { display: grid; grid-template-columns: minmax(90px, .8fr) minmax(0, 1.6fr); gap: 10px; border-bottom: 1px solid color-mix(in srgb, var(--fe-border) 60%, var(--fe-panel)); padding: 8px 11px; font-size: 12px; }
 .card-list > div:last-child { border-bottom: 0; }
-.card-list dt { color: #877d69; }
-.card-list dd { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: #3d382e; }
+.card-list dt { color: var(--fe-ink-3); }
+.card-list dd { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fe-ink); }
 .persona-toggle {
   display: flex;
   width: 100%;
   align-items: center;
   gap: 7px;
   margin-top: 14px;
-  border: 1px solid #ddd2bc;
-  border-radius: 6px;
-  background: #faf6ec;
+  border: 1px solid var(--fe-border);
+  border-radius: var(--fe-radius);
+  background: var(--fe-panel);
   padding: 8px 11px;
   font-size: 12px;
   font-weight: 700;
-  color: #544d3f;
+  color: var(--fe-ink-2);
 }
 .persona-block {
   max-height: 300px;
   overflow-y: auto;
   margin-top: 6px;
-  border: 1px solid #ddd2bc;
-  border-radius: 6px;
-  background: #f6f1e3;
+  border: 1px solid var(--fe-border);
+  border-radius: var(--fe-radius);
+  background: var(--fe-panel-2);
   padding: 12px;
   font-family: "JetBrains Mono", "Consolas", monospace;
   font-size: 11px;
   line-height: 1.7;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  color: #544d3f;
+  color: var(--fe-ink-2);
 }
 .save-row { display: flex; gap: 8px; margin-top: 16px; }
 
@@ -817,15 +817,15 @@ async function saveCardToCharacterLibrary(): Promise<void> {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  border: 1px solid #e5b5ad;
-  border-radius: 6px;
-  background: #fff4f1;
+  border: 1px solid color-mix(in srgb, var(--fe-danger) 28%, var(--fe-panel));
+  border-radius: var(--fe-radius);
+  background: color-mix(in srgb, var(--fe-danger) 6%, var(--fe-panel));
   padding: 10px 12px;
   font-size: 12px;
-  color: #8d2c20;
+  color: var(--fe-danger);
 }
-.icon-mini { display: grid; width: 26px; height: 26px; place-items: center; border-radius: 5px; color: #948a76; }
-.icon-mini:hover { background: #f3ecdc; color: #8d2c20; }
+.icon-mini { display: grid; width: 26px; height: 26px; place-items: center; border-radius: 5px; color: var(--fe-ink-3); }
+.icon-mini:hover { background: var(--fe-panel-2); color: var(--fe-danger); }
 
 .btn {
   display: inline-flex;
@@ -833,29 +833,29 @@ async function saveCardToCharacterLibrary(): Promise<void> {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border: 1px solid #ddd2bc;
-  border-radius: 6px;
-  background: #f3ecdc;
+  border: 1px solid var(--fe-border);
+  border-radius: var(--fe-radius);
+  background: var(--fe-panel-2);
   padding: 0 12px;
-  color: #544d3f;
+  color: var(--fe-ink-2);
   font-size: 12px;
   font-weight: 700;
   transition: background-color 140ms ease, border-color 140ms ease, transform 100ms ease;
 }
-.btn:hover:not(:disabled) { border-color: #b0a48e; }
+.btn:hover:not(:disabled) { border-color: var(--fe-border-strong); }
 .btn:active:not(:disabled) { transform: scale(.97); }
-.btn.primary { border-color: #b63a2b; background: #b63a2b; color: #fff; }
-.btn.primary:hover:not(:disabled) { background: #9f2f22; }
+.btn.primary { border-color: var(--fe-accent); background: var(--fe-accent); color: var(--fe-accent-ink); }
+.btn.primary:hover:not(:disabled) { background: var(--fe-accent-strong); }
 .btn.ghost { background: transparent; }
-.btn:disabled { border-color: #ddd2bc; background: #ebe3d1; color: #b0a48e; }
+.btn:disabled { border-color: var(--fe-border); background: var(--fe-panel-3); color: var(--fe-border-strong); }
 
 .designer-footer {
   display: flex;
   flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
-  border-top: 1px solid #ddd2bc;
-  background: #fdfaf2;
+  border-top: 1px solid var(--fe-border);
+  background: var(--fe-panel);
   padding: 10px 14px;
 }
 </style>

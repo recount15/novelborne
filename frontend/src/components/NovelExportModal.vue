@@ -268,7 +268,7 @@ function downloadMarkdown(): void {
   align-items: flex-start;
   gap: 8px;
   border: 1px solid color-mix(in srgb, var(--fe-danger) 35%, var(--fe-border));
-  border-radius: 6px;
+  border-radius: var(--fe-radius);
   background: color-mix(in srgb, var(--fe-danger) 8%, var(--fe-bg));
   padding: 10px 12px;
   font-size: 12px;
@@ -294,7 +294,7 @@ function downloadMarkdown(): void {
 }
 .preview-meta { margin-top: 4px; text-align: center; font-size: 11px; color: var(--fe-ink-3); }
 .chapter-list { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
-.chapter-item { border: 1px solid var(--fe-border); border-radius: 6px; background: var(--fe-panel-2); }
+.chapter-item { border: 1px solid var(--fe-border); border-radius: var(--fe-radius); background: var(--fe-panel-2); }
 .chapter-toggle {
   display: flex;
   width: 100%;
@@ -335,7 +335,7 @@ function downloadMarkdown(): void {
   justify-content: center;
   gap: 6px;
   border: 1px solid var(--fe-border);
-  border-radius: 6px;
+  border-radius: var(--fe-radius);
   background: var(--fe-panel-2);
   padding: 0 12px;
   color: var(--fe-ink-2);

@@ -187,7 +187,8 @@ export interface StartPayload {
   heroine_count: number
   /** 数量即事实：伴侣 >1 时自动按多女主提交，对齐后端单女主校验 */
   heroine_mode?: string
-  protagonist_gender: 'male' | 'female'
+  /** 性别栏杆已破除：前端不再采集，缺省时后端按 unknown 处理 */
+  protagonist_gender?: 'male' | 'female'
   enable_nemesis: boolean
   nemesis_select: string
   nemesis_upload_id: string | null

@@ -99,6 +99,8 @@ interface EditableRosterEntry extends RosterEntry {
   model_id: string
   skill_mode: SkillMode
   skill_upload: UploadInfo | null
+  /** 通用性格预设名（空串=跟随设定）；开局打包进 member_pack */
+  persona_preset: string
 }
 
 const bootstrap = ref<BootstrapData | null>(null)
@@ -1730,25 +1732,25 @@ watch([compressionRecord, round], () => {
 
 <template>
   <div
-    class="app-root h-dvh min-h-[640px] bg-paper text-ink"
+    class="app-root h-dvh min-h-[640px] bg-(--fe-bg) text-(--fe-ink)"
     :class="[fontSize === 'large' ? 'font-large' : '', reduceMotion ? 'reduce-motion' : '']"
   >
-    <header class="flex h-14 items-center border-b border-[#ddd2bc] bg-[#fdfaf2] px-3 sm:px-4">
+    <header class="app-header relative z-10 flex h-14 items-center border-b border-(--fe-border) bg-(--fe-panel) px-3 sm:px-4">
       <div class="flex min-w-0 items-center gap-2.5">
-        <div class="seal-logo grid size-8 shrink-0 place-items-center rounded-full text-white">
+        <div class="seal-logo grid size-8 shrink-0 place-items-center rounded-full text-(--fe-accent-ink)">
           <BookOpen :size="17" />
         </div>
         <div class="min-w-0 flex items-center gap-1.5">
           <div class="min-w-0">
             <h1 class="truncate text-sm font-bold">书中织梦</h1>
-            <p class="title-loom truncate text-[10px] text-[#7d7461]">Novelborne · 生于书卷</p>
+            <p class="title-loom truncate text-[10px] text-(--fe-ink-3)">Novelborne · 生于书卷</p>
           </div>
           <SiameseCat title="喵" />
         </div>
       </div>
 
-      <div class="ml-5 hidden min-w-0 items-center gap-2 text-xs text-[#746b5a] md:flex">
-        <span class="status-badge rounded border px-2 py-1" :class="enhanced ? 'border-[#c9a24a] bg-[#faf3e3] text-[#7c5b12]' : 'border-[#ddd2bc] bg-[#f4eee0]'">{{ enhanced ? '强化模式' : '基础模式' }}</span>
+      <div class="ml-5 hidden min-w-0 items-center gap-2 text-xs text-(--fe-ink-3) md:flex">
+        <span class="status-badge rounded border px-2 py-1" :class="enhanced ? 'border-[color-mix(in_srgb,_var(--fe-warn)_55%,_var(--fe-panel))] bg-[color-mix(in_srgb,_var(--fe-warn)_10%,_var(--fe-panel))] text-[color-mix(in_srgb,_var(--fe-warn)_72%,_var(--fe-ink))]' : 'border-(--fe-border) bg-(--fe-panel-2)'">{{ enhanced ? '强化模式' : '基础模式' }}</span>
         <span class="truncate">{{ status }}</span>
       </div>
 
@@ -1784,19 +1786,19 @@ watch([compressionRecord, round], () => {
     </header>
 
     <Transition name="pop">
-      <div v-if="error" class="absolute inset-x-3 top-[62px] z-30 mx-auto flex max-w-2xl items-start gap-2 rounded-md border border-[#e5b5ad] bg-[#fff4f1] px-3 py-2 text-xs text-[#8d2c20] shadow-sm">
+      <div v-if="error" class="absolute inset-x-3 top-[62px] z-30 mx-auto flex max-w-2xl items-start gap-2 rounded-md border border-[color-mix(in_srgb,_var(--fe-danger)_28%,_var(--fe-panel))] bg-[color-mix(in_srgb,_var(--fe-danger)_6%,_var(--fe-panel))] px-3 py-2 text-xs text-(--fe-danger) shadow-sm">
         <CircleAlert class="mt-0.5 shrink-0" :size="15" />
         <span class="min-w-0 flex-1 break-words">{{ error }}</span>
         <button title="关闭" @click="error = ''"><X :size="15" /></button>
       </div>
     </Transition>
 
-    <main class="grid h-[calc(100dvh-56px)] min-h-[584px] grid-cols-1 lg:grid-cols-[300px_minmax(420px,1fr)_320px]">
+    <main class="grid h-[calc(100dvh-56px)] min-h-[584px] grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)_300px] xl:grid-cols-[300px_minmax(420px,1fr)_320px]">
       <aside
-        class="panel-left scrollbar overflow-y-auto border-r border-[#ddd2bc] bg-[#efe8d8] pb-20 lg:block lg:pb-4"
+        class="panel-left scrollbar overflow-y-auto border-r border-(--fe-border) bg-(--fe-panel-2) pb-20 lg:block lg:pb-4"
         :class="mobilePanel === 'setup' ? 'block' : 'hidden'"
       >
-        <section class="border-b border-[#ddd2bc] p-3">
+        <section class="border-b border-(--fe-border) p-3">
           <button class="section-toggle" @click="basicOpen = !basicOpen">
             <span class="flex items-center gap-2"><Settings2 :size="15" /> 基础设定</span>
             <ChevronDown :size="15" class="chevron" :class="basicOpen ? 'rotate-180' : ''" />
@@ -1823,7 +1825,7 @@ watch([compressionRecord, round], () => {
                   @click="form.convergence = item"
                 >{{ item }}</button>
               </div>
-              <p class="mt-1 text-[10px] leading-4 text-[#948a76]">收束力越高，剧情走向越贴近原著主线锚点。</p>
+              <p class="mt-1 text-[10px] leading-4 text-(--fe-ink-3)">收束力越高，剧情走向越贴近原著主线锚点。</p>
             </div>
 
             <div v-if="enhanced" class="mt-3">
@@ -1845,11 +1847,11 @@ watch([compressionRecord, round], () => {
                 />
                 <span class="seal-mark seal-max" aria-hidden="true">繁</span>
               </div>
-              <p class="mt-1.5 text-[10px] leading-4 text-[#948a76]">{{ richnessTier.note }}</p>
+              <p class="mt-1.5 text-[10px] leading-4 text-(--fe-ink-3)">{{ richnessTier.note }}</p>
               <Transition name="pop">
                 <p
                   v-if="richnessThinkingHint && enhanced"
-                  class="mt-1 flex items-start gap-1 rounded-md border border-[#e3cf9a] bg-[#faf3dd] px-2 py-1.5 text-[10px] leading-4 text-[#7c5b12]"
+                  class="mt-1 flex items-start gap-1 rounded-md border border-[color-mix(in_srgb,_var(--fe-warn)_32%,_var(--fe-panel))] bg-[color-mix(in_srgb,_var(--fe-warn)_10%,_var(--fe-panel))] px-2 py-1.5 text-[10px] leading-4 text-[color-mix(in_srgb,_var(--fe-warn)_72%,_var(--fe-ink))]"
                 >
                   <Sparkles :size="11" class="mt-0.5 shrink-0" />
                   当前丰富度建议搭配带思考模式的模型，或在下方把思考模式设为「开启」。
@@ -1859,29 +1861,29 @@ watch([compressionRecord, round], () => {
 
             <div v-if="enhanced" class="mt-2">
               <label class="flex cursor-pointer items-center gap-2 text-xs font-bold">
-                <input v-model="form.story_agent_mode" type="checkbox" class="size-4 accent-[#b63a2b]" :disabled="setupLocked" />
+                <input v-model="form.story_agent_mode" type="checkbox" class="size-4 accent-(--fe-accent)" :disabled="setupLocked" />
                 {{ bootstrap?.story_agent_mode?.label ?? '类 Agent 生成' }}
-                <Sparkles :size="12" class="text-[#b63a2b]" />
+                <Sparkles :size="12" class="text-(--fe-accent)" />
               </label>
-              <p class="mt-1 text-[10px] leading-4 text-[#948a76]">{{ bootstrap?.story_agent_mode?.note }}</p>
+              <p class="mt-1 text-[10px] leading-4 text-(--fe-ink-3)">{{ bootstrap?.story_agent_mode?.note }}</p>
             </div>
 
             <div v-if="!enhanced" class="mt-2">
               <span class="label flex items-center justify-between">
                 <span>作品库</span>
-                <span class="font-normal text-[#948a76]">{{ worksCount }} 部</span>
+                <span class="font-normal text-(--fe-ink-3)">{{ worksCount }} 部</span>
               </span>
               <div class="work-picker">
                 <button type="button" class="field work-picker-trigger" :disabled="setupLocked" @click="workPickerOpen = !workPickerOpen">
                   <span class="min-w-0 flex-1 truncate text-left">{{ form.work || '选择作品' }}</span>
-                  <ChevronDown :size="14" class="shrink-0 text-[#948a76]" />
+                  <ChevronDown :size="14" class="shrink-0 text-(--fe-ink-3)" />
                 </button>
                 <div v-if="workPickerOpen" class="picker-overlay" @click="workPickerOpen = false" />
                 <div v-if="workPickerOpen" class="work-picker-panel">
                   <div class="work-picker-search">
-                    <Search :size="13" class="shrink-0 text-[#948a76]" />
+                    <Search :size="13" class="shrink-0 text-(--fe-ink-3)" />
                     <input v-model="workQuery" placeholder="搜索作品名或编号…" />
-                    <span class="shrink-0 text-[10px] text-[#948a76]">{{ filteredWorks.length }} 部</span>
+                    <span class="shrink-0 text-[10px] text-(--fe-ink-3)">{{ filteredWorks.length }} 部</span>
                   </div>
                   <div class="work-picker-list scrollbar">
                     <button
@@ -1892,8 +1894,8 @@ watch([compressionRecord, round], () => {
                       :class="work === form.work ? 'active' : ''"
                       @click="selectWork(work)"
                     >{{ work }}</button>
-                    <button v-if="hasMoreWorks" type="button" class="w-full py-2 text-center text-[11px] text-vermilion hover:underline" @click="loadMoreWorks">加载更多（{{ filteredWorks.length - pagedWorks.length }} 部）</button>
-                    <p v-if="!filteredWorks.length" class="py-4 text-center text-[11px] text-[#948a76]">无匹配作品</p>
+                    <button v-if="hasMoreWorks" type="button" class="w-full py-2 text-center text-[11px] text-(--fe-accent) hover:underline" @click="loadMoreWorks">加载更多（{{ filteredWorks.length - pagedWorks.length }} 部）</button>
+                    <p v-if="!filteredWorks.length" class="py-4 text-center text-[11px] text-(--fe-ink-3)">无匹配作品</p>
                   </div>
                 </div>
               </div>
@@ -1910,13 +1912,13 @@ watch([compressionRecord, round], () => {
               <div v-if="!enhanced" class="mt-2">
                 <span class="label flex items-center justify-between">
                   <span>自定义原著（可选上传）</span>
-                  <button v-if="novelUpload" type="button" class="text-[10px] text-vermilion hover:underline" :disabled="setupLocked" @click="novelUpload = null">清除（回到作品库）</button>
+                  <button v-if="novelUpload" type="button" class="text-[10px] text-(--fe-accent) hover:underline" :disabled="setupLocked" @click="novelUpload = null">清除（回到作品库）</button>
                 </span>
                 <label class="upload-zone" @dragover.prevent @drop.prevent="handleUpload">
-                  <Upload :size="16" class="shrink-0 text-vermilion" />
+                  <Upload :size="16" class="shrink-0 text-(--fe-accent)" />
                   <span class="min-w-0 text-xs">
                     <strong class="block truncate">{{ novelUpload?.filename || '选择 TXT 文件' }}</strong>
-                    <small class="block truncate text-[10px] text-[#7d7461]">
+                    <small class="block truncate text-[10px] text-(--fe-ink-3)">
                       {{ novelUpload ? `${Number(novelUpload.bytes || 0).toLocaleString()} bytes · 开局时优先于作品库` : '上传自有文本作为穿越世界（优先于左侧作品库）' }}
                     </small>
                   </span>
@@ -1928,10 +1930,10 @@ watch([compressionRecord, round], () => {
             <div v-else class="mt-2">
               <span class="label">完整原著 TXT</span>
               <label class="upload-zone" @dragover.prevent @drop.prevent="handleUpload">
-                <Upload :size="16" class="shrink-0 text-vermilion" />
+                <Upload :size="16" class="shrink-0 text-(--fe-accent)" />
                 <span class="min-w-0 text-xs">
                   <strong class="block truncate">{{ novelUpload?.filename || '选择 TXT 文件' }}</strong>
-                  <small class="block truncate text-[10px] text-[#7d7461]">
+                  <small class="block truncate text-[10px] text-(--fe-ink-3)">
                     {{ novelUpload ? `${Number(novelUpload.bytes || 0).toLocaleString()} bytes` : '点击或拖入 TXT，开局时执行章节切分门禁' }}
                   </small>
                 </span>
@@ -1941,7 +1943,7 @@ watch([compressionRecord, round], () => {
           </div>
         </section>
 
-        <section class="border-b border-[#ddd2bc] p-3">
+        <section class="border-b border-(--fe-border) p-3">
           <button class="section-toggle" @click="savesOpen = !savesOpen">
             <span class="flex items-center gap-2"><Save :size="15" /> 存档</span>
             <ChevronDown :size="15" class="chevron" :class="savesOpen ? 'rotate-180' : ''" />
@@ -1978,9 +1980,9 @@ watch([compressionRecord, round], () => {
                   <strong class="min-w-0 flex-1 truncate text-[12px]">{{ meta.save_id }}</strong>
                   <span class="save-mode-badge" :class="saveModeLabel(meta.mode) === '强化' ? 'enhanced' : ''">{{ saveModeLabel(meta.mode) }}</span>
                 </div>
-                <p class="mt-1 truncate text-[11px] text-[#544d3f]" :title="saveWorkLabel(meta)">{{ saveWorkLabel(meta) }}</p>
-                <p class="truncate text-[10px] text-[#877d69]">{{ saveRoleLabel(meta) }} · {{ meta.difficulty || '未知难度' }}</p>
-                <div class="mt-1.5 flex items-center justify-between gap-2 text-[10px] text-[#948a76]">
+                <p class="mt-1 truncate text-[11px] text-(--fe-ink-2)" :title="saveWorkLabel(meta)">{{ saveWorkLabel(meta) }}</p>
+                <p class="truncate text-[10px] text-(--fe-ink-3)">{{ saveRoleLabel(meta) }} · {{ meta.difficulty || '未知难度' }}</p>
+                <div class="mt-1.5 flex items-center justify-between gap-2 text-[10px] text-(--fe-ink-3)">
                   <span>回合 {{ meta.round ?? '—' }} · 章节 {{ meta.chapter ?? '—' }}</span>
                   <span class="shrink-0">{{ formatSavedAt(meta.saved_at) }}</span>
                 </div>
@@ -2008,7 +2010,7 @@ watch([compressionRecord, round], () => {
           </div>
         </section>
 
-        <section class="border-b border-[#ddd2bc] p-3">
+        <section class="border-b border-(--fe-border) p-3">
           <button class="section-toggle" @click="protagonistOpen = !protagonistOpen">
             <span class="flex items-center gap-2"><Sparkles :size="15" /> 主角、角色与金手指</span>
             <ChevronDown :size="15" class="chevron" :class="protagonistOpen ? 'rotate-180' : ''" />
@@ -2025,7 +2027,7 @@ watch([compressionRecord, round], () => {
             <div class="mt-2">
               <span class="label flex items-center justify-between">
                 <span>主角性格</span>
-                <span class="font-normal text-[#948a76]">{{ totalPoolCards }} 张卡</span>
+                <span class="font-normal text-(--fe-ink-3)">{{ totalPoolCards }} 张卡</span>
               </span>
               <div class="mt-1">
                 <select v-model="poolSlots['主角栏'].category" class="field h-8 flex-1 px-2 text-[12px]" :disabled="setupLocked" @change="onPoolCategoryChanged('主角栏')">
@@ -2067,9 +2069,9 @@ watch([compressionRecord, round], () => {
               </select>
               <p v-if="selectedPoolCards['主角栏']" class="pool-picked">
                 已选：<strong>{{ selectedPersonaPreset || poolCardById('主角栏', selectedPoolCards['主角栏'])?.name }}</strong>
-                <span v-if="!selectedPersonaPreset" class="ml-1 text-[10px] text-[#948a76]">{{ poolCardById('主角栏', selectedPoolCards['主角栏'])?.gender || '未知性别' }} · {{ poolCardById('主角栏', selectedPoolCards['主角栏'])?.work || '原创' }}</span>
-                <span v-else class="ml-1 text-[10px] text-[#948a76]">通用性格</span>
-                <button type="button" class="ml-1 text-[#8d2c20]" :disabled="setupLocked" @click="togglePoolCard('主角栏', selectedPoolCards['主角栏'])">移除</button>
+                <span v-if="!selectedPersonaPreset" class="ml-1 text-[10px] text-(--fe-ink-3)">{{ poolCardById('主角栏', selectedPoolCards['主角栏'])?.gender || '未知性别' }} · {{ poolCardById('主角栏', selectedPoolCards['主角栏'])?.work || '原创' }}</span>
+                <span v-else class="ml-1 text-[10px] text-(--fe-ink-3)">通用性格</span>
+                <button type="button" class="ml-1 text-(--fe-danger)" :disabled="setupLocked" @click="togglePoolCard('主角栏', selectedPoolCards['主角栏'])">移除</button>
               </p>
               <input
                 :value="poolSlots['主角栏'].query"
@@ -2082,7 +2084,7 @@ watch([compressionRecord, round], () => {
               <div v-if="poolPreviewCard('主角栏')" class="pool-preview-card">
                 <div class="flex items-baseline justify-between gap-2">
                   <strong>{{ poolPreviewCard('主角栏')!.name }}</strong>
-                  <span class="text-[10px] text-[#948a76]">{{ poolPreviewCard('主角栏')!.original_position || '未标注' }} · {{ poolPreviewCard('主角栏')!.gender || '未知性别' }}</span>
+                  <span class="text-[10px] text-(--fe-ink-3)">{{ poolPreviewCard('主角栏')!.original_position || '未标注' }} · {{ poolPreviewCard('主角栏')!.gender || '未知性别' }}</span>
                 </div>
                 <dl class="pool-preview-fields">
                   <div><dt>原型</dt><dd>{{ poolPreviewCard('主角栏')!.archetype || '—' }}</dd></div>
@@ -2095,17 +2097,17 @@ watch([compressionRecord, round], () => {
             </div>
 
             <button type="button" class="designer-entry" @click="currentView = 'designer'">
-              <Wand2 :size="14" class="shrink-0 text-vermilion" />
+              <Wand2 :size="14" class="shrink-0 text-(--fe-accent)" />
               <span class="min-w-0 flex-1 text-left">
                 <strong class="block text-[12px]">角色设计器</strong>
-                <small class="block text-[10px] font-normal text-[#948a76]">自定义角色由此生成并存入数据库</small>
+                <small class="block text-[10px] font-normal text-(--fe-ink-3)">自定义角色由此生成并存入数据库</small>
               </span>
             </button>
 
             <label class="mt-3 block">
               <span class="label flex items-center justify-between">
                 <span>伙伴数量</span>
-                <span class="text-[10px] font-normal" :class="gfPrerequisites.ok ? 'text-jade' : 'text-[#b63a2b]'">
+                <span class="text-[10px] font-normal" :class="gfPrerequisites.ok ? 'text-(--fe-ok)' : 'text-(--fe-accent)'">
                   {{ gfPrerequisites.ok ? '人物已齐备' : `待定：${gfPrerequisites.problems.join('、')}` }}
                 </span>
               </span>
@@ -2114,8 +2116,8 @@ watch([compressionRecord, round], () => {
 
             <div v-for="(entry, index) in companionRoster" :key="`c-${index}`" class="mt-3 roster-row">
               <div class="mb-2 flex items-center justify-between">
-                <strong class="text-[11px]">伙伴 {{ index + 1 }}/{{ form.companion_count }}<span class="ml-1 font-normal text-[#948a76]">{{ poolCardById('伙伴栏', entry.model_id)?.gender || entry.gender || '' }}</span></strong>
-                <span class="text-[10px] text-[#7d7461]">剧情相关度 {{ entry.participation }}</span>
+                <strong class="text-[11px]">伙伴 {{ index + 1 }}/{{ form.companion_count }}<span class="ml-1 font-normal text-(--fe-ink-3)">{{ poolCardById('伙伴栏', entry.model_id)?.gender || entry.gender || '' }}</span></strong>
+                <span class="text-[10px] text-(--fe-ink-3)">剧情相关度 {{ entry.participation }}</span>
               </div>
               <div class="flex gap-1.5">
                 <select v-model="poolSlots['伙伴栏'].category" class="field h-8 flex-1 px-2 text-[11px]" :disabled="setupLocked" @change="onPoolCategoryChanged('伙伴栏')">
@@ -2153,7 +2155,7 @@ watch([compressionRecord, round], () => {
               <div v-if="entry.model_id && poolCardById('伙伴栏', entry.model_id)" class="pool-preview-card">
                 <div class="flex items-baseline justify-between gap-2">
                   <strong>{{ poolCardById('伙伴栏', entry.model_id)!.name }}</strong>
-                  <span class="text-[10px] text-[#948a76]">{{ poolCardById('伙伴栏', entry.model_id)!.original_position || '未标注' }} · {{ poolCardById('伙伴栏', entry.model_id)!.gender || '未知性别' }}</span>
+                  <span class="text-[10px] text-(--fe-ink-3)">{{ poolCardById('伙伴栏', entry.model_id)!.original_position || '未标注' }} · {{ poolCardById('伙伴栏', entry.model_id)!.gender || '未知性别' }}</span>
                 </div>
                 <dl class="pool-preview-fields">
                   <div><dt>原型</dt><dd>{{ poolCardById('伙伴栏', entry.model_id)!.archetype || '—' }}</dd></div>
@@ -2170,7 +2172,7 @@ watch([compressionRecord, round], () => {
               </select>
               <textarea v-model="entry.background" class="field mt-1.5 h-14 p-2 text-[11px]" placeholder="背景与关系" :disabled="setupLocked" />
               <textarea v-model="entry.skill" class="field mt-1.5 h-12 p-2 text-[11px]" placeholder="技能/能力描述（留空按设定推断）" />
-              <input v-model.number="entry.participation" type="range" min="1" max="9" class="mt-2 w-full accent-[#b63a2b]" :disabled="setupLocked" />
+              <input v-model.number="entry.participation" type="range" min="1" max="9" class="mt-2 w-full accent-(--fe-accent)" :disabled="setupLocked" />
               <div class="participation-scale">
                 <span>偶尔</span><span>·</span><span>·</span><span>·</span><span>·</span><span>·</span><span>·</span><span>·</span><span>全程</span>
               </div>
@@ -2181,14 +2183,14 @@ watch([compressionRecord, round], () => {
               <input v-model.number="form.heroine_count" type="number" min="0" max="10" class="field h-9 px-2 text-[13px]" :disabled="setupLocked" />
             </label>
 
-            <p v-if="!heroineRoster.length" class="py-4 text-center text-[11px] text-[#8d8370]">
+            <p v-if="!heroineRoster.length" class="py-4 text-center text-[11px] text-(--fe-ink-3)">
               输入目标数量后逐位配置
             </p>
 
             <div v-for="(entry, index) in heroineRoster" :key="`h-${index}`" class="mt-3 roster-row">
               <div class="mb-2 flex items-center justify-between">
-                <strong class="text-[11px]">伴侣 {{ index + 1 }}/{{ form.heroine_count }}<span class="ml-1 font-normal text-[#948a76]">{{ poolCardById('伴侣栏', entry.model_id)?.gender || entry.gender || '' }}</span></strong>
-                <span class="text-[10px] text-[#7d7461]">剧情相关度 {{ entry.participation }}</span>
+                <strong class="text-[11px]">伴侣 {{ index + 1 }}/{{ form.heroine_count }}<span class="ml-1 font-normal text-(--fe-ink-3)">{{ poolCardById('伴侣栏', entry.model_id)?.gender || entry.gender || '' }}</span></strong>
+                <span class="text-[10px] text-(--fe-ink-3)">剧情相关度 {{ entry.participation }}</span>
               </div>
               <div class="flex gap-1.5">
                 <select v-model="poolSlots['伴侣栏'].category" class="field h-8 flex-1 px-2 text-[11px]" :disabled="setupLocked" @change="onPoolCategoryChanged('伴侣栏')">
@@ -2226,7 +2228,7 @@ watch([compressionRecord, round], () => {
                 <option value="">性格：跟随设定</option>
                 <option v-for="persona in genericPersonas" :key="persona" :value="persona">【通用】{{ persona }}</option>
               </select>
-              <input v-model.number="entry.participation" type="range" min="1" max="9" class="mt-2 w-full accent-[#b63a2b]" :disabled="setupLocked" />
+              <input v-model.number="entry.participation" type="range" min="1" max="9" class="mt-2 w-full accent-(--fe-accent)" :disabled="setupLocked" />
               <div class="participation-scale">
                 <span>偶尔</span><span>·</span><span>·</span><span>·</span><span>·</span><span>·</span><span>·</span><span>·</span><span>全程</span>
               </div>
@@ -2234,7 +2236,7 @@ watch([compressionRecord, round], () => {
               <div v-if="entry.model_id && poolCardById('伴侣栏', entry.model_id)" class="pool-preview-card">
                 <div class="flex items-baseline justify-between gap-2">
                   <strong>{{ poolCardById('伴侣栏', entry.model_id)!.name }}</strong>
-                  <span class="text-[10px] text-[#948a76]">{{ poolCardById('伴侣栏', entry.model_id)!.original_position || '未标注' }} · {{ poolCardById('伴侣栏', entry.model_id)!.gender || '未知性别' }}</span>
+                  <span class="text-[10px] text-(--fe-ink-3)">{{ poolCardById('伴侣栏', entry.model_id)!.original_position || '未标注' }} · {{ poolCardById('伴侣栏', entry.model_id)!.gender || '未知性别' }}</span>
                 </div>
                 <dl class="pool-preview-fields">
                   <div><dt>原型</dt><dd>{{ poolCardById('伴侣栏', entry.model_id)!.archetype || '—' }}</dd></div>
@@ -2249,7 +2251,7 @@ watch([compressionRecord, round], () => {
         </section>
 
 
-        <section class="border-b border-[#ddd2bc] p-3">
+        <section class="border-b border-(--fe-border) p-3">
           <button class="section-toggle" @click="nemesisOpen = !nemesisOpen">
             <span class="flex items-center gap-2"><Swords :size="15" /> 宿敌</span>
             <ChevronDown :size="15" class="chevron" :class="nemesisOpen ? 'rotate-180' : ''" />
@@ -2257,10 +2259,10 @@ watch([compressionRecord, round], () => {
 
           <div v-if="nemesisOpen" class="mt-3">
             <label class="flex cursor-pointer items-center gap-2 text-xs font-bold">
-              <input v-model="enableNemesis" type="checkbox" class="size-4 accent-[#b63a2b]" :disabled="setupLocked" />
+              <input v-model="enableNemesis" type="checkbox" class="size-4 accent-(--fe-accent)" :disabled="setupLocked" />
               启用宿敌系统
             </label>
-            <p v-if="enableNemesis && !enhanced" class="mt-1 text-[10px] text-[#b63a2b]">注：宿敌系统仅强化模式生效，基础模式下勾选不会启用</p>
+            <p v-if="enableNemesis && !enhanced" class="mt-1 text-[10px] text-(--fe-accent)">注：宿敌系统仅强化模式生效，基础模式下勾选不会启用</p>
 
             <div v-if="enableNemesis" class="mt-2">
               <div class="mt-1 flex gap-1.5">
@@ -2303,9 +2305,9 @@ watch([compressionRecord, round], () => {
                 </select>
                 <p v-if="selectedPoolCards['宿敌栏']" class="pool-picked">
                   已选：<strong>{{ selectedPoolCards['宿敌栏'].startsWith(PRESET_PREFIX) ? selectedPoolCards['宿敌栏'].slice(PRESET_PREFIX.length) : poolCardById('宿敌栏', selectedPoolCards['宿敌栏'])?.name }}</strong>
-                  <span v-if="!selectedPoolCards['宿敌栏'].startsWith(PRESET_PREFIX)" class="ml-1 text-[10px] text-[#948a76]">{{ poolCardById('宿敌栏', selectedPoolCards['宿敌栏'])?.gender || '未知性别' }} · {{ poolCardById('宿敌栏', selectedPoolCards['宿敌栏'])?.work || '原创' }}</span>
-                  <span v-else class="ml-1 text-[10px] text-[#948a76]">通用性格 · 强度按默认战力 2 计</span>
-                  <button type="button" class="ml-1 text-[#8d2c20]" :disabled="setupLocked" @click="togglePoolCard('宿敌栏', selectedPoolCards['宿敌栏'])">移除</button>
+                  <span v-if="!selectedPoolCards['宿敌栏'].startsWith(PRESET_PREFIX)" class="ml-1 text-[10px] text-(--fe-ink-3)">{{ poolCardById('宿敌栏', selectedPoolCards['宿敌栏'])?.gender || '未知性别' }} · {{ poolCardById('宿敌栏', selectedPoolCards['宿敌栏'])?.work || '原创' }}</span>
+                  <span v-else class="ml-1 text-[10px] text-(--fe-ink-3)">通用性格 · 强度按默认战力 2 计</span>
+                  <button type="button" class="ml-1 text-(--fe-danger)" :disabled="setupLocked" @click="togglePoolCard('宿敌栏', selectedPoolCards['宿敌栏'])">移除</button>
                 </p>
                 <input
                   :value="poolSlots['宿敌栏'].query"
@@ -2318,7 +2320,7 @@ watch([compressionRecord, round], () => {
                 <div v-if="poolPreviewCard('宿敌栏')" class="pool-preview-card">
                   <div class="flex items-baseline justify-between gap-2">
                     <strong>{{ poolPreviewCard('宿敌栏')!.name }}</strong>
-                    <span class="text-[10px] text-[#948a76]">{{ poolPreviewCard('宿敌栏')!.original_position || '未标注' }} · {{ poolPreviewCard('宿敌栏')!.gender || '未知性别' }}</span>
+                    <span class="text-[10px] text-(--fe-ink-3)">{{ poolPreviewCard('宿敌栏')!.original_position || '未标注' }} · {{ poolPreviewCard('宿敌栏')!.gender || '未知性别' }}</span>
                   </div>
                   <dl class="pool-preview-fields">
                     <div><dt>原型</dt><dd>{{ poolPreviewCard('宿敌栏')!.archetype || '—' }}</dd></div>
@@ -2329,10 +2331,10 @@ watch([compressionRecord, round], () => {
                   </dl>
                 </div>
               <!-- 宿敌强度系数（选卡后实时计算） -->
-              <div v-if="selectedPoolCards['宿敌栏']" class="mt-2 rounded border border-[#ddd2bc] bg-[#fdfaf2] px-2.5 py-1.5">
+              <div v-if="selectedPoolCards['宿敌栏']" class="mt-2 rounded border border-(--fe-border) bg-(--fe-panel) px-2.5 py-1.5">
                 <div class="flex items-center justify-between">
-                  <span class="text-[11px] font-medium text-[#544d3f]">宿敌强度系数</span>
-                  <span class="text-[13px] font-bold text-vermilion">D{{ displayNemesisDifficulty?.toFixed(2) }}</span>
+                  <span class="text-[11px] font-medium text-(--fe-ink-2)">宿敌强度系数</span>
+                  <span class="text-[13px] font-bold text-(--fe-accent)">D{{ displayNemesisDifficulty?.toFixed(2) }}</span>
                 </div>
                 <div class="nemesis-bar-row">
                   <span class="nemesis-bar-label">强</span>
@@ -2341,23 +2343,23 @@ watch([compressionRecord, round], () => {
                   </span>
                   <span class="nemesis-bar-label">弱</span>
                 </div>
-                <p class="mt-0.5 text-[9px] leading-tight text-[#948a76]">D0.01 碾压级 ← → D9.99 微末级；主角难度 + 主角团 vs 宿敌方非线性计算</p>
+                <p class="mt-0.5 text-[9px] leading-tight text-(--fe-ink-3)">D0.01 碾压级 ← → D9.99 微末级；主角难度 + 主角团 vs 宿敌方非线性计算</p>
               </div>
             </div>
           </div>
         </section>
 
-        <section class="border-b border-[#ddd2bc] p-3">
+        <section class="border-b border-(--fe-border) p-3">
           <button class="section-toggle" @click="gfOpen = !gfOpen">
             <span class="flex items-center gap-2"><Sparkles :size="15" /> 难度与金手指</span>
-            <span class="ml-1 text-[10px] font-normal" :class="gfGenerated ? 'text-jade' : (setupConfirmed ? 'text-jade' : (gfPrerequisites.problems.length ? 'text-[#b63a2b]' : 'text-[#948a76]'))">
+            <span class="ml-1 text-[10px] font-normal" :class="gfGenerated ? 'text-(--fe-ok)' : (setupConfirmed ? 'text-(--fe-ok)' : (gfPrerequisites.problems.length ? 'text-(--fe-accent)' : 'text-(--fe-ink-3)'))">
               {{ gfGenerated ? '已生成·设定锁定' : (setupConfirmed ? '已确认，选择金手指' : (gfPrerequisites.problems.length ? `待定：${gfPrerequisites.problems.join('、')}` : '待确认设定')) }}
             </span>
             <ChevronDown :size="15" class="chevron" :class="gfOpen ? 'rotate-180' : ''" />
           </button>
 
           <div v-if="gfOpen" class="mt-3.5 space-y-3">
-            <p class="text-[10px] leading-4 text-[#948a76]">
+            <p class="text-[10px] leading-4 text-(--fe-ink-3)">
               流程：① 配置人物（四栏均可留空，空位开局由模型分配：主角→原著主角，其余→性格最贴合的原著角色）→ ② 选难度 → ③ 点「确定人物与难度设定」→ ④ 选择金手指。
               金手指按宿敌强度 D 缩放（GF(D)=D^1.15）；确认设定后人物与难度将锁定。
             </p>
@@ -2369,8 +2371,8 @@ watch([compressionRecord, round], () => {
               </select>
             </label>
 
-            <p class="text-[10px] leading-4 text-[#948a76]">
-              收束力：<strong class="text-[#544d3f]">{{ form.convergence }}</strong>
+            <p class="text-[10px] leading-4 text-(--fe-ink-3)">
+              收束力：<strong class="text-(--fe-ink-2)">{{ form.convergence }}</strong>
               <span class="ml-1">（「基础设定」区可选；{{ setupLocked ? '已随设定锁定' : '确认设定后一并锁定' }}）</span>
             </p>
 
@@ -2393,9 +2395,9 @@ watch([compressionRecord, round], () => {
               >
                 <Sparkles :size="12" /> {{ gfGenerated ? '已生成' : '生成推荐金手指' }}
               </button>
-              <span v-if="gfGenerated" class="text-[10px] text-jade">✓ 已按宿敌强度 D{{ displayNemesisDifficulty?.toFixed(2) }} 缩放（GF={{ gfValue }}）</span>
-              <span v-else-if="!setupConfirmed && gfPrerequisites.problems.length" class="text-[10px] text-[#b63a2b]">先补齐：{{ gfPrerequisites.problems.join('、') }}</span>
-              <span v-else-if="setupConfirmed && !gfGenerated" class="text-[10px] text-[#948a76]">可生成推荐，或直接从下方选择</span>
+              <span v-if="gfGenerated" class="text-[10px] text-(--fe-ok)">✓ 已按宿敌强度 D{{ displayNemesisDifficulty?.toFixed(2) }} 缩放（GF={{ gfValue }}）</span>
+              <span v-else-if="!setupConfirmed && gfPrerequisites.problems.length" class="text-[10px] text-(--fe-accent)">先补齐：{{ gfPrerequisites.problems.join('、') }}</span>
+              <span v-else-if="setupConfirmed && !gfGenerated" class="text-[10px] text-(--fe-ink-3)">可生成推荐，或直接从下方选择</span>
             </div>
 
             <label class="block">
@@ -2407,7 +2409,7 @@ watch([compressionRecord, round], () => {
                 <option v-for="item in goldenFingerSelectOptions" :key="item">{{ item }}</option>
               </select>
             </label>
-            <div v-if="customGoldenFinger" class="proposal-card mt-2 border-l-2 border-gold bg-[#fdfaf2] p-2.5">
+            <div v-if="customGoldenFinger" class="proposal-card mt-2 border-l-2 border-(--fe-warn) bg-(--fe-panel) p-2.5">
               <textarea v-model="goldenFingerText" class="field h-14 p-2 text-[11px]" placeholder="描述能力想法" :disabled="!setupConfirmed || inGame || busy" />
               <div class="mt-2 flex gap-1.5">
                 <button class="small-action" :disabled="!setupConfirmed || !goldenFingerText.trim() || (goldenFingerProposal?.attempt ?? 0) >= 3" @click="proposeCustomGoldenFinger">
@@ -2427,13 +2429,13 @@ watch([compressionRecord, round], () => {
               </Transition>
             </div>
 
-            <p v-if="gfLockHint" class="mt-2 rounded border border-[#e3cf9a] bg-[#faf3dd] px-2 py-1.5 text-[10px] leading-4 text-[#7c5b12]">
+            <p v-if="gfLockHint" class="mt-2 rounded border border-[color-mix(in_srgb,_var(--fe-warn)_32%,_var(--fe-panel))] bg-[color-mix(in_srgb,_var(--fe-warn)_10%,_var(--fe-panel))] px-2 py-1.5 text-[10px] leading-4 text-[color-mix(in_srgb,_var(--fe-warn)_72%,_var(--fe-ink))]">
               🔒 {{ gfLockHint }}
             </p>
           </div>
         </section>
 
-        <section class="border-b border-[#ddd2bc] p-3">
+        <section class="border-b border-(--fe-border) p-3">
           <button class="section-toggle" @click="modelOpen = !modelOpen">
             <span class="flex items-center gap-2"><KeyRound :size="15" /> 模型与参数</span>
             <ChevronDown :size="15" class="chevron" :class="modelOpen ? 'rotate-180' : ''" />
@@ -2452,7 +2454,7 @@ watch([compressionRecord, round], () => {
             <label class="block">
               <span class="label flex items-center justify-between">
                 <span>模型</span>
-                <span class="text-[10px] font-normal text-[#948a76]">优先选带思考模式的模型</span>
+                <span class="text-[10px] font-normal text-(--fe-ink-3)">优先选带思考模式的模型</span>
               </span>
               <div class="flex gap-1.5">
                 <select v-if="availableModels.length" v-model="form.model" class="field h-9 flex-1 px-2 text-[13px]" :disabled="modelLocked">
@@ -2476,7 +2478,7 @@ watch([compressionRecord, round], () => {
               </div>
             </label>
             <Transition name="pop">
-              <p v-if="connectionResult" class="rounded-md border px-2.5 py-1.5 text-[11px]" :class="connectionResult.ok ? 'border-[#add7cc] bg-[#f0f8f5] text-jade' : 'border-[#e5b5ad] bg-[#fff4f1] text-[#8d2c20]'">
+              <p v-if="connectionResult" class="rounded-md border px-2.5 py-1.5 text-[11px]" :class="connectionResult.ok ? 'border-[color-mix(in_srgb,_var(--fe-ok)_30%,_var(--fe-panel))] bg-[color-mix(in_srgb,_var(--fe-ok)_8%,_var(--fe-panel))] text-(--fe-ok)' : 'border-[color-mix(in_srgb,_var(--fe-danger)_28%,_var(--fe-panel))] bg-[color-mix(in_srgb,_var(--fe-danger)_6%,_var(--fe-panel))] text-(--fe-danger)'">
                 {{ connectionResult.message }}
               </p>
             </Transition>
@@ -2495,12 +2497,12 @@ watch([compressionRecord, round], () => {
               </label>
             </div>
             <label class="flex cursor-pointer items-center gap-2 text-xs font-bold" :class="enhanced ? 'opacity-80' : ''">
-              <input v-model="form.distill_enabled" type="checkbox" class="size-4 accent-[#b63a2b]" :disabled="modelLocked || enhanced" />
+              <input v-model="form.distill_enabled" type="checkbox" class="size-4 accent-(--fe-accent)" :disabled="modelLocked || enhanced" />
               启用锚点蒸馏{{ enhanced ? '（强化模式必需）' : '' }}
             </label>
           </div>
 
-          <button class="start-button mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-md bg-vermilion px-3 text-[13px] font-bold text-white hover:bg-[#9f2f22] disabled:bg-[#bfb5a0]" :disabled="startDisabled" @click="startGame">
+          <button class="start-button mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-md bg-(--fe-accent) px-3 text-[13px] font-bold text-(--fe-accent-ink) hover:bg-(--fe-accent-strong) disabled:bg-(--fe-panel-3) disabled:text-(--fe-ink-3)" :disabled="startDisabled" @click="startGame">
             <LoaderCircle v-if="busy" class="animate-spin" :size="16" />
             <Play v-else :size="16" />
             {{ busy ? '正在推演' : enhanced ? '校验原著并准备' : '开始模拟' }}
@@ -2521,11 +2523,11 @@ watch([compressionRecord, round], () => {
               </select>
             </label>
             <label class="flex cursor-pointer items-center gap-2 text-xs font-bold">
-              <input v-model="dropCapEnabled" type="checkbox" class="size-4 accent-[#b63a2b]" />
+              <input v-model="dropCapEnabled" type="checkbox" class="size-4 accent-(--fe-accent)" />
               首字下沉（章节首段朱红大字）
             </label>
             <label class="flex cursor-pointer items-center gap-2 text-xs font-bold">
-              <input v-model="reduceMotion" type="checkbox" class="size-4 accent-[#b63a2b]" />
+              <input v-model="reduceMotion" type="checkbox" class="size-4 accent-(--fe-accent)" />
               减少动效
             </label>
           </div>
@@ -2533,13 +2535,13 @@ watch([compressionRecord, round], () => {
       </aside>
 
       <section
-        class="story-panel theme-decor relative flex min-h-0 min-w-0 flex-col bg-[#ece4d0] pb-16 lg:flex lg:pb-0"
+        class="story-panel theme-decor relative flex min-h-0 min-w-0 flex-col bg-(--fe-panel-3) pb-16 lg:flex lg:pb-0"
         :class="mobilePanel === 'story' ? 'flex' : 'hidden'"
       >
-        <div class="flex h-11 shrink-0 items-center border-b border-[#e2d9c4] px-4">
-          <MessageSquareText :size="15" class="mr-2 text-vermilion" />
+        <div class="flex h-11 shrink-0 items-center border-b border-[color-mix(in_srgb,_var(--fe-border)_60%,_var(--fe-panel))] px-4">
+          <MessageSquareText :size="15" class="mr-2 text-(--fe-accent)" />
           <h2 class="text-xs font-bold">叙事舞台</h2>
-          <div class="ml-auto flex items-center gap-3 text-[10px] text-[#7d7461]">
+          <div class="ml-auto flex items-center gap-3 text-[10px] text-(--fe-ink-3)">
             <span>回合 {{ round }}</span>
             <span>章节 {{ chapter }}</span>
             <span v-if="sessionId" class="hidden max-w-24 truncate sm:inline">{{ sessionId }}</span>
@@ -2587,19 +2589,19 @@ watch([compressionRecord, round], () => {
 
         <div ref="storyScroll" class="scrollbar min-h-0 flex-1 overflow-y-auto">
           <div v-if="booting" class="grid h-full place-items-center">
-            <LoaderCircle class="animate-spin text-vermilion" :size="24" />
+            <LoaderCircle class="animate-spin text-(--fe-accent)" :size="24" />
           </div>
           <div v-else-if="!chat.length" class="mx-auto flex h-full max-w-lg flex-col items-center justify-center px-8 text-center">
-            <div class="grid size-12 place-items-center rounded-md border border-[#ddd2bc] bg-[#fdfaf2] text-vermilion">
+            <div class="grid size-12 place-items-center rounded-md border border-(--fe-border) bg-(--fe-panel) text-(--fe-accent)">
               <Sparkles :size="21" />
             </div>
             <h2 class="mt-4 text-base font-bold">等待第一幕</h2>
-            <p class="mt-1 text-[13px] leading-6 text-[#7d7461]">
+            <p class="mt-1 text-[13px] leading-6 text-(--fe-ink-3)">
               {{ enhanced ? '上传可切章的完整 TXT，并完成左侧配置。' : '从作品库选择世界，配置主角与同伴。' }}
             </p>
-            <div class="mt-5 flex gap-2 text-[10px] text-[#7d7461]">
-              <span class="rounded border border-[#ddd2bc] bg-[#fdfaf2] px-2 py-1">{{ worksCount }} 部作品</span>
-              <span class="rounded border border-[#ddd2bc] bg-[#fdfaf2] px-2 py-1">{{ poolsCount }} 个角色模型</span>
+            <div class="mt-5 flex gap-2 text-[10px] text-(--fe-ink-3)">
+              <span class="rounded border border-(--fe-border) bg-(--fe-panel) px-2 py-1">{{ worksCount }} 部作品</span>
+              <span class="rounded border border-(--fe-border) bg-(--fe-panel) px-2 py-1">{{ poolsCount }} 个角色模型</span>
             </div>
           </div>
           <div v-else class="mx-auto w-full max-w-[860px] px-3 py-5 sm:px-6 sm:py-7">
@@ -2611,14 +2613,14 @@ watch([compressionRecord, round], () => {
                 :class="[item.role === 'user' ? 'pl-[12%]' : '', item.role !== 'user' && assistantDistanceFrom(index) === 0 ? 'is-focus' : '']"
                 :style="wheelStyle(index)"
               >
-                <div class="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold text-[#7d7461]" :class="item.role === 'user' ? 'justify-end' : ''">
+                <div class="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold text-(--fe-ink-3)" :class="item.role === 'user' ? 'justify-end' : ''">
                   <UserRound v-if="item.role === 'user'" :size="12" />
                   <Bot v-else :size="12" />
                   {{ item.role === 'user' ? '你的行动' : '叙事引擎' }}
                 </div>
                 <div
                   v-if="item.role === 'user'"
-                  class="whitespace-pre-wrap break-words rounded-md bg-[#e9e1cd] px-4 py-3 text-[15px] leading-7 text-[#403a30] kraft-note"
+                  class="whitespace-pre-wrap break-words rounded-md bg-(--fe-panel-3) px-4 py-3 text-[15px] leading-7 text-(--fe-ink) kraft-note"
                 >{{ item.content }}</div>
                 <div v-else class="narrative-body">
                   <template v-for="(block, blockIndex) in narrativeBlocks(item.content)" :key="blockIndex">
@@ -2634,14 +2636,14 @@ watch([compressionRecord, round], () => {
           </div>
         </div>
 
-        <div class="shrink-0 border-t border-[#ddd2bc] bg-[#fdfaf2] px-3 pb-3 pt-2 sm:px-4">
+        <div class="shrink-0 border-t border-(--fe-border) bg-(--fe-panel) px-3 pb-3 pt-2 sm:px-4">
           <div class="mx-auto max-w-[820px]">
             <div class="ask-card">
               <button type="button" class="ask-toggle" @click="askOpen = !askOpen">
-                <HelpCircle :size="13" class="shrink-0 text-jade" />
+                <HelpCircle :size="13" class="shrink-0 text-(--fe-ok)" />
                 <span>不懂就问</span>
                 <span class="ask-note">{{ relayActive ? '已接通：输入内容将永久增补进主线' : '基于规则文档答疑，不影响剧情' }}</span>
-                <ChevronDown :size="13" class="chevron ml-auto shrink-0 text-[#948a76]" :class="askOpen ? 'rotate-180' : ''" />
+                <ChevronDown :size="13" class="chevron ml-auto shrink-0 text-(--fe-ink-3)" :class="askOpen ? 'rotate-180' : ''" />
               </button>
               <div v-if="askOpen" class="ask-body">
                 <div v-if="askThread.length" class="ask-thread scrollbar">
@@ -2663,21 +2665,21 @@ watch([compressionRecord, round], () => {
                     <Send v-else :size="12" /> 提问
                   </button>
                 </div>
-                <p v-if="askError" class="mt-1.5 text-[10px] text-[#8d2c20]">{{ askError }}</p>
+                <p v-if="askError" class="mt-1.5 text-[10px] text-(--fe-danger)">{{ askError }}</p>
               </div>
             </div>
 
             <div v-if="openingStep" class="mb-3">
               <button
                 type="button"
-                class="flex h-10 w-full items-center justify-center gap-2 rounded-md bg-vermilion px-3 text-[13px] font-bold text-white hover:bg-[#9f2f22] disabled:bg-[#bfb5a0]"
+                class="flex h-10 w-full items-center justify-center gap-2 rounded-md bg-(--fe-accent) px-3 text-[13px] font-bold text-(--fe-accent-ink) hover:bg-(--fe-accent-strong) disabled:bg-(--fe-panel-3) disabled:text-(--fe-ink-3)"
                 :disabled="busy"
                 @click="confirmOpeningStep"
               >
                 <Check :size="14" />
                 {{ openingStep === 'gf' ? '确认金手指' : '确认开局' }}
               </button>
-              <p class="mt-1 text-center text-[10px] text-[#948a76]">
+              <p class="mt-1 text-center text-[10px] text-(--fe-ink-3)">
                 {{ openingStep === 'gf' ? '点击即确认当前金手指，然后进入开局确认' : '点击后立即生成第一幕' }}
               </p>
             </div>
@@ -2703,7 +2705,7 @@ watch([compressionRecord, round], () => {
             </div>
 
             <div v-if="options.length && inGame" class="mb-1.5 flex items-center justify-end gap-2">
-              <span class="text-[10px] text-[#948a76]">点一次仅托管本回合</span>
+              <span class="text-[10px] text-(--fe-ink-3)">点一次仅托管本回合</span>
               <button
                 type="button"
                 class="small-action"
@@ -2757,28 +2759,28 @@ watch([compressionRecord, round], () => {
               <button v-if="busy" type="button" class="small-action" @click="stopStream">
                 <Square :size="11" /> 停止读取
               </button>
-              <p class="min-w-0 flex-1 truncate text-[10px] text-[#948a76]">{{ status }}</p>
+              <p class="min-w-0 flex-1 truncate text-[10px] text-(--fe-ink-3)">{{ status }}</p>
             </div>
 
             <!-- 页脚版权（铭刻已移至右侧栏底部） -->
-            <div class="mt-1.5 border-t border-[#e2d9c4] pt-1.5 text-center">
-              <p class="text-[9px] leading-3 tracking-wide text-[#948a76] opacity-80">© 2026 书中织梦 · Novelborne</p>
+            <div class="mt-1.5 border-t border-[color-mix(in_srgb,_var(--fe-border)_60%,_var(--fe-panel))] pt-1.5 text-center">
+              <p class="text-[9px] leading-3 tracking-wide text-(--fe-ink-3) opacity-80">© 2026 书中织梦 · Novelborne</p>
             </div>
           </div>
         </div>
       </section>
 
       <aside
-        class="panel-right scrollbar overflow-y-auto border-l border-[#ddd2bc] bg-[#efe8d8] pb-20 lg:block lg:pb-4"
+        class="panel-right scrollbar overflow-y-auto border-l border-(--fe-border) bg-(--fe-panel-2) pb-20 lg:block lg:pb-4"
         :class="mobilePanel === 'state' ? 'block' : 'hidden'"
       >
-        <div class="flex h-11 items-center border-b border-[#ddd2bc] bg-[#fdfaf2] px-3">
-          <Gauge :size="15" class="mr-2 text-jade" />
+        <div class="flex h-11 items-center border-b border-(--fe-border) bg-(--fe-panel) px-3">
+          <Gauge :size="15" class="mr-2 text-(--fe-ok)" />
           <h2 class="text-xs font-bold">运行状态</h2>
-          <span class="status-dot ml-auto size-2 rounded-full" :class="busy ? 'animate-pulse bg-gold' : inGame ? 'bg-jade' : 'bg-[#b0a48e]'" />
+          <span class="status-dot ml-auto size-2 rounded-full" :class="busy ? 'animate-pulse bg-(--fe-warn)' : inGame ? 'bg-(--fe-ok)' : 'bg-(--fe-border-strong)'" />
         </div>
 
-        <section class="grid grid-cols-2 border-b border-[#ddd2bc] bg-[#fdfaf2]">
+        <section class="grid grid-cols-2 border-b border-(--fe-border) bg-(--fe-panel)">
           <div class="metric"><span>回合</span><strong>{{ round }}</strong></div>
           <div class="metric border-l"><span>章节</span><strong>{{ chapter }}</strong></div>
           <div class="metric border-t"><span>章内进度</span><strong>{{ chapterRound }}/{{ turnBudget || '—' }}</strong></div>
@@ -2806,10 +2808,10 @@ watch([compressionRecord, round], () => {
             <div class="mt-2.5">
               <span class="label flex items-center justify-between">
                 <span>难度系数</span>
-                <span class="font-normal text-[#948a76]">{{ questDifficulty.toFixed(2) }}</span>
+                <span class="font-normal text-(--fe-ink-3)">{{ questDifficulty.toFixed(2) }}</span>
               </span>
-              <input v-model.number="questDifficulty" type="range" min="0" max="1" step="0.05" class="w-full accent-[#b63a2b]" :disabled="questBusy" />
-              <p class="mt-1 text-[10px] leading-4 text-[#948a76]">系数在可选区间内线性取档（受世界总体难度制约）；系数越高奖励越丰厚、时限越长。</p>
+              <input v-model.number="questDifficulty" type="range" min="0" max="1" step="0.05" class="w-full accent-(--fe-accent)" :disabled="questBusy" />
+              <p class="mt-1 text-[10px] leading-4 text-(--fe-ink-3)">系数在可选区间内线性取档（受世界总体难度制约）；系数越高奖励越丰厚、时限越长。</p>
             </div>
             <button
               type="button"
@@ -2831,18 +2833,18 @@ watch([compressionRecord, round], () => {
             <div v-if="questEstimate" class="mt-2">
               <span class="label flex items-center justify-between">
                 <span>任务难度预估</span>
-                <span class="font-normal text-[#948a76]">{{ questEstimate.label }}（{{ questEstimate.level }}/9）</span>
+                <span class="font-normal text-(--fe-ink-3)">{{ questEstimate.label }}（{{ questEstimate.level }}/9）</span>
               </span>
-              <div class="relative h-1.5 w-full rounded bg-[#e6ddc8]">
-                <div class="h-full rounded bg-[#b63a2b]" :style="{ width: `${(questEstimate.level / 9) * 100}%` }"></div>
+              <div class="relative h-1.5 w-full rounded bg-(--fe-panel-3)">
+                <div class="h-full rounded bg-(--fe-accent)" :style="{ width: `${(questEstimate.level / 9) * 100}%` }"></div>
                 <div
                   v-for="bound in [questEstimate.range_lo, questEstimate.range_hi]"
                   :key="bound"
-                  class="absolute top-[-2px] h-2.5 w-[2px] bg-[#5a4a32]"
+                  class="absolute top-[-2px] h-2.5 w-[2px] bg-(--fe-ink-2)"
                   :style="{ left: `${(bound / 9) * 100}%` }"
                 ></div>
               </div>
-              <p class="mt-1 text-[10px] leading-4 text-[#948a76]">
+              <p class="mt-1 text-[10px] leading-4 text-(--fe-ink-3)">
                 可选难度区间：{{ questEstimate.range_label }}（受世界总体难度制约）；
                 时限 {{ questEstimate.deadline_span }} 回合。
               </p>
@@ -2894,7 +2896,7 @@ watch([compressionRecord, round], () => {
         <section class="state-section">
           <h3>
             <Sparkles :size="14" /> 涟漪与积势
-            <span v-if="convergenceEffective" class="ml-auto text-[10px] font-normal text-[#948a76]">收束力 · {{ convergenceEffective }}</span>
+            <span v-if="convergenceEffective" class="ml-auto text-[10px] font-normal text-(--fe-ink-3)">收束力 · {{ convergenceEffective }}</span>
           </h3>
           <div v-if="convergenceAvailable" class="conv-bar" role="img" aria-label="收束力位置">
             <span class="conv-tick" style="left: 25%" />
@@ -2909,7 +2911,7 @@ watch([compressionRecord, round], () => {
             <div><dt>尝试压力</dt><dd>{{ text(ripple.attempt_total) }}</dd></div>
           </dl>
           <div class="momentum-bar-wrap mt-2">
-            <div class="flex items-center justify-between text-[10px] text-[#877d69]">
+            <div class="flex items-center justify-between text-[10px] text-(--fe-ink-3)">
               <span>碎锚积势 · {{ text(momentumBar.tier, convergenceEffective || '较高') }}</span>
               <span>{{ numeric(momentumBar.total, 0) }}/{{ numeric(momentumBar.threshold, 0) }}{{ momentumReady ? ' · 可碎锚' : '' }}</span>
             </div>
@@ -2951,11 +2953,11 @@ watch([compressionRecord, round], () => {
         <section class="state-section">
           <h3><UsersRound :size="14" /> 活跃角色</h3>
           <div v-if="activeMembers.length" class="space-y-1.5">
-            <div v-for="(member, index) in activeMembers" :key="index" class="member-card flex items-center gap-2 rounded-md border border-[#ddd2bc] bg-[#fdfaf2] px-2.5 py-2">
-              <div class="grid size-7 shrink-0 place-items-center rounded bg-[#e9e1cd] text-[#655c4c]"><UserRound :size="14" /></div>
+            <div v-for="(member, index) in activeMembers" :key="index" class="member-card flex items-center gap-2 rounded-md border border-(--fe-border) bg-(--fe-panel) px-2.5 py-2">
+              <div class="grid size-7 shrink-0 place-items-center rounded bg-(--fe-panel-3) text-(--fe-ink-2)"><UserRound :size="14" /></div>
               <div class="min-w-0 flex-1">
                 <strong class="block truncate text-[11px]">{{ text(member.name, `角色 ${index + 1}`) }}</strong>
-                <span class="block truncate text-[10px] text-[#877d69]">{{ text(member.role, text(member.background, '已进入场景')) }}</span>
+                <span class="block truncate text-[10px] text-(--fe-ink-3)">{{ text(member.role, text(member.background, '已进入场景')) }}</span>
               </div>
             </div>
           </div>
@@ -2965,7 +2967,7 @@ watch([compressionRecord, round], () => {
         <section v-if="nemesisSummary" class="state-section">
           <h3><Swords :size="14" /> 宿敌动向（5 回合摘要）</h3>
           <div v-if="displayNemesisDifficulty" class="mb-1.5 flex items-center gap-2 text-[10px]">
-            <span class="rounded bg-[#fdfaf2] border border-[#ddd2bc] px-1.5 py-0.5 font-medium text-vermilion">强度 D{{ displayNemesisDifficulty.toFixed(2) }}</span>
+            <span class="rounded bg-(--fe-panel) border border-(--fe-border) px-1.5 py-0.5 font-medium text-(--fe-accent)">强度 D{{ displayNemesisDifficulty.toFixed(2) }}</span>
             <span class="nemesis-bar-mini">
               <span class="nemesis-bar-fill" :style="{ left: `${nemesisBarRatio * 100}%` }" />
             </span>
@@ -2985,7 +2987,7 @@ watch([compressionRecord, round], () => {
         <section class="state-section">
           <h3><FileText :size="14" /> 锚点蒸馏</h3>
           <template v-if="distillProgress && distillProgress.enabled">
-            <p class="text-[11px] leading-5 text-[#655c4c]">{{ distillProgress.summary }}</p>
+            <p class="text-[11px] leading-5 text-(--fe-ink-2)">{{ distillProgress.summary }}</p>
             <div v-if="distillProgress.total" class="quest-progress-track mt-2" aria-label="蒸馏进度">
               <span class="quest-progress-fill" :style="{ width: `${distillRatio * 100}%` }" />
             </div>
@@ -2995,12 +2997,12 @@ watch([compressionRecord, round], () => {
                 :key="c.chapter"
                 class="rounded border px-1.5 py-0.5 text-[10px] leading-4"
                 :class="c.status === 'done'
-                  ? 'border-[#a8bf9a] bg-[#eef4ea] text-[#4a6b3a]'
+                  ? 'border-[color-mix(in_srgb,_var(--fe-ok)_30%,_var(--fe-panel))] bg-[color-mix(in_srgb,_var(--fe-ok)_8%,_var(--fe-panel))] text-[color-mix(in_srgb,_var(--fe-ok)_70%,_var(--fe-ink))]'
                   : c.status === 'in_progress'
-                    ? 'border-[#c9a24a] bg-[#faf3e3] text-[#7c5b12]'
+                    ? 'border-[color-mix(in_srgb,_var(--fe-warn)_55%,_var(--fe-panel))] bg-[color-mix(in_srgb,_var(--fe-warn)_10%,_var(--fe-panel))] text-[color-mix(in_srgb,_var(--fe-warn)_72%,_var(--fe-ink))]'
                     : c.status === 'failed'
-                      ? 'border-[#c98a6b] bg-[#faf0e8] text-[#8a4a26]'
-                      : 'border-[#ddd2bc] bg-[#f4eee0] text-[#877d69]'"
+                      ? 'border-[color-mix(in_srgb,_var(--fe-danger)_40%,_var(--fe-panel))] bg-[color-mix(in_srgb,_var(--fe-danger)_8%,_var(--fe-panel))] text-[color-mix(in_srgb,_var(--fe-danger)_75%,_var(--fe-ink))]'
+                      : 'border-(--fe-border) bg-(--fe-panel-2) text-(--fe-ink-3)'"
               >{{ c.current ? '第' + c.chapter + '章·当前·' : '第' + c.chapter + '章·' }}{{ c.status_zh }}</span>
             </div>
           </template>
@@ -3020,7 +3022,7 @@ watch([compressionRecord, round], () => {
       aria-label="Lomsting"
       @click="openLomsting"
     >
-      <span class="flex size-6 items-center justify-center rounded text-[#8a7a5c] opacity-60 transition-opacity duration-200 hover:opacity-100">
+      <span class="flex size-6 items-center justify-center rounded text-(--fe-ink-3) opacity-60 transition-opacity duration-200 hover:opacity-100">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
           <path d="M20 4c-5 0-11 4-13.5 9.5C5 17 5 19 5 19s2 0 5.5-1.5C16 15 20 9 20 4Z" />
           <path d="M5 19 15 9" />
@@ -3036,33 +3038,33 @@ watch([compressionRecord, round], () => {
         class="fixed inset-0 z-50 grid place-items-center bg-black/40 px-4"
         @click.self="lanQrOpen = false"
       >
-        <div class="w-full max-w-xs rounded-lg border border-[#ddd2bc] bg-[#fdfaf2] p-4 shadow-xl">
-          <div class="flex items-center gap-2 border-b border-[#ddd2bc] pb-2.5">
-            <Smartphone :size="15" class="text-jade" />
+        <div class="w-full max-w-xs rounded-lg border border-(--fe-border) bg-(--fe-panel) p-4 shadow-xl">
+          <div class="flex items-center gap-2 border-b border-(--fe-border) pb-2.5">
+            <Smartphone :size="15" class="text-(--fe-ok)" />
             <h2 class="text-xs font-bold">手机扫码远程使用</h2>
-            <button class="ml-auto text-[#7d7461]" title="关闭" @click="lanQrOpen = false"><X :size="15" /></button>
+            <button class="ml-auto text-(--fe-ink-3)" title="关闭" @click="lanQrOpen = false"><X :size="15" /></button>
           </div>
           <div class="pt-3 text-center">
-            <LoaderCircle v-if="lanBusy" class="mx-auto animate-spin text-[#7d7461]" :size="22" />
+            <LoaderCircle v-if="lanBusy" class="mx-auto animate-spin text-(--fe-ink-3)" :size="22" />
             <template v-else-if="lanInfo?.url">
               <img
                 :src="'/api/lan-qrcode.png?port=' + lanInfo.port"
                 alt="局域网访问二维码"
-                class="mx-auto block w-44 rounded border border-[#ddd2bc] bg-white p-1.5"
+                class="mx-auto block w-44 rounded border border-(--fe-border) bg-white p-1.5"
               />
-              <p class="mt-2.5 break-all font-mono text-xs font-bold text-[#544d3f]">{{ lanInfo.url }}</p>
-              <p class="mt-1.5 text-[11px] leading-relaxed text-[#7d7461]">{{ lanInfo.hint }}</p>
-              <p v-if="!lanInfo.listening_lan" class="mt-1.5 text-[11px] text-[#8d2c20]">
+              <p class="mt-2.5 break-all font-mono text-xs font-bold text-(--fe-ink-2)">{{ lanInfo.url }}</p>
+              <p class="mt-1.5 text-[11px] leading-relaxed text-(--fe-ink-3)">{{ lanInfo.hint }}</p>
+              <p v-if="!lanInfo.listening_lan" class="mt-1.5 text-[11px] text-(--fe-danger)">
                 当前服务只监听本机回环地址，手机无法访问：请去掉 --host 127.0.0.1（默认 0.0.0.0）后重启。
               </p>
             </template>
-            <p v-else class="py-4 text-xs text-[#7d7461]">未检测到局域网地址：请确认电脑已连接 Wi-Fi / 路由器。</p>
+            <p v-else class="py-4 text-xs text-(--fe-ink-3)">未检测到局域网地址：请确认电脑已连接 Wi-Fi / 路由器。</p>
           </div>
         </div>
       </div>
     </Transition>
 
-    <nav class="fixed inset-x-0 bottom-0 z-20 grid h-16 grid-cols-3 border-t border-[#ddd2bc] bg-[#fdfaf2] lg:hidden">
+    <nav class="fixed inset-x-0 bottom-0 z-20 grid h-16 grid-cols-3 border-t border-(--fe-border) bg-(--fe-panel) lg:hidden">
       <button class="mobile-tab" :class="mobilePanel === 'setup' ? 'active' : ''" @click="mobilePanel = 'setup'">
         <Menu :size="18" /><span>配置</span>
       </button>
@@ -3092,10 +3094,11 @@ watch([compressionRecord, round], () => {
 </template>
 
 <style scoped>
+.app-header { box-shadow: var(--fe-shadow-1); }
 .theme-picker { max-width: min(48vw, 560px); overflow-x: auto; }
 .theme-choice { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--fe-border); border-radius: var(--fe-radius); background: var(--fe-panel); padding: 3px 6px; color: var(--fe-ink-2); font-size: 10px; white-space: nowrap; transition: border-color var(--fe-motion) ease, background-color var(--fe-motion) ease, color var(--fe-motion) ease; }
 .theme-choice:hover, .theme-choice.active { border-color: var(--fe-accent); color: var(--fe-accent); }
-.theme-choice.active { background: var(--fe-accent-soft); font-weight: 700; }
+.theme-choice.active { background: var(--fe-accent-soft); color: color-mix(in srgb, var(--fe-accent) 78%, var(--fe-ink)); font-weight: 700; }
 .theme-swatch { width: 14px; height: 14px; flex: 0 0 auto; border: 1px solid color-mix(in srgb, var(--fe-ink) 20%, transparent); border-radius: 999px; }
 .theme-decor { isolation: isolate; background: var(--fe-decor-stage); }
 .theme-decor::after { z-index: -1; }
@@ -3105,10 +3108,10 @@ watch([compressionRecord, round], () => {
   width: 32px;
   height: 32px;
   place-items: center;
-  border: 1px solid #ddd2bc;
-  border-radius: 6px;
-  background: #fdfaf2;
-  color: #544d3f;
+  border: 1px solid var(--fe-border);
+  border-radius: var(--fe-radius);
+  background: var(--fe-panel);
+  color: var(--fe-ink-2);
   transition: background-color 140ms ease, border-color 140ms ease, transform 100ms ease;
 }
 
@@ -3138,34 +3141,34 @@ watch([compressionRecord, round], () => {
   opacity: 0.55;
   pointer-events: none;
 }
-.icon-button:hover:not(:disabled) { border-color: #b0a48e; background: #f3ecdc; }
+.icon-button:hover:not(:disabled) { border-color: var(--fe-border-strong); background: var(--fe-panel-2); }
 .icon-button:active:not(:disabled) { transform: scale(.94); }
-.icon-button:disabled { color: #b0a48e; opacity: .55; }
+.icon-button:disabled { color: var(--fe-border-strong); opacity: .55; }
 .section-toggle { display: flex; width: 100%; align-items: center; justify-content: space-between; text-align: left; font-size: 13px; font-weight: 700; }
 .section-toggle .chevron { transition: transform 180ms ease; }
-.small-action { display: inline-flex; height: 30px; align-items: center; justify-content: center; gap: 5px; border: 1px solid #ddd2bc; border-radius: 6px; background: #f3ecdc; padding: 0 9px; color: #544d3f; font-size: 11px; font-weight: 700; transition: background-color 140ms ease, border-color 140ms ease, transform 100ms ease; }
-.small-action:hover:not(:disabled) { border-color: #b0a48e; }
+.small-action { display: inline-flex; height: 30px; align-items: center; justify-content: center; gap: 5px; border: 1px solid var(--fe-border); border-radius: var(--fe-radius); background: var(--fe-panel-2); padding: 0 9px; color: var(--fe-ink-2); font-size: 11px; font-weight: 700; transition: background-color 140ms ease, border-color 140ms ease, transform 100ms ease; }
+.small-action:hover:not(:disabled) { border-color: var(--fe-border-strong); }
 .small-action:active:not(:disabled) { transform: scale(.96); }
-.small-action.primary { border-color: #b63a2b; background: #b63a2b; color: #fff; }
-.small-action.primary:hover:not(:disabled) { background: #9f2f22; }
-.small-action:disabled { border-color: #ddd2bc; background: #ebe3d1; color: #b0a48e; }
+.small-action.primary { border-color: var(--fe-accent); background: var(--fe-accent); color: var(--fe-accent-ink); }
+.small-action.primary:hover:not(:disabled) { background: var(--fe-accent-strong); }
+.small-action:disabled { border-color: var(--fe-border); background: var(--fe-panel-3); color: var(--fe-border-strong); }
 .start-button { transition: background-color 160ms ease, transform 100ms ease, box-shadow 160ms ease; }
 .start-button:hover:not(:disabled) { box-shadow: 0 2px 8px rgb(182 58 43 / 25%); }
 .start-button:active:not(:disabled) { transform: scale(.98); }
-.roster-row { margin-top: 10px; border-left: 2px solid #b63a2b; border-radius: 0 6px 6px 0; background: #fdfaf2; padding: 10px; }
-.roster-row.heroine { border-left-color: #137c6c; }
-.skill-tab { display: inline-flex; height: 24px; align-items: center; border: 1px solid #ddd2bc; border-radius: 6px; background: #f3ecdc; padding: 0 8px; color: #6f6758; font-size: 10px; font-weight: 700; transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease; }
-.skill-tab.active { border-color: #b63a2b; background: #fdfaf2; color: #b63a2b; }
+.roster-row { margin-top: 10px; border-left: 2px solid var(--fe-accent); border-radius: 0 var(--fe-radius) var(--fe-radius) 0; background: var(--fe-panel); padding: 10px; }
+.roster-row.heroine { border-left-color: var(--fe-ok); }
+.skill-tab { display: inline-flex; height: 24px; align-items: center; border: 1px solid var(--fe-border); border-radius: var(--fe-radius); background: var(--fe-panel-2); padding: 0 8px; color: var(--fe-ink-2); font-size: 10px; font-weight: 700; transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease; }
+.skill-tab.active { border-color: var(--fe-accent); background: var(--fe-panel); color: var(--fe-accent); }
 
 /* —— 角色选择池 —— */
-.pool-count-chip { display: inline-grid; min-width: 16px; height: 16px; place-items: center; border-radius: 999px; background: #b63a2b; padding: 0 4px; color: #fff; font-size: 10px; font-weight: 800; }
-.pool-note { margin-bottom: 8px; color: #877d69; font-size: 11px; line-height: 1.6; }
-.pool-warn { display: flex; gap: 6px; margin-bottom: 8px; border: 1px solid #e3d3a8; border-radius: 6px; background: #faf3e3; padding: 7px 9px; color: #8a6510; font-size: 11px; line-height: 1.55; }
+.pool-count-chip { display: inline-grid; min-width: 16px; height: 16px; place-items: center; border-radius: 999px; background: var(--fe-accent); padding: 0 4px; color: var(--fe-accent-ink); font-size: 10px; font-weight: 800; }
+.pool-note { margin-bottom: 8px; color: var(--fe-ink-3); font-size: 11px; line-height: 1.6; }
+.pool-warn { display: flex; gap: 6px; margin-bottom: 8px; border: 1px solid color-mix(in srgb, var(--fe-warn) 32%, var(--fe-panel)); border-radius: var(--fe-radius); background: color-mix(in srgb, var(--fe-warn) 10%, var(--fe-panel)); padding: 7px 9px; color: color-mix(in srgb, var(--fe-warn) 80%, var(--fe-ink)); font-size: 11px; line-height: 1.55; }
 
 /* —— 选角框美化层（主题变量驱动，六主题通用）—— */
 /* 主选择框：主 CTA 级——更高、更圆润、字重清晰 */
 .pool-select-main {
-  border-radius: 8px;
+  border-radius: calc(var(--fe-radius) + 2px);
   font-weight: 650;
   background:
     repeating-linear-gradient(0deg, rgb(120 96 54 / 1.4%) 0 1px, transparent 1px 3px),
@@ -3183,7 +3186,7 @@ watch([compressionRecord, round], () => {
   border-left-width: 3px;
   background:
     repeating-linear-gradient(0deg, rgb(120 96 54 / 1.2%) 0 1px, transparent 1px 3px),
-    color-mix(in srgb, var(--fe-accent-soft, #faece8) 46%, var(--fe-panel));
+    color-mix(in srgb, var(--fe-accent-soft, var(--fe-accent-soft)) 46%, var(--fe-panel));
 }
 /* 搜索框：辅助级——轻若无物（虚感细边+浅底），不与主选择抢层级 */
 .pool-search {
@@ -3209,11 +3212,11 @@ watch([compressionRecord, round], () => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid color-mix(in srgb, var(--fe-ok, #137c6c) 35%, transparent);
+  border: 1px solid color-mix(in srgb, var(--fe-ok, var(--fe-ok)) 35%, transparent);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--fe-ok, #137c6c) 9%, transparent);
+  background: color-mix(in srgb, var(--fe-ok, var(--fe-ok)) 9%, transparent);
   padding: 3px 10px;
-  color: var(--fe-ok, #137c6c);
+  color: var(--fe-ok, var(--fe-ok));
   font-size: 11px;
 }
 .pool-picked::before {
@@ -3221,44 +3224,44 @@ watch([compressionRecord, round], () => {
   width: 5px;
   height: 5px;
   border-radius: 999px;
-  background: var(--fe-ok, #137c6c);
-  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--fe-ok, #137c6c) 25%, transparent);
+  background: var(--fe-ok, var(--fe-ok));
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--fe-ok, var(--fe-ok)) 25%, transparent);
 }
 .pool-picked button { transition: opacity var(--fe-motion, 140ms) ease; }
 .pool-picked button:hover:not(:disabled) { text-decoration: underline; }
-.pool-search { display: flex; align-items: center; gap: 7px; margin-bottom: 10px; border: 1px solid #ddd2bc; border-radius: 999px; background: #fdfaf2; padding: 6px 12px; color: #948a76; }
-.pool-search input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; color: #45403a; font-size: 12px; }
-.pool-slot { margin-top: 10px; border: 1px solid #e4dbc6; border-radius: 8px; background: #faf6ec; padding: 9px 10px; }
+.pool-search { display: flex; align-items: center; gap: 7px; margin-bottom: 10px; border: 1px solid var(--fe-border); border-radius: 999px; background: var(--fe-panel); padding: 6px 12px; color: var(--fe-ink-3); }
+.pool-search input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; color: var(--fe-ink); font-size: 12px; }
+.pool-slot { margin-top: 10px; border: 1px solid color-mix(in srgb, var(--fe-border) 60%, var(--fe-panel)); border-radius: calc(var(--fe-radius) + 2px); background: var(--fe-panel); padding: 9px 10px; }
 .pool-slot-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.pool-slot-head strong { color: #3a332a; font-size: 12.5px; font-weight: 800; }
-.pool-slot-note { margin-top: 2px; color: #948a76; font-size: 10px; line-height: 1.5; }
-.pool-error { margin-top: 6px; color: #8d2c20; font-size: 11px; }
-.pool-loading { display: flex; align-items: center; gap: 6px; margin-top: 8px; color: #948a76; font-size: 11px; }
-.pool-group { margin-top: 7px; overflow: hidden; border: 1px solid #e4dbc6; border-radius: 6px; background: #fdfaf2; }
-.pool-group-head { display: flex; width: 100%; align-items: center; gap: 6px; padding: 6px 9px; color: #544d3f; font-size: 11.5px; font-weight: 700; transition: background-color 130ms ease; }
-.pool-group-head:hover { background: #f3ecdc; }
-.pool-group-count { flex-shrink: 0; border-radius: 999px; background: #eee7d6; padding: 1px 7px; color: #6b6255; font-size: 10px; font-weight: 800; }
-.pool-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 6px; border-top: 1px dashed #e4dbc6; padding: 8px; }
-.pool-card { display: flex; min-width: 0; flex-direction: column; gap: 2px; border: 1px solid #ddd2bc; border-radius: 6px; background: #fffdf7; padding: 6px 8px; text-align: left; transition: border-color 120ms ease, background-color 120ms ease, transform 100ms ease; }
-.pool-card:hover { border-color: #b0a48e; transform: translateY(-1px); }
-.pool-card.selected { border-color: #b63a2b; background: #fdf3ef; box-shadow: 0 0 0 1px #b63a2b inset; }
-.pool-card strong { color: #3a332a; font-size: 11.5px; font-weight: 800; }
-.pool-card small { color: #8a8172; font-size: 10px; }
-.pool-empty { margin-top: 8px; color: #948a76; font-size: 11px; text-align: center; }
+.pool-slot-head strong { color: var(--fe-ink); font-size: 12.5px; font-weight: 800; }
+.pool-slot-note { margin-top: 2px; color: var(--fe-ink-3); font-size: 10px; line-height: 1.5; }
+.pool-error { margin-top: 6px; color: var(--fe-danger); font-size: 11px; }
+.pool-loading { display: flex; align-items: center; gap: 6px; margin-top: 8px; color: var(--fe-ink-3); font-size: 11px; }
+.pool-group { margin-top: 7px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--fe-border) 60%, var(--fe-panel)); border-radius: var(--fe-radius); background: var(--fe-panel); }
+.pool-group-head { display: flex; width: 100%; align-items: center; gap: 6px; padding: 6px 9px; color: var(--fe-ink-2); font-size: 11.5px; font-weight: 700; transition: background-color 130ms ease; }
+.pool-group-head:hover { background: var(--fe-panel-2); }
+.pool-group-count { flex-shrink: 0; border-radius: 999px; background: var(--fe-panel-3); padding: 1px 7px; color: var(--fe-ink-2); font-size: 10px; font-weight: 800; }
+.pool-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 6px; border-top: 1px dashed color-mix(in srgb, var(--fe-border) 60%, var(--fe-panel)); padding: 8px; }
+.pool-card { display: flex; min-width: 0; flex-direction: column; gap: 2px; border: 1px solid var(--fe-border); border-radius: var(--fe-radius); background: color-mix(in srgb, var(--fe-panel) 60%, white); padding: 6px 8px; text-align: left; transition: border-color 120ms ease, background-color 120ms ease, transform 100ms ease; }
+.pool-card:hover { border-color: var(--fe-border-strong); transform: translateY(-1px); }
+.pool-card.selected { border-color: var(--fe-accent); background: color-mix(in srgb, var(--fe-accent) 8%, var(--fe-panel)); box-shadow: 0 0 0 1px var(--fe-accent) inset; }
+.pool-card strong { color: var(--fe-ink); font-size: 11.5px; font-weight: 800; }
+.pool-card small { color: var(--fe-ink-3); font-size: 10px; }
+.pool-empty { margin-top: 8px; color: var(--fe-ink-3); font-size: 11px; text-align: center; }
 /* —— 角色简介卡：悬停/选中下拉候选时显示 —— */
-.pool-preview-card { margin-top: 6px; border: 1px solid #e4dbc6; border-left: 3px solid #b63a2b; border-radius: 6px; background: #fffdf7; padding: 7px 9px; }
-.participation-scale { display: flex; justify-content: space-between; margin-top: 1px; padding: 0 2px; font-size: 8px; color: #c4baa6; letter-spacing: 0.5px; }
+.pool-preview-card { margin-top: 6px; border: 1px solid color-mix(in srgb, var(--fe-border) 60%, var(--fe-panel)); border-left: 3px solid var(--fe-accent); border-radius: var(--fe-radius); background: color-mix(in srgb, var(--fe-panel) 60%, white); padding: 7px 9px; }
+.participation-scale { display: flex; justify-content: space-between; margin-top: 1px; padding: 0 2px; font-size: 8px; color: var(--fe-border-strong); letter-spacing: 0.5px; }
 .nemesis-bar-row { display: flex; align-items: center; gap: 4px; margin-top: 3px; }
-.nemesis-bar-label { font-size: 8px; color: #948a76; flex-shrink: 0; }
-.nemesis-bar-track { position: relative; flex: 1; height: 6px; border-radius: 3px; background: linear-gradient(90deg, #b63a2b 0%, #e8a838 30%, #6b9a4a 60%, #5a7a8a 100%); }
-.nemesis-bar-fill { position: absolute; top: -2px; width: 3px; height: 10px; border-radius: 1.5px; background: #3a332a; border: 1px solid #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.3); transform: translateX(-50%); }
-.nemesis-bar-mini { position: relative; display: inline-block; width: 60px; height: 5px; border-radius: 2.5px; background: linear-gradient(90deg, #b63a2b 0%, #e8a838 30%, #6b9a4a 60%, #5a7a8a 100%); }
+.nemesis-bar-label { font-size: 8px; color: var(--fe-ink-3); flex-shrink: 0; }
+.nemesis-bar-track { position: relative; flex: 1; height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--fe-accent) 0%, #e8a838 30%, #6b9a4a 60%, #5a7a8a 100%); }
+.nemesis-bar-fill { position: absolute; top: -2px; width: 3px; height: 10px; border-radius: 1.5px; background: var(--fe-ink); border: 1px solid #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.3); transform: translateX(-50%); }
+.nemesis-bar-mini { position: relative; display: inline-block; width: 60px; height: 5px; border-radius: 2.5px; background: linear-gradient(90deg, var(--fe-accent) 0%, #e8a838 30%, #6b9a4a 60%, #5a7a8a 100%); }
 .nemesis-bar-mini .nemesis-bar-fill { top: -2px; height: 9px; width: 2px; }
-.pool-preview-card strong { color: #3a332a; font-size: 12px; }
+.pool-preview-card strong { color: var(--fe-ink); font-size: 12px; }
 .pool-preview-fields { margin: 4px 0 0; }
 .pool-preview-fields > div { display: flex; gap: 5px; padding: 1.5px 0; }
-.pool-preview-fields dt { flex: 0 0 52px; color: #948a76; font-size: 10px; }
-.pool-preview-fields dd { flex: 1; min-width: 0; margin: 0; color: #544d3f; font-size: 10px; line-height: 1.5; }
+.pool-preview-fields dt { flex: 0 0 52px; color: var(--fe-ink-3); font-size: 10px; }
+.pool-preview-fields dd { flex: 1; min-width: 0; margin: 0; color: var(--fe-ink-2); font-size: 10px; line-height: 1.5; }
 
 /* —— 故事丰富度：蜡封滑块 —— */
 .richness-slider { display: flex; align-items: center; gap: 7px; margin-top: 2px; }
@@ -3267,7 +3270,7 @@ watch([compressionRecord, round], () => {
   border-radius: 999px; font-size: 10px; font-weight: 800; line-height: 1;
   color: #fff; user-select: none;
   /* 火漆印质感：深红底 + 边缘暗圈 + 微高光 */
-  background: radial-gradient(circle at 32% 28%, #d05a48, #b63a2b 52%, #8d2c20);
+  background: radial-gradient(circle at 32% 28%, color-mix(in srgb, var(--fe-accent) 78%, white), var(--fe-accent) 52%, var(--fe-danger));
   box-shadow: inset 0 0 0 2.5px rgb(255 255 255 / 14%), 0 1px 3px rgb(90 30 20 / 35%);
 }
 .seal-max { filter: saturate(.85) brightness(.92); }
@@ -3275,88 +3278,88 @@ watch([compressionRecord, round], () => {
 .richness-range:active { cursor: grabbing; }
 .richness-range::-webkit-slider-runnable-track {
   height: 6px; border-radius: 999px;
-  background: linear-gradient(90deg, #d9cfba, #c8a24a);
+  background: linear-gradient(90deg, var(--fe-border), color-mix(in srgb, var(--fe-warn) 55%, var(--fe-panel)));
   box-shadow: inset 0 1px 2px rgb(60 50 32 / 25%);
 }
 .richness-range::-moz-range-track {
   height: 6px; border-radius: 999px;
-  background: linear-gradient(90deg, #d9cfba, #c8a24a);
+  background: linear-gradient(90deg, var(--fe-border), color-mix(in srgb, var(--fe-warn) 55%, var(--fe-panel)));
   box-shadow: inset 0 1px 2px rgb(60 50 32 / 25%);
 }
 /* 拇指做成小火漆章：拖动的就是一枚印章。 */
 .richness-range::-webkit-slider-thumb {
   appearance: none; -webkit-appearance: none;
   width: 20px; height: 20px; margin-top: -7px;
-  border-radius: 999px; border: 2px solid #fdfaf2;
-  background: radial-gradient(circle at 32% 28%, #d05a48, #b63a2b 55%, #8d2c20);
+  border-radius: 999px; border: 2px solid var(--fe-panel);
+  background: radial-gradient(circle at 32% 28%, color-mix(in srgb, var(--fe-accent) 78%, white), var(--fe-accent) 55%, var(--fe-danger));
   box-shadow: inset 0 0 0 2px rgb(255 255 255 / 12%), 0 1px 4px rgb(90 30 20 / 40%);
   transition: transform 120ms ease;
 }
 .richness-range::-webkit-slider-thumb:hover { transform: scale(1.08); }
 .richness-range::-moz-range-thumb {
   width: 16px; height: 16px;
-  border-radius: 999px; border: 2px solid #fdfaf2;
-  background: radial-gradient(circle at 32% 28%, #d05a48, #b63a2b 55%, #8d2c20);
+  border-radius: 999px; border: 2px solid var(--fe-panel);
+  background: radial-gradient(circle at 32% 28%, color-mix(in srgb, var(--fe-accent) 78%, white), var(--fe-accent) 55%, var(--fe-danger));
   box-shadow: inset 0 0 0 2px rgb(255 255 255 / 12%), 0 1px 4px rgb(90 30 20 / 40%);
 }
-.richness-range:focus-visible { outline: 2px solid #b63a2b; outline-offset: 3px; border-radius: 999px; }
+.richness-range:focus-visible { outline: 2px solid var(--fe-accent); outline-offset: 3px; border-radius: 999px; }
 .richness-badge {
   display: inline-flex; align-items: center; gap: 4px;
   border: 1px solid currentColor; border-radius: 4px;
   padding: 0 6px; font-size: 10px; font-weight: 700;
 }
-.richness-badge[data-tier='轻盈'] { color: #137c6c; background: #eef5ee; }
-.richness-badge[data-tier='适中'] { color: #7c5b12; background: #faf3dd; }
-.richness-badge[data-tier='厚重'] { color: #a87516; background: #f8ecd2; }
-.richness-badge[data-tier='沉浸'] { color: #b63a2b; background: #faece8; }
-.upload-zone { display: flex; min-height: 64px; cursor: pointer; align-items: center; gap: 8px; border: 1px dashed #c2b6a0; border-radius: 6px; background: #fdfaf2; padding: 8px 12px; transition: border-color 140ms ease, background-color 140ms ease; }
-.upload-zone:hover { border-color: #b63a2b; }
-.upload-chip { display: flex; min-height: 34px; cursor: pointer; align-items: center; gap: 6px; border: 1px dashed #cfc3ab; border-radius: 6px; background: #fdfaf2; padding: 5px 9px; font-size: 11px; color: #544d3f; transition: border-color 140ms ease, background-color 140ms ease; }
-.upload-chip:hover { border-color: #b63a2b; }
+.richness-badge[data-tier='轻盈'] { color: var(--fe-ok); background: color-mix(in srgb, var(--fe-ok) 8%, var(--fe-panel)); }
+.richness-badge[data-tier='适中'] { color: color-mix(in srgb, var(--fe-warn) 72%, var(--fe-ink)); background: color-mix(in srgb, var(--fe-warn) 10%, var(--fe-panel)); }
+.richness-badge[data-tier='厚重'] { color: var(--fe-warn); background: color-mix(in srgb, var(--fe-warn) 16%, var(--fe-panel)); }
+.richness-badge[data-tier='沉浸'] { color: var(--fe-accent); background: var(--fe-accent-soft); }
+.upload-zone { display: flex; min-height: 64px; cursor: pointer; align-items: center; gap: 8px; border: 1px dashed var(--fe-border-strong); border-radius: var(--fe-radius); background: var(--fe-panel); padding: 8px 12px; transition: border-color 140ms ease, background-color 140ms ease; }
+.upload-zone:hover { border-color: var(--fe-accent); }
+.upload-chip { display: flex; min-height: 34px; cursor: pointer; align-items: center; gap: 6px; border: 1px dashed var(--fe-border); border-radius: var(--fe-radius); background: var(--fe-panel); padding: 5px 9px; font-size: 11px; color: var(--fe-ink-2); transition: border-color 140ms ease, background-color 140ms ease; }
+.upload-chip:hover { border-color: var(--fe-accent); }
 .work-picker { position: relative; }
 .work-picker-trigger { display: flex; height: 36px; align-items: center; gap: 6px; padding: 0 8px; font-size: 13px; }
 .picker-overlay { position: fixed; inset: 0; z-index: 40; }
-.work-picker-panel { position: absolute; z-index: 50; top: calc(100% + 4px); left: 0; right: 0; overflow: hidden; border: 1px solid #d9cfba; border-radius: 6px; background: #fdfaf2; box-shadow: 0 8px 24px rgb(36 35 33 / 12%); animation: panel-in 160ms ease-out; }
-.work-picker-search { display: flex; align-items: center; gap: 6px; border-bottom: 1px solid #e8e0cd; padding: 7px 9px; }
+.work-picker-panel { position: absolute; z-index: 50; top: calc(100% + 4px); left: 0; right: 0; overflow: hidden; border: 1px solid var(--fe-border); border-radius: var(--fe-radius); background: var(--fe-panel); box-shadow: var(--fe-shadow-2); animation: panel-in 160ms ease-out; }
+.work-picker-search { display: flex; align-items: center; gap: 6px; border-bottom: 1px solid color-mix(in srgb, var(--fe-border) 60%, var(--fe-panel)); padding: 7px 9px; }
 .work-picker-search input { min-width: 0; flex: 1; border: 0; background: transparent; font-size: 12px; outline: none; }
 .work-picker-list { max-height: 240px; overflow-y: auto; }
-.work-option { display: block; width: 100%; overflow: hidden; padding: 7px 10px; text-align: left; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: #3d382e; transition: background-color 100ms ease; }
-.work-option:hover { background: #f3ecdc; }
-.work-option.active { background: #f7ece9; color: #b63a2b; font-weight: 700; }
-.proposal-card { border-radius: 0 6px 6px 0; }
+.work-option { display: block; width: 100%; overflow: hidden; padding: 7px 10px; text-align: left; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--fe-ink); transition: background-color 100ms ease; }
+.work-option:hover { background: var(--fe-panel-2); }
+.work-option.active { background: color-mix(in srgb, var(--fe-accent) 8%, var(--fe-panel)); color: var(--fe-accent); font-weight: 700; }
+.proposal-card { border-radius: 0 var(--fe-radius) var(--fe-radius) 0; }
 .status-badge { transition: background-color 200ms ease, border-color 200ms ease, color 200ms ease; }
 .save-point { display: flex; gap: 6px; }
 .save-list { display: flex; max-height: 300px; flex-direction: column; gap: 8px; overflow-y: auto; }
-.save-card { border: 1px solid #ddd2bc; border-radius: 6px; background: #fdfaf2; padding: 9px 10px; transition: border-color 160ms ease, box-shadow 160ms ease; }
+.save-card { border: 1px solid var(--fe-border); border-radius: var(--fe-radius); background: var(--fe-panel); padding: 9px 10px; transition: border-color 160ms ease, box-shadow 160ms ease; }
 .save-card.flash { animation: save-flash 2.4s ease-out; }
-.save-mode-badge { flex: 0 0 auto; border: 1px solid #ddd2bc; border-radius: 4px; background: #f6f5f2; padding: 1px 5px; color: #6f6b64; font-size: 9px; font-weight: 700; }
-.save-mode-badge.enhanced { border-color: #c9a24a; background: #faf3e3; color: #7c5b12; }
+.save-mode-badge { flex: 0 0 auto; border: 1px solid var(--fe-border); border-radius: 4px; background: var(--fe-panel-2); padding: 1px 5px; color: var(--fe-ink-2); font-size: 9px; font-weight: 700; }
+.save-mode-badge.enhanced { border-color: color-mix(in srgb, var(--fe-warn) 55%, var(--fe-panel)); background: color-mix(in srgb, var(--fe-warn) 10%, var(--fe-panel)); color: color-mix(in srgb, var(--fe-warn) 72%, var(--fe-ink)); }
 .options-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
-.option-card { display: flex; align-items: flex-start; gap: 8px; border: 1px solid #d9cfba; border-left-width: 3px; border-radius: 6px; background: #fdfaf2; padding: 9px 10px; text-align: left; transition: transform 120ms ease, box-shadow 140ms ease, background-color 140ms ease, opacity 140ms ease; }
-.option-card:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 12px rgb(36 35 33 / 10%); }
+.option-card { display: flex; align-items: flex-start; gap: 8px; border: 1px solid var(--fe-border); border-left-width: 3px; border-radius: var(--fe-radius); background: var(--fe-panel); padding: 9px 10px; text-align: left; transition: transform 120ms ease, box-shadow 140ms ease, background-color 140ms ease, opacity 140ms ease; }
+.option-card:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--fe-shadow-2); }
 .option-card:active:not(:disabled) { transform: scale(.98); }
 .option-card:disabled { opacity: .55; }
-.option-card.selected { background: #faf3e3; box-shadow: 0 0 0 2px rgb(168 117 22 / 25%); }
-.option-key { display: grid; width: 22px; height: 22px; flex: 0 0 auto; place-items: center; border: 1.5px solid; border-radius: 6px; font-size: 11px; font-weight: 800; }
-.option-text { min-width: 0; overflow-wrap: anywhere; color: #3d382e; font-size: 12.5px; line-height: 1.55; }
-.opt-a { border-left-color: #b63a2b; } .opt-a .option-key { border-color: #b63a2b; color: #b63a2b; }
-.opt-b { border-left-color: #137c6c; } .opt-b .option-key { border-color: #137c6c; color: #137c6c; }
-.opt-c { border-left-color: #a87516; } .opt-c .option-key { border-color: #a87516; color: #a87516; }
-.opt-d { border-left-color: #4d4a45; } .opt-d .option-key { border-color: #4d4a45; color: #4d4a45; }
-.opt-e { border-left-color: #8d2c20; } .opt-e .option-key { border-color: #8d2c20; color: #8d2c20; }
-.opt-f { border-left-color: #0f5f53; } .opt-f .option-key { border-color: #0f5f53; color: #0f5f53; }
-.options-placeholder { display: flex; margin-top: 8px; align-items: center; justify-content: center; gap: 8px; border: 1px dashed #cfc3ab; border-radius: 6px; padding: 13px 8px; color: #948a76; font-size: 11px; }
+.option-card.selected { background: color-mix(in srgb, var(--fe-warn) 10%, var(--fe-panel)); box-shadow: 0 0 0 2px rgb(168 117 22 / 25%); }
+.option-key { display: grid; width: 22px; height: 22px; flex: 0 0 auto; place-items: center; border: 1.5px solid; border-radius: var(--fe-radius); font-size: 11px; font-weight: 800; }
+.option-text { min-width: 0; overflow-wrap: anywhere; color: var(--fe-ink); font-size: 12.5px; line-height: 1.55; }
+.opt-a { border-left-color: var(--fe-accent); } .opt-a .option-key { border-color: var(--fe-accent); color: var(--fe-accent); }
+.opt-b { border-left-color: var(--fe-ok); } .opt-b .option-key { border-color: var(--fe-ok); color: var(--fe-ok); }
+.opt-c { border-left-color: var(--fe-warn); } .opt-c .option-key { border-color: var(--fe-warn); color: var(--fe-warn); }
+.opt-d { border-left-color: var(--fe-ink); } .opt-d .option-key { border-color: var(--fe-ink); color: var(--fe-ink); }
+.opt-e { border-left-color: var(--fe-danger); } .opt-e .option-key { border-color: var(--fe-danger); color: var(--fe-danger); }
+.opt-f { border-left-color: color-mix(in srgb, var(--fe-ok) 78%, black); } .opt-f .option-key { border-color: color-mix(in srgb, var(--fe-ok) 78%, black); color: color-mix(in srgb, var(--fe-ok) 78%, black); }
+.options-placeholder { display: flex; margin-top: 8px; align-items: center; justify-content: center; gap: 8px; border: 1px dashed var(--fe-border); border-radius: var(--fe-radius); padding: 13px 8px; color: var(--fe-ink-3); font-size: 11px; }
 .options-placeholder.waiting { animation: placeholder-pulse 1.6s ease-in-out infinite; }
-.ask-card { border: 1px solid #e2d9c4; border-radius: 6px; background: #fdfaf2; }
-.ask-toggle { display: flex; width: 100%; align-items: center; gap: 6px; padding: 6px 9px; color: #544d3f; font-size: 11px; font-weight: 700; }
+.ask-card { border: 1px solid color-mix(in srgb, var(--fe-border) 60%, var(--fe-panel)); border-radius: var(--fe-radius); background: var(--fe-panel); }
+.ask-toggle { display: flex; width: 100%; align-items: center; gap: 6px; padding: 6px 9px; color: var(--fe-ink-2); font-size: 11px; font-weight: 700; }
 .ask-toggle .chevron { transition: transform 180ms ease; }
-.ask-note { font-size: 10px; font-weight: 400; color: #948a76; }
-.ask-body { border-top: 1px solid #e8e0cd; padding: 8px 9px; }
+.ask-note { font-size: 10px; font-weight: 400; color: var(--fe-ink-3); }
+.ask-body { border-top: 1px solid color-mix(in srgb, var(--fe-border) 60%, var(--fe-panel)); padding: 8px 9px; }
 .ask-thread { display: flex; max-height: 150px; flex-direction: column; gap: 6px; margin-bottom: 8px; overflow-y: auto; }
-.ask-q { font-size: 11px; font-weight: 700; color: #3d382e; }
-.ask-a { margin-top: 2px; white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid #e8e0cd; border-radius: 6px; background: #fdfaf2; padding: 5px 8px; font-size: 11px; line-height: 1.6; color: #655c4c; }
-.anchor-timeline { display: flex; align-items: center; overflow-x: auto; border-bottom: 1px solid #e2d9c4; background: #f3edde; padding: 9px 12px 13px; }
-.tl-node { position: relative; display: flex; flex: 0 0 auto; align-items: center; gap: 6px; border: 1px solid #ddd2bc; border-radius: 5px 5px 2px 2px; background: #fdfaf2; padding: 4px 9px 5px; box-shadow: 0 1px 2px rgb(60 50 32 / 8%); animation: tl-in 320ms ease-out both; }
+.ask-q { font-size: 11px; font-weight: 700; color: var(--fe-ink); }
+.ask-a { margin-top: 2px; white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid color-mix(in srgb, var(--fe-border) 60%, var(--fe-panel)); border-radius: var(--fe-radius); background: var(--fe-panel); padding: 5px 8px; font-size: 11px; line-height: 1.6; color: var(--fe-ink-2); }
+.anchor-timeline { display: flex; align-items: center; overflow-x: auto; border-bottom: 1px solid color-mix(in srgb, var(--fe-border) 60%, var(--fe-panel)); background: var(--fe-bg); padding: 9px 12px 13px; }
+.tl-node { position: relative; display: flex; flex: 0 0 auto; align-items: center; gap: 6px; border: 1px solid var(--fe-border); border-radius: 5px 5px 2px 2px; background: var(--fe-panel); padding: 4px 9px 5px; box-shadow: 0 1px 2px rgb(60 50 32 / 8%); animation: tl-in 320ms ease-out both; }
 .tl-node::after {
   content: '';
   position: absolute;
@@ -3365,35 +3368,35 @@ watch([compressionRecord, round], () => {
   width: 7px;
   height: 7px;
   transform: translateX(-50%) rotate(45deg);
-  border-right: 1px solid #ddd2bc;
-  border-bottom: 1px solid #ddd2bc;
-  background: #fdfaf2;
+  border-right: 1px solid var(--fe-border);
+  border-bottom: 1px solid var(--fe-border);
+  background: var(--fe-panel);
 }
-.tl-past { border-color: #b9d4c8; }
-.tl-past::after { border-color: #b9d4c8; }
-.tl-current { border-color: #b63a2b; background: #fdf3ef; }
-.tl-current::after { border-color: #b63a2b; background: #fdf3ef; }
-.tl-dot { display: grid; width: 15px; height: 15px; flex: 0 0 auto; place-items: center; border: 1.5px solid #d9cfba; border-radius: 999px; background: #fdfaf2; color: #fff; }
-.tl-past .tl-dot { border-color: #137c6c; background: #137c6c; }
-.tl-current .tl-dot { border-color: #b63a2b; background: #b63a2b; animation: tl-pulse 1.6s ease-in-out infinite; }
-.tl-line { width: 20px; height: 1.5px; flex: 0 0 auto; margin: 0 6px; background: #d9cfba; }
-.tl-chapter { display: block; font-size: 9px; color: #948a76; }
-.tl-title { display: block; max-width: 132px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; font-weight: 700; color: #3d382e; }
-.tl-past .tl-title { color: #137c6c; }
-.tl-current .tl-title { color: #b63a2b; }
-.metric { padding: 12px; }
-.metric span { display: block; color: #877d69; font-size: 10px; }
+.tl-past { border-color: color-mix(in srgb, var(--fe-ok) 30%, var(--fe-panel)); }
+.tl-past::after { border-color: color-mix(in srgb, var(--fe-ok) 30%, var(--fe-panel)); }
+.tl-current { border-color: var(--fe-accent); background: color-mix(in srgb, var(--fe-accent) 8%, var(--fe-panel)); }
+.tl-current::after { border-color: var(--fe-accent); background: color-mix(in srgb, var(--fe-accent) 8%, var(--fe-panel)); }
+.tl-dot { display: grid; width: 15px; height: 15px; flex: 0 0 auto; place-items: center; border: 1.5px solid var(--fe-border); border-radius: 999px; background: var(--fe-panel); color: #fff; }
+.tl-past .tl-dot { border-color: var(--fe-ok); background: var(--fe-ok); }
+.tl-current .tl-dot { border-color: var(--fe-accent); background: var(--fe-accent); animation: tl-pulse 1.6s ease-in-out infinite; }
+.tl-line { width: 20px; height: 1.5px; flex: 0 0 auto; margin: 0 6px; background: var(--fe-border); }
+.tl-chapter { display: block; font-size: 9px; color: var(--fe-ink-3); }
+.tl-title { display: block; max-width: 132px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; font-weight: 700; color: var(--fe-ink); }
+.tl-past .tl-title { color: var(--fe-ok); }
+.tl-current .tl-title { color: var(--fe-accent); }
+.metric { padding: 12px; border-color: var(--fe-border); }
+.metric span { display: block; color: var(--fe-ink-3); font-size: 10px; }
 .metric strong { display: block; margin-top: 2px; font-size: 15px; }
-.state-section { border-bottom: 1px solid #ddd2bc; padding: 12px; }
+.state-section { border-bottom: 1px solid var(--fe-border); padding: 12px; }
 .state-section h3 { display: flex; align-items: center; gap: 7px; margin-bottom: 10px; font-size: 12px; font-weight: 700; }
-.compact-list { overflow: hidden; border: 1px solid #ddd2bc; border-radius: 6px; background: #fdfaf2; }
-.compact-list div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 8px; border-bottom: 1px solid #e8e0cd; padding: 7px 9px; font-size: 10px; }
+.compact-list { overflow: hidden; border: 1px solid var(--fe-border); border-radius: var(--fe-radius); background: var(--fe-panel); }
+.compact-list div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 8px; border-bottom: 1px solid color-mix(in srgb, var(--fe-border) 60%, var(--fe-panel)); padding: 7px 9px; font-size: 10px; }
 .compact-list div:last-child { border-bottom: 0; }
-.compact-list dt { color: #877d69; }
-.compact-list dd { min-width: 0; overflow-wrap: anywhere; text-align: right; color: #3d382e; font-weight: 650; }
-.empty-state { border: 1px dashed #cfc3ab; border-radius: 6px; padding: 18px 8px; text-align: center; color: #948a76; font-size: 10px; }
-.mobile-tab { display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #7d7461; font-size: 10px; transition: color 140ms ease; }
-.mobile-tab.active { color: #b63a2b; font-weight: 700; }
+.compact-list dt { color: var(--fe-ink-3); }
+.compact-list dd { min-width: 0; overflow-wrap: anywhere; text-align: right; color: var(--fe-ink); font-weight: 650; }
+.empty-state { border: 1px dashed var(--fe-border); border-radius: var(--fe-radius); padding: 18px 8px; text-align: center; color: var(--fe-ink-3); font-size: 10px; }
+.mobile-tab { display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--fe-ink-3); font-size: 10px; transition: color 140ms ease; }
+.mobile-tab.active { color: var(--fe-accent); font-weight: 700; }
 
 .chat-message { animation: message-in 260ms ease-out both; }
 .member-card { animation: message-in 220ms ease-out both; }
@@ -3409,13 +3412,13 @@ watch([compressionRecord, round], () => {
   bottom: 2px;
   width: 3px;
   border-radius: 2px;
-  background: linear-gradient(180deg, #b63a2b, #d98a4a);
+  background: linear-gradient(180deg, var(--fe-accent), color-mix(in srgb, var(--fe-accent) 55%, var(--fe-warn)));
   opacity: .8;
 }
 
 .book-page {
   position: relative;
-  border: 1px solid #e2d9c4;
+  border: 1px solid color-mix(in srgb, var(--fe-border) 60%, var(--fe-panel));
   border-radius: 3px;
   /* 输出框纸张：米黄纸底 + 隐约纤维纹理 + 轻微明暗斑驳，不抢正文 */
   background:
@@ -3423,7 +3426,7 @@ watch([compressionRecord, round], () => {
     repeating-linear-gradient(90deg, rgb(120 96 54 / 2.2%) 0 1px, transparent 1px 4px),
     radial-gradient(ellipse 90% 60% at 18% 8%, rgb(190 158 100 / 7%), transparent 55%),
     radial-gradient(ellipse 70% 50% at 88% 92%, rgb(160 128 72 / 6%), transparent 60%),
-    #faf6ec;
+    var(--fe-panel);
   padding: 30px clamp(18px, 5vw, 56px) 36px;
   box-shadow:
     inset 26px 0 30px -30px rgb(90 74 46 / 28%),
@@ -3461,7 +3464,7 @@ watch([compressionRecord, round], () => {
   font-family: var(--font-serif);
   font-size: 15.75px;
   line-height: 1.9;
-  color: #332e26;
+  color: var(--fe-ink);
   overflow-wrap: anywhere;
 }
 .narrative-para { margin: 0 0 .9em; text-indent: 2em; /* 叙事正文用楷体书卷气（UI 仍为雅黑） */ font-family: var(--font-serif); line-height: 1.85; }
@@ -3470,7 +3473,7 @@ watch([compressionRecord, round], () => {
 .drop-cap {
   float: left;
   margin: 4px 9px 0 0;
-  color: #b63a2b;
+  color: var(--fe-accent);
   font-family: var(--font-serif);
   font-size: 2.55em;
   font-weight: 700;
@@ -3480,7 +3483,7 @@ watch([compressionRecord, round], () => {
   position: relative;
   margin: 1.35em 0 1em;
   padding-bottom: .55em;
-  color: #3a332a;
+  color: var(--fe-ink);
   font-family: var(--font-serif);
   font-size: 19px;
   font-weight: 700;
@@ -3495,9 +3498,9 @@ watch([compressionRecord, round], () => {
   width: 72px;
   height: 5px;
   transform: translateX(-50%);
-  border-bottom: 1px solid #c8bda6;
+  border-bottom: 1px solid var(--fe-border-strong);
   background:
-    linear-gradient(45deg, transparent 44%, #b63a2b 44%, #b63a2b 56%, transparent 56%) center / 7px 5px no-repeat;
+    linear-gradient(45deg, transparent 44%, var(--fe-accent) 44%, var(--fe-accent) 56%, transparent 56%) center / 7px 5px no-repeat;
 }
 .font-large .narrative-body { font-size: 17px; }
 
@@ -3506,7 +3509,7 @@ watch([compressionRecord, round], () => {
   background:
     repeating-linear-gradient(0deg, rgb(110 86 48 / 3%) 0 1px, transparent 1px 4px),
     radial-gradient(ellipse 80% 100% at 100% 0%, rgb(170 140 90 / 6%), transparent 60%),
-    #e9e1cd;
+    var(--fe-panel-3);
   box-shadow: inset 0 0 0 1px rgb(120 96 54 / 8%), 0 1px 2px rgb(60 50 32 / 6%);
 }
 
@@ -3516,20 +3519,20 @@ watch([compressionRecord, round], () => {
   align-items: center;
   gap: 8px;
   margin-top: 10px;
-  border: 1px solid #ddd2bc;
-  border-left: 3px solid #b63a2b;
-  border-radius: 6px;
-  background: #fdfaf2;
+  border: 1px solid var(--fe-border);
+  border-left: 3px solid var(--fe-accent);
+  border-radius: var(--fe-radius);
+  background: var(--fe-panel);
   padding: 8px 10px;
-  color: #3d382e;
+  color: var(--fe-ink);
   font-weight: 700;
   transition: border-color 140ms ease, background-color 140ms ease, transform 100ms ease;
 }
-.designer-entry:hover { border-color: #b63a2b; background: #faf3e9; }
+.designer-entry:hover { border-color: var(--fe-accent); background: color-mix(in srgb, var(--fe-accent) 6%, var(--fe-panel)); }
 .designer-entry:active { transform: scale(.98); }
 
-.chapter-track { height: 3px; background: #e9e1cd; }
-.chapter-fill { display: block; height: 100%; background: #b63a2b; transition: width 500ms ease; }
+.chapter-track { height: 3px; background: var(--fe-panel-3); }
+.chapter-fill { display: block; height: 100%; background: var(--fe-accent); transition: width 500ms ease; }
 
 .compression-toast {
   position: absolute;
@@ -3540,53 +3543,53 @@ watch([compressionRecord, round], () => {
   gap: 8px;
   margin-inline: auto;
   max-width: 640px;
-  border: 1px solid #c9a24a;
-  border-radius: 6px;
-  background: #fdf8ec;
+  border: 1px solid color-mix(in srgb, var(--fe-warn) 55%, var(--fe-panel));
+  border-radius: var(--fe-radius);
+  background: color-mix(in srgb, var(--fe-warn) 10%, var(--fe-panel));
   padding: 8px 12px;
-  color: #7c5b12;
+  color: color-mix(in srgb, var(--fe-warn) 72%, var(--fe-ink));
   font-size: 11px;
   line-height: 1.5;
-  box-shadow: 0 4px 14px rgb(36 35 33 / 10%);
+  box-shadow: var(--fe-shadow-2);
 }
 
 .quest-card {
-  border: 1px solid #ddd2bc;
-  border-left: 3px solid #b63a2b;
-  border-radius: 6px;
-  background: #fdfaf2;
+  border: 1px solid var(--fe-border);
+  border-left: 3px solid var(--fe-accent);
+  border-radius: var(--fe-radius);
+  background: var(--fe-panel);
   padding: 10px;
   animation: quest-in 280ms ease-out both;
   transition: border-color 200ms ease, background-color 200ms ease;
 }
-.quest-card.completed { border-left-color: #137c6c; }
-.quest-card.failed { border-left-color: #8d2c20; }
-.quest-title { display: block; font-size: 12px; font-weight: 700; color: #3d382e; }
-.quest-req { margin-top: 6px; padding-left: 14px; list-style: disc; font-size: 11px; line-height: 1.6; color: #655c4c; }
-.quest-goal { margin-top: 6px; overflow-wrap: anywhere; font-size: 11px; line-height: 1.6; color: #544d3f; }
-.quest-meta { margin-top: 5px; font-size: 10px; color: #877d69; }
+.quest-card.completed { border-left-color: var(--fe-ok); }
+.quest-card.failed { border-left-color: var(--fe-danger); }
+.quest-title { display: block; font-size: 12px; font-weight: 700; color: var(--fe-ink); }
+.quest-req { margin-top: 6px; padding-left: 14px; list-style: disc; font-size: 11px; line-height: 1.6; color: var(--fe-ink-2); }
+.quest-goal { margin-top: 6px; overflow-wrap: anywhere; font-size: 11px; line-height: 1.6; color: var(--fe-ink-2); }
+.quest-meta { margin-top: 5px; font-size: 10px; color: var(--fe-ink-3); }
 .quest-result { margin-top: 6px; font-size: 11px; font-weight: 700; }
-.quest-result.completed { color: #137c6c; }
-.quest-result.failed { color: #8d2c20; }
-.quest-progress-track { margin-top: 8px; height: 6px; overflow: hidden; border-radius: 999px; background: #e9e1cd; }
-.quest-progress-fill { display: block; height: 100%; border-radius: 999px; background: #b63a2b; transition: width 500ms ease; }
-.quest-progress-fill.ready { background: #137c6c; }
-.break-anchor-panel { border-left: 2px solid #2563eb; border-radius: 0 6px 6px 0; background: #fdfaf2; padding: 8px 10px; }
+.quest-result.completed { color: var(--fe-ok); }
+.quest-result.failed { color: var(--fe-danger); }
+.quest-progress-track { margin-top: 8px; height: 6px; overflow: hidden; border-radius: 999px; background: var(--fe-panel-3); }
+.quest-progress-fill { display: block; height: 100%; border-radius: 999px; background: var(--fe-accent); transition: width 500ms ease; }
+.quest-progress-fill.ready { background: var(--fe-ok); }
+.break-anchor-panel { border-left: 2px solid #2563eb; border-radius: 0 var(--fe-radius) var(--fe-radius) 0; background: var(--fe-panel); padding: 8px 10px; }
 .quest-flash-msg {
   margin-top: 8px;
-  border: 1px solid #c9a24a;
-  border-radius: 6px;
-  background: #faf3e3;
+  border: 1px solid color-mix(in srgb, var(--fe-warn) 55%, var(--fe-panel));
+  border-radius: var(--fe-radius);
+  background: color-mix(in srgb, var(--fe-warn) 10%, var(--fe-panel));
   padding: 4px 8px;
   font-size: 10px;
-  color: #7c5b12;
+  color: color-mix(in srgb, var(--fe-warn) 72%, var(--fe-ink));
 }
 
 .conv-bar {
   position: relative;
   height: 10px;
   border-radius: 999px;
-  background: linear-gradient(90deg, #b63a2b, #2563eb);
+  background: linear-gradient(90deg, var(--fe-accent), #2563eb);
 }
 .conv-tick {
   position: absolute;
@@ -3595,7 +3598,7 @@ watch([compressionRecord, round], () => {
   height: 6px;
   transform: translate(-50%, -50%) rotate(45deg);
   border-radius: 1px;
-  background: #fdfaf2;
+  background: var(--fe-panel);
   opacity: .9;
 }
 .conv-dot { position: absolute; top: 50%; transform: translate(-50%, -50%); border-radius: 999px; }
@@ -3603,7 +3606,7 @@ watch([compressionRecord, round], () => {
   width: 12px;
   height: 12px;
   border: 2px solid #fff;
-  background: #242321;
+  background: var(--fe-ink);
   box-shadow: 0 1px 3px rgb(36 35 33 / 35%);
   transition: left 600ms ease;
 }
@@ -3616,19 +3619,19 @@ watch([compressionRecord, round], () => {
 }
 
 .nemesis-card {
-  border: 1px solid #ddd2bc;
-  border-left: 3px solid #8d2c20;
-  border-radius: 6px;
-  background: #fdfaf2;
+  border: 1px solid var(--fe-border);
+  border-left: 3px solid var(--fe-danger);
+  border-radius: var(--fe-radius);
+  background: var(--fe-panel);
   padding: 10px;
   animation: nemesis-in 300ms ease-out both;
 }
-.nemesis-text { overflow-wrap: anywhere; white-space: pre-wrap; font-size: 11px; line-height: 1.65; color: #544d3f; }
+.nemesis-text { overflow-wrap: anywhere; white-space: pre-wrap; font-size: 11px; line-height: 1.65; color: var(--fe-ink-2); }
 .distortion-row { display: flex; margin-top: 8px; align-items: center; gap: 8px; }
-.distortion-track { height: 5px; flex: 1; overflow: hidden; border-radius: 999px; background: #e9e1cd; }
-.distortion-fill { display: block; height: 100%; border-radius: 999px; background: #8d2c20; transition: width 500ms ease; }
-.distortion-value { flex: 0 0 auto; font-size: 9px; color: #877d69; }
-.distortion-note { margin-top: 4px; font-size: 9px; color: #948a76; }
+.distortion-track { height: 5px; flex: 1; overflow: hidden; border-radius: 999px; background: var(--fe-panel-3); }
+.distortion-fill { display: block; height: 100%; border-radius: 999px; background: var(--fe-danger); transition: width 500ms ease; }
+.distortion-value { flex: 0 0 auto; font-size: 9px; color: var(--fe-ink-3); }
+.distortion-note { margin-top: 4px; font-size: 9px; color: var(--fe-ink-3); }
 
 @keyframes quest-in {
   from { opacity: 0; transform: perspective(420px) rotateX(-8deg) translateY(6px); }
@@ -3663,8 +3666,8 @@ watch([compressionRecord, round], () => {
   50% { opacity: .55; }
 }
 @keyframes save-flash {
-  0%, 60% { border-color: #c9a24a; box-shadow: 0 0 0 2px rgb(201 162 74 / 40%); }
-  100% { border-color: #ddd2bc; box-shadow: none; }
+  0%, 60% { border-color: color-mix(in srgb, var(--fe-warn) 55%, var(--fe-panel)); box-shadow: 0 0 0 2px rgb(201 162 74 / 40%); }
+  100% { border-color: var(--fe-border); box-shadow: none; }
 }
 
 @media (max-width: 640px) {
@@ -3718,7 +3721,7 @@ watch([compressionRecord, round], () => {
   top: 55%;
   width: 9px;
   height: 1.5px;
-  background: linear-gradient(90deg, transparent, var(--fe-accent, #b63a2b));
+  background: linear-gradient(90deg, transparent, var(--fe-accent, var(--fe-accent)));
   border-radius: 2px;
 }
 .title-loom::after {
@@ -3729,7 +3732,7 @@ watch([compressionRecord, round], () => {
   width: 3px;
   height: 3px;
   border-radius: 999px;
-  background: var(--fe-accent, #b63a2b);
+  background: var(--fe-accent, var(--fe-accent));
   animation: loom-knot-pulse 3.8s ease-in-out infinite;
 }
 @keyframes loom-knot-pulse {
@@ -3764,13 +3767,13 @@ watch([compressionRecord, round], () => {
 .app-root ::-webkit-scrollbar { width: 8px; height: 8px; }
 .app-root ::-webkit-scrollbar-track { background: transparent; }
 .app-root ::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--fe-ink, #6f6758) 22%, transparent);
+  background: color-mix(in srgb, var(--fe-ink, var(--fe-ink-2)) 22%, transparent);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 .app-root ::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--fe-ink, #6f6758) 34%, transparent);
+  background: color-mix(in srgb, var(--fe-ink, var(--fe-ink-2)) 34%, transparent);
   background-clip: padding-box;
 }
 
