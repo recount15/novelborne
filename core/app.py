@@ -14,6 +14,8 @@ import threading
 import gradio as gr
 
 from core import fate_engine as fe
+from core import state_schema
+from core.state_schema import start_setting
 import core.engine.plot_summary
 import core.engine.anchor_distiller
 import core.engine.work_distiller
@@ -200,7 +202,7 @@ def _ripple_block(state, message):
     progress = _mechanical_progress(state) / 100
     difficulty = engine.runtime_mechanics.difficulty_number(state.get("start_params", {}).get("difficulty", 4))
     # 积势门槛随收束力分档（较低/一般/较高），三档在实测中形成攒势速度差异。
-    convergence = (state.get("convergence_state") or {}).get("base") or (state.get("start_params") or {}).get("convergence") or "一般"
+    convergence = (state.get("convergence_state") or {}).get("base") or start_setting(state, "convergence") or "一般"
     previous = [item for item in (state.get("ripples") or []) if isinstance(item, dict)]
     ledger = engine.runtime_mechanics.RippleLedger(difficulty, convergence)
     if previous:
@@ -691,7 +693,7 @@ def _settle_convergence(state, round_no):
         if not isinstance(conv, dict) or conv.get("base") not in engine.dynamic_convergence.TIERS:
             conv = engine.dynamic_convergence.init_state(
                 engine.normalize_convergence(
-                    state.get("convergence") or (state.get("start_params") or {}).get("convergence")))
+                    start_setting(state, "convergence")))
         outcome, k = _convergence_outcome(state)
         # 权重取 K 与共存阈值 60 的距离：离阈值越远，本回合结算证据越强。
         weight = max(0.5, min(2.0, 1.0 + abs(k - 60) / 100.0))
@@ -856,7 +858,7 @@ def _relax_convergence(state, relief, round_no):
         if not isinstance(conv, dict) or conv.get("base") not in engine.dynamic_convergence.TIERS:
             conv = engine.dynamic_convergence.init_state(
                 engine.normalize_convergence(
-                    state.get("convergence") or (state.get("start_params") or {}).get("convergence")))
+                    start_setting(state, "convergence")))
         engine.dynamic_convergence.settle(
             conv, "faithful", weight=float(relief) / 0.02, round=round_no)
         state["convergence_state"] = conv
@@ -2077,10 +2079,10 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
     target_chapter = target_chapter_state.get("current_chapter", state.get("current_chapter", 1))
     current_anchor = _current_anchor_text(state, target_chapter) if enhanced else ""
     convergence = engine.normalize_convergence(
-        state.get("convergence") or (state.get("start_params") or {}).get("convergence"))
+        start_setting(state, "convergence"))
     # 故事丰富度：玩家可拖动的单回合体量刻度，决定门禁区间与提示块目标。
     story_richness = engine.normalize_richness(
-        state.get("story_richness") or (state.get("start_params") or {}).get("story_richness"))
+        start_setting(state, "story_richness"))
     state["story_richness"] = story_richness
     state["scene_budget"] = engine.scene_budget(richness=story_richness)
     state["richness_tier"] = engine.richness_tier(story_richness)
@@ -2100,17 +2102,9 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
         chatbot = chatbot + [{"role": "user", "content": message}, {"role": "assistant", "content": f"⚠️ 目标章节第 {target_chapter} 章缺少已验证剧情锚点，已阻断本回合；请等待锚点准备完成后重试。"}]
         yield _out_send(chatbot, state, msg_update=gr.update(value=""))
         return
-    transaction_keys = (
-        "round", "current_chapter", "chapter_round", "turn_budget", "total_chapters",
-        "chapter_index", "ledger", "state_memory", "state_panel", "ripples", "last_ripple",
-        "active_members", "companions", "heroines", "lore", "lore_hits", "progress",
-        "last_style", "last_trope", "last_compatibility_k", "tok_in", "tok_out", "tok_cache", "tok_last", "tok_est",
-        # 回合管线新增字段：异常回滚时必须一并还原，否则碎锚进度 / 积势扣减标志
-        # / 性格 pending 与已回滚的 round、ripples 脱节（凭空退积势、重复结算）。
-        "skill_profiles", "break_anchor", "broken_anchors", "anchors_shattered_from",
-    )
+    # 回合事务键与回滚白名单的单一来源：core/state_schema.py（Phase 2 收编）
     transaction_snapshot = {
-        key: copy.deepcopy(state.get(key)) for key in transaction_keys
+        key: copy.deepcopy(state.get(key)) for key in state_schema.TRANSACTIONAL_KEYS
     }
     state["round"] = state.get("round", 0) + 1
     r = state["round"]
@@ -2213,7 +2207,7 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
         # —— 类 Agent 质量循环：draft → 自检 → 定向修订 → 重过机械门禁 ——
         # 只在强化模式且玩家开启时启用；自检失败不阻断主线，修订最多一轮。
         agent_mode = bool(enhanced and (state.get("agent_mode")
-                                        or (state.get("start_params") or {}).get("story_agent_mode")))
+                                        or start_setting(state, "story_agent_mode")))
         length_text = engine.strip_options_block(clean_acc)
         if agent_mode:
             budget_probe = engine.validate_scene_length(length_text, richness=story_richness)
