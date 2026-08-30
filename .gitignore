@@ -18,6 +18,8 @@ frontend/dist-*/
 # ---- 打包产物 ----
 build/dist/
 build/build/
+build/pkg/
+build/pkg_win/
 *.spec.bak
 *.zip
 *.7z

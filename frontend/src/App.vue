@@ -16,6 +16,7 @@ import {
   LoaderCircle,
   Menu,
   MessageSquareText,
+  Minus,
   Palette,
   PanelLeft,
   PanelRight,
@@ -109,6 +110,15 @@ const error = ref('')
 const status = ref('等待配置')
 const busy = ref(false)
 const sessionId = ref<string | null>(null)
+// —— 窗口化模式（pywebview 壳）：渲染无边框自定义标题栏 ——
+const isWindowed = computed(() => typeof window !== 'undefined' && 'pywebview' in window)
+function winControl(action: 'minimize' | 'toggle' | 'close'): void {
+  const api = (window as unknown as { pywebview?: { api?: { minimize?: () => void; toggle_maximize?: () => void; close?: () => void } } }).pywebview?.api
+  if (!api) return
+  if (action === 'minimize') api.minimize?.()
+  else if (action === 'toggle') api.toggle_maximize?.()
+  else api.close?.()
+}
 const novelUpload = ref<UploadInfo | null>(null)
 const personaUpload = ref<UploadInfo | null>(null)
 const state = ref<Record<string, unknown>>({})
@@ -1804,7 +1814,30 @@ watch([compressionRecord, round], () => {
     class="app-root h-dvh min-h-[640px] bg-(--fe-bg) text-(--fe-ink)"
     :class="[fontSize === 'large' ? 'font-large' : '', reduceMotion ? 'reduce-motion' : '']"
   >
-    <header class="app-header relative z-10 flex h-14 items-center border-b border-(--fe-border) bg-(--fe-panel) px-3 sm:px-4">
+    <!-- 无边框窗口标题栏（仅窗口化模式渲染）：macOS 弧形边框由 DWM 圆角提供，
+         双击标题区最大化/还原，右缘三键为 Windows 习惯的窗控位。 -->
+    <div v-if="isWindowed" class="titlebar app-titlebar flex h-10 shrink-0 select-none items-center gap-3 px-4">
+      <div class="titlebar-logo grid size-5 place-items-center">
+        <BookOpen :size="13" />
+      </div>
+      <span class="titlebar-title">书中织梦 <em>Novelborne</em></span>
+      <span
+        class="titlebar-drag flex-1 self-stretch"
+        title="双击最大化 / 还原"
+        @dblclick="winControl('toggle')"
+      />
+      <button class="titlebar-btn" title="最小化" @click="winControl('minimize')">
+        <Minus :size="14" />
+      </button>
+      <button class="titlebar-btn" title="最大化 / 还原" @click="winControl('toggle')">
+        <Square :size="10" />
+      </button>
+      <button class="titlebar-btn titlebar-close" title="关闭" @click="winControl('close')">
+        <X :size="14" />
+      </button>
+    </div>
+
+    <header v-if="!isWindowed" class="app-header relative z-10 flex h-14 items-center border-b border-(--fe-border) bg-(--fe-panel) px-3 sm:px-4">
       <div class="flex min-w-0 items-center gap-2.5">
         <div class="seal-logo grid size-8 shrink-0 place-items-center rounded-full text-(--fe-accent-ink)">
           <BookOpen :size="17" />
@@ -3164,6 +3197,55 @@ watch([compressionRecord, round], () => {
 
 <style scoped>
 .app-header { box-shadow: var(--fe-shadow-1); }
+
+/* —— 无边框窗口标题栏（pywebview + DWM 圆角）—— */
+.app-titlebar {
+  border-bottom: 1px solid color-mix(in srgb, var(--fe-border) 80%, transparent);
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--fe-panel) 96%, var(--fe-accent-soft)),
+    var(--fe-panel));
+  backdrop-filter: saturate(1.05);
+}
+.titlebar-logo {
+  border-radius: calc(var(--fe-radius) - 2px);
+  color: var(--fe-accent-ink);
+  background: radial-gradient(circle at 32% 28%,
+    color-mix(in srgb, var(--fe-accent) 78%, white), var(--fe-accent) 60%,
+    var(--fe-accent-strong));
+  box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / 14%), 0 1px 3px rgb(0 0 0 / 18%);
+}
+.titlebar-title {
+  color: var(--fe-ink);
+  font-family: var(--font-serif);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.titlebar-title em {
+  margin-left: 2px;
+  color: var(--fe-ink-3);
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+.titlebar-drag { -webkit-app-region: drag; cursor: default; }
+.titlebar-btn {
+  display: grid;
+  width: 34px;
+  height: 26px;
+  place-items: center;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fe-ink-2);
+  transition: background-color 130ms ease, color 130ms ease, transform 100ms ease;
+}
+.titlebar-btn:hover { background: var(--fe-panel-2); color: var(--fe-ink); }
+.titlebar-btn:active { transform: scale(.9); }
+.titlebar-close { margin-right: -4px; }
+.titlebar-close:hover { background: #e81123; color: #fff; }
 .theme-picker { max-width: min(48vw, 560px); overflow-x: auto; }
 .theme-choice { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--fe-border); border-radius: var(--fe-radius); background: var(--fe-panel); padding: 3px 6px; color: var(--fe-ink-2); font-size: 10px; white-space: nowrap; transition: border-color var(--fe-motion) ease, background-color var(--fe-motion) ease, color var(--fe-motion) ease; }
 .theme-choice:hover, .theme-choice.active { border-color: var(--fe-accent); color: var(--fe-accent); }
