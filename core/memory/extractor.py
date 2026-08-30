@@ -16,12 +16,12 @@ _HOUR_RE = re.compile(r"(?<!\d)([01]?\d|2[0-3])\s*点(?:钟)?")
 _PHASES = ("凌晨", "清晨", "早晨", "上午", "正午", "中午", "午后", "下午", "傍晚", "黄昏", "入夜", "夜里", "深夜", "半夜")
 _NEXT_DAY = ("次日", "第二天", "翌日", "隔日", "第二日")
 _DAY_AFTER = ("第三天", "两天后", "后天")
-_LOCATION_RE = re.compile(r"(?:抵达|到达|来到|返回|回到|进入|走进|踏入|前往)([\u4e00-\u9fa5A-Za-z0-9·]{2,12})")
+_LOCATION_RE = re.compile(r"(?:抵达|到达|来到|返回|回到|进入|走进|踏入|前往)了?([\u4e00-\u9fa5A-Za-z0-9·]{2,12})")
 _INJURY_WORDS = ("重伤", "骨折", "中毒", "内伤", "失血", "撕裂", "灼伤", "冻伤", "断骨", "受伤", "擦伤", "淤青")
 _HEAL_WORDS = ("伤势痊愈", "伤口愈合", "康复", "痊愈", "伤势尽复")
-_GAIN_RE = re.compile(r"(?:获得|得到|拿到|取得|捡到|收下)([\u4e00-\u9fa5A-Za-z0-9·]{2,12})")
-_LOSE_RE = re.compile(r"(?:失去|丢失|被夺走|遗失|用掉|耗尽)([\u4e00-\u9fa5A-Za-z0-9·]{2,12})")
-_SKILL_RE = re.compile(r"(?:学会|掌握|习得|领悟)([\u4e00-\u9fa5A-Za-z0-9·]{2,12})")
+_GAIN_RE = re.compile(r"(?:获得|得到|拿到|取得|捡到|收下)了?([\u4e00-\u9fa5A-Za-z0-9·]{2,12})")
+_LOSE_RE = re.compile(r"(?:失去|丢失|被夺走|遗失|用掉|耗尽)了?([\u4e00-\u9fa5A-Za-z0-9·]{2,12})")
+_SKILL_RE = re.compile(r"(?:学会|掌握|习得|领悟)了?([\u4e00-\u9fa5A-Za-z0-9·]{2,12})")
 _MISTAKE_WORDS = ("其实并非", "并非如此", "误以为", "判断有误", "认知错误", "看错", "误判")
 
 
@@ -30,10 +30,27 @@ _QUANTIFIER_RE = re.compile(
 
 
 def _clean_noun(text: str) -> str:
-    """剥掉数量词前缀，避免「一枚铜牌」与「铜牌」被记成两件物品。"""
+    """剥掉数量词前缀，避免「一枚铜牌」与「铜牌」被记成两件物品。
+
+    剥完为空（捕获只有量词，如「获得一枚。」）返回空串，由调用方按
+    「无效捕获」过滤——原先回退原值会把「一枚」记成一件物品。
+    """
     value = str(text or "").strip()
-    stripped = _QUANTIFIER_RE.sub("", value)
-    return stripped or value
+    return _QUANTIFIER_RE.sub("", value)
+
+
+# 子句功能字：贪婪捕获会把动词后的整个子句吞进名词（实测「走进门洞才把册子放低」
+# 被捕成地点「门洞才把册子放低」）。这些字不出现在地点/物品名里，作硬边界。
+# 注意刻意排除 当/向/沿/从/后/前/里 等可出现在真实地名里的字（当铺/向阳村/从江/后山）。
+_CLAUSE_STOP = frozenset("才把将便就又再且而或但于是因此让使令好的了着地得是在与时候")
+
+
+def _trim_noun(text: str) -> str:
+    """剪掉贪婪捕获吞进来的子句尾巴（「门洞才把册子放低」→「门洞」）。"""
+    for i, ch in enumerate(text):
+        if ch in _CLAUSE_STOP:
+            return text[:i]
+    return text
 
 
 def _dedup(values: list[str], cap: int = 12) -> list[str]:
@@ -95,8 +112,8 @@ def extract_patch(reply: str, *, action: str = "", current: Mapping[str, Any] | 
 
     place = _LOCATION_RE.search(text)
     if place:
-        name = place.group(1)
-        if name != (state.get("location") or {}).get("name"):
+        name = _trim_noun(place.group(1))
+        if len(name) >= 2 and name != (state.get("location") or {}).get("name"):
             patch["location"] = {"name": name}
 
     body_now = dict(state.get("body") or {})
@@ -109,14 +126,14 @@ def extract_patch(reply: str, *, action: str = "", current: Mapping[str, Any] | 
         patch["body"]["condition"] = "正常"
 
     assets_now = dict(state.get("assets") or {})
-    gains = [_clean_noun(m.group(1)) for m in _GAIN_RE.finditer(text)]
-    losses = {_clean_noun(m.group(1)) for m in _LOSE_RE.finditer(text)}
+    gains = [n for n in (_trim_noun(_clean_noun(m.group(1))) for m in _GAIN_RE.finditer(text)) if len(n) >= 2]
+    losses = {n for n in (_trim_noun(_clean_noun(m.group(1))) for m in _LOSE_RE.finditer(text)) if len(n) >= 2}
     if gains or losses:
         items = _extend(assets_now.get("items"), gains, 16)
         items = [item for item in items if item not in losses]
         patch["assets"] = {"items": items}
 
-    skills = [_clean_noun(m.group(1)) for m in _SKILL_RE.finditer(text)]
+    skills = [n for n in (_trim_noun(_clean_noun(m.group(1))) for m in _SKILL_RE.finditer(text)) if len(n) >= 2]
     if skills:
         patch["abilities"] = {"skills": _extend((state.get("abilities") or {}).get("skills"), skills, 16)}
 

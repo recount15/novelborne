@@ -22,6 +22,8 @@
 | `var/gaptest_api.py` | 47 端点中的只读面 + 静态页 + 错误优雅性 | 15/15 |
 | `var/fulltest_glm.py` | 基础模式：开局→穿越表→回合→问答→存档 | 14/14 |
 | `var/fulltest_enhanced.py` | 强化模式：上传→切章→四槽穿越→蒸馏→确认→回合 | 8/8 |
+| `var/gaptest_c.py` | 端点盲区：角色库 CRUD 全周期、任务三端点、金手指推荐、作弊码双码、gf-designer 规格存取、models/fetch、并发 409 | 25/25 |
+| `var/repro_agent_stall.py` | 故障复现长跑：强化+类Agent+丰富度拉满的多回合健康（选项产出/蒸馏推进/ask 锁语义） | 12/12 |
 
 要点：
 - NDJSON 流的 `delta` 是**增量块**，必须累加拼接（脚本已内置）
