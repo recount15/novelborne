@@ -139,7 +139,8 @@ map_server/map_engine/map_periph.md）。
 | character_library.py | 角色卡文件库 CRUD（builtin/user/overrides 遮蔽），与 SQLite 双写 | server |
 | cheat_code.py | 作弊码双码体系：三愿、永久通路、愿望脱敏 | ask_service、server、app |
 | context_compressor.py | 每 10 回合历史压缩装配与保真校验 | app |
-| distill.py | 内部子调用统一通道 distill_model | server、app、ask_service |
+| distill.py | 内部子调用统一通道 distill_model（120s 持锁/300s 后台超时） | server、app、ask_service |
+| elastic_gate.py | 弹性门限：两稿不过后代码层修复（剥非叙事块+合成补足选项）零模型放行 | app |
 | dynamic_convergence.py | 动态收束力：连续位置+有界漂移+滞回换挡 | app |
 | faction.py | 阵营势差与宿敌难度非线性计算 | runtime_mechanics 经由 |
 | gender_guard.py | 穿越保障：附身对照表 prompt/解析、叙事约束块 | app |

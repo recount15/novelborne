@@ -2214,16 +2214,29 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
                             state["scene_gate_reason"] = (
                                 f"体量弹性放行（正文 {_chars} 字，目标区间 {_lo}–{_hi}）")
             if not state["scene_gate"]:
-                # 恢复本回合所有可能被预写入的运行时字段，不只恢复章节预算。
-                for key, value in transaction_snapshot.items():
-                    if value is None and key not in state:
-                        continue
-                    state[key] = copy.deepcopy(value)
-                reason = _scene_gate_reasons(budget_check, interaction_check, anchor_check)
-                state["scene_gate_reason"] = "；".join(reason)
-                chatbot[-1] = {"role": "assistant", "content": "⚠️ 本回合未通过机械门禁：" + state["scene_gate_reason"] + "。已自动重写一稿仍未达标，未提交状态、未推进章节；请换个行动再试。"}
-                yield _out_send(chatbot, dict(state, history=state.get("history", [])), msg_update=gr.update(value=""))
-                return
+                # —— 弹性门限（2026-08-30）：两稿（原稿+定向重写）仍不过时不再
+                # 回滚整回合，改为代码层确定性修复后放行——
+                # 1) 剥离模型残留的非叙事块（代码围栏/JSON/系统自检段，思考型
+                #    模型偶发，占用体量且污染展示）；
+                # 2) 修复选项数量（解析不足 6 个时代码合成补足，见下方选项段）。
+                # 剧情事实由模型两稿背书，代码只修形式——重写稿即使体量/锚点
+                # 仍不达标也放行，代价透明记录在 scene_gate_reason。
+                _residual = _scene_gate_reasons(budget_check, interaction_check, anchor_check)
+                _repaired = engine.elastic_repair(clean_acc, engine.parse_options(clean_acc))
+                if _repaired["repaired_fences"]:
+                    clean_acc = _repaired["narrative"]
+                    acc = clean_acc
+                    length_text = engine.strip_options_block(clean_acc)
+                    budget_check = engine.validate_scene_length(length_text, richness=story_richness)
+                state["scene_gate"] = True
+                state["scene_gate_reason"] = (
+                    "弹性放行（重写一稿仍"
+                    + "；".join(_residual)
+                    + "；已代码修复形式问题后放行）")
+                state["elastic_repair"] = {
+                    "repaired_fences": _repaired["repaired_fences"],
+                    "repaired_options": _repaired["repaired_options"],
+                }
         if enhanced:
             if (state.get("scene_validation") or {}).get("anchor", {}).get("status") == "fulfilled":
                 _record_anchor_fulfilled(state, target_chapter, r)
@@ -2325,27 +2338,22 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
             else:
                 _append_log(log_path, f"- 十回合评价: 已随第{r}回合回复展示（存档补发失败，本周期不压缩）\n")
 
-        # —— 代码级选项校验（字母 A–F）：不足 6 个编号选项则隐式补发，并把补发选项合并回同一气泡
-        #    （先截掉主回复末尾的残缺选项块，避免选项重复出现）——
+        # —— 代码级选项校验（字母 A–F）：不足 6 个时弹性门限接管——
+        # 原先隐式补发一次模型调用（option_repair），两稿思路下改为纯代码修复：
+        # 剥离残缺选项块 + 从正文行动句/中性模板合成补足，零模型成本，
+        # 前端固定 6+1 交互契约由代码保证（elastic_gate.repair_options）。
         final_display = fe.strip_hidden(acc)
         if not engine.options_ok(final_display):
             base = engine.truncate_partial_options(final_display)
-            history = history + [{"role": "user", "content": fe.OPTION_REPAIR_MESSAGE}]
-            yield _out_send(chatbot, dict(state, history=history))
-            acc2 = ""
-            ub2 = {}
-            for acc2 in fe.stream_reply(client, model, state["system"], history, usage_box=ub2,
-                                        provider=provider, thinking_mode=state.get("thinking_mode", "auto"),
-                                        thinking_param=state.get("thinking_param", "")):
-                merged = (base + "\n\n" + fe.strip_hidden(acc2)).strip()
-                chatbot[-1] = {"role": "assistant", "content": merged or "…"}
-                yield _out_send(chatbot, dict(state, history=history))
-            _accum_tokens(state, ub2,
-                          est_in=int((len(state["system"]) + sum(len(h["content"]) for h in history)) / 1.5),
-                          est_out=int(len(acc2) / 1.5))
-            history = history + [{"role": "assistant", "content": acc2}]
-            final_display = (base + "\n\n" + fe.strip_hidden(acc2)).strip()
-            chatbot[-1] = {"role": "assistant", "content": final_display}
+            parsed_now = engine.parse_options(base)
+            _rep = engine.repair_options(base, parsed_now)
+            final_display = (base + "\n\n"
+                             + engine.render_options_block(_rep)).strip() if _rep else base
+            chatbot[-1] = {"role": "assistant", "content": final_display or "…"}
+            state["elastic_repair"] = {
+                **(state.get("elastic_repair") or {}),
+                "repaired_options": True,
+            }
             yield _out_send(chatbot, dict(state, history=history))
         # —— 选项结构化：选项块从叙事正文剥离写入 state["options"]，由前端按钮渲染；
         #    旧界面在正文末尾重挂规范化文本选项，保持可读。——

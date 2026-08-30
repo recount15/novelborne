@@ -90,6 +90,11 @@ _LAZY_EXPORTS.update({
     )
 })
 _LAZY_EXPORTS.update({
+    name: "elastic_gate" for name in (
+        "elastic_repair", "strip_non_narrative_blocks", "repair_options",
+    )
+})
+_LAZY_EXPORTS.update({
     name: "autoplay" for name in (
         "build_autoplay_prompt", "parse_autoplay_choice",
     )
@@ -143,7 +148,7 @@ _SUBMODULES = (
     "participation", "options", "autoplay", "agent_mode", "gf_designer",
     "skill_drift", "break_anchor", "name_collision", "gender_guard", "roster_relevance",
     "cheat_code",
-    "distill",
+    "distill", "elastic_gate",
 )
 
 
