@@ -8,6 +8,12 @@ export const THEME_IDS = [
   "calm",
   "siam",
   "metro",
+  "cyber",
+  "nebula",
+  "dynasty",
+  "cthulhu",
+  "sweetheart",
+  "fortune",
 ] as const;
 
 export type ThemeId = (typeof THEME_IDS)[number] | "classic";
@@ -32,6 +38,30 @@ export const THEME_META: Record<ThemeId, { label: string; swatch: string }> = {
   metro: {
     label: "现代都市",
     swatch: "linear-gradient(135deg, #e8eaed 0%, #2f3437 50%, #c9a227 100%)",
+  },
+  cyber: {
+    label: "赛博朋克",
+    swatch: "linear-gradient(135deg, #0d0f1a 0%, #22d3ee 55%, #ff2d95 100%)",
+  },
+  nebula: {
+    label: "宇宙大战",
+    swatch: "linear-gradient(135deg, #0a0e1e 0%, #7c6cf0 55%, #ff8a3d 100%)",
+  },
+  dynasty: {
+    label: "华夏王朝",
+    swatch: "linear-gradient(135deg, #f6efdb 0%, #b02418 55%, #b08d3f 100%)",
+  },
+  cthulhu: {
+    label: "克苏鲁",
+    swatch: "linear-gradient(135deg, #0c1210 0%, #3ec99a 55%, #143028 100%)",
+  },
+  sweetheart: {
+    label: "恋爱甜心",
+    swatch: "linear-gradient(135deg, #fdf2f6 0%, #c2255c 55%, #f5dbe6 100%)",
+  },
+  fortune: {
+    label: "马上发财",
+    swatch: "linear-gradient(135deg, #faf1da 0%, #c02b1a 50%, #b8860b 100%)",
   },
   classic: {
     label: "经典牛皮纸",

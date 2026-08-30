@@ -4,6 +4,12 @@
 @import "./themes/calm.css";
 @import "./themes/siam.css";
 @import "./themes/metro.css";
+@import "./themes/cyber.css";
+@import "./themes/nebula.css";
+@import "./themes/dynasty.css";
+@import "./themes/cthulhu.css";
+@import "./themes/sweetheart.css";
+@import "./themes/fortune.css";
 
 @theme {
   --color-paper: #f3edde;

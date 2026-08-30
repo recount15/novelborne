@@ -714,13 +714,21 @@ function narrativeBlocks(content: string): NarrativeBlock[] {
   return blocks
 }
 
-// 轮盘式叙事：距「当前焦点」（最新一条 assistant 叙事）越远，淡化越强。
-function assistantDistanceFrom(index: number): number {
-  let distance = 0
-  for (let i = index + 1; i < chat.value.length; i++) {
-    if (chat.value[i].role !== 'user') distance++
+// 叙事块解析缓存：键为正文字符串。流式期间只有最后一条在变，历史条目直接命中。
+const narrativeCache = new Map<string, NarrativeBlock[]>()
+const NARRATIVE_CACHE_MAX = 200
+
+function narrativeBlocksCached(content: string): NarrativeBlock[] {
+  const hit = narrativeCache.get(content)
+  if (hit) return hit
+  const blocks = narrativeBlocks(content)
+  if (narrativeCache.size >= NARRATIVE_CACHE_MAX) {
+    // 先进先出淘汰：Map 保持插入顺序，删最旧一条即可。
+    const oldest = narrativeCache.keys().next().value
+    if (oldest !== undefined) narrativeCache.delete(oldest)
   }
-  return distance
+  narrativeCache.set(content, blocks)
+  return blocks
 }
 
 function fadeOpacity(distance: number): number {
@@ -729,16 +737,50 @@ function fadeOpacity(distance: number): number {
   return steps[Math.min(distance - 1, steps.length - 1)] ?? 0.15
 }
 
-function wheelStyle(index: number): Record<string, string> {
-  const distance = assistantDistanceFrom(index)
-  const isUser = chat.value[index]?.role === 'user'
-  const opacity = isUser ? Math.max(0.55, fadeOpacity(distance)) : fadeOpacity(distance)
-  const scale = distance > 0 ? Math.max(0.96, 1 - distance * 0.012) : 1
-  return {
-    opacity: String(opacity),
-    transform: distance > 0 ? `scale(${scale})` : 'none',
+/** 叙事列表的渲染视图：一次遍历产出每条的块、焦点距离与轮盘样式。
+ *
+ * 原先模板对每条消息调用 narrativeBlocks/assistantDistanceFrom/wheelStyle 三个
+ * 方法，而 assistantDistanceFrom 每次向后扫描全表——整表是 O(N²)，且每个流式
+ * chunk 都会重算全部消息的正文分块。改为单个 computed：距离由尾部反向一次扫出，
+ * 分块走内容级缓存，流式期间只有最后一条需要重算。
+ */
+const chatView = computed(() => {
+  const items = chat.value
+  const rows: Array<{
+    role: string
+    content: string
+    blocks: NarrativeBlock[]
+    distance: number
+    isFocus: boolean
+    style: Record<string, string>
+  }> = []
+  // 反向一次扫描：distance = 该条之后 assistant 条数。
+  const distances = new Array<number>(items.length)
+  let seen = 0
+  for (let i = items.length - 1; i >= 0; i--) {
+    distances[i] = seen
+    if (items[i].role !== 'user') seen++
   }
-}
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]
+    const isUser = item.role === 'user'
+    const distance = distances[i]
+    const opacity = isUser ? Math.max(0.55, fadeOpacity(distance)) : fadeOpacity(distance)
+    const scale = distance > 0 ? Math.max(0.96, 1 - distance * 0.012) : 1
+    rows.push({
+      role: item.role,
+      content: item.content,
+      blocks: isUser ? [] : narrativeBlocksCached(item.content),
+      distance,
+      isFocus: !isUser && distance === 0,
+      style: {
+        opacity: String(opacity),
+        transform: distance > 0 ? `scale(${scale})` : 'none',
+      },
+    })
+  }
+  return rows
+})
 
 async function onDesignerSaved(label: string): Promise<void> {
   // 设计器产物入数据库；刷新四栏池让新卡立即出现在候选中。
@@ -2607,11 +2649,11 @@ watch([compressionRecord, round], () => {
           <div v-else class="mx-auto w-full max-w-[860px] px-3 py-5 sm:px-6 sm:py-7">
             <div class="book-page">
               <article
-                v-for="(item, index) in chat"
+                v-for="(item, index) in chatView"
                 :key="index"
                 class="chat-message mb-7 wheel-transition"
-                :class="[item.role === 'user' ? 'pl-[12%]' : '', item.role !== 'user' && assistantDistanceFrom(index) === 0 ? 'is-focus' : '']"
-                :style="wheelStyle(index)"
+                :class="[item.role === 'user' ? 'pl-[12%]' : '', item.isFocus ? 'is-focus' : '']"
+                :style="item.style"
               >
                 <div class="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold text-(--fe-ink-3)" :class="item.role === 'user' ? 'justify-end' : ''">
                   <UserRound v-if="item.role === 'user'" :size="12" />
@@ -2623,7 +2665,7 @@ watch([compressionRecord, round], () => {
                   class="whitespace-pre-wrap break-words rounded-md bg-(--fe-panel-3) px-4 py-3 text-[15px] leading-7 text-(--fe-ink) kraft-note"
                 >{{ item.content }}</div>
                 <div v-else class="narrative-body">
-                  <template v-for="(block, blockIndex) in narrativeBlocks(item.content)" :key="blockIndex">
+                  <template v-for="(block, blockIndex) in item.blocks" :key="blockIndex">
                     <h3 v-if="block.kind === 'chapter'" class="narrative-chapter">{{ block.text }}</h3>
                     <p v-else class="narrative-para" :class="block.dropCap && dropCapEnabled ? 'first' : ''">
                       <template v-if="block.dropCap && dropCapEnabled"><span class="drop-cap" aria-hidden="true">{{ block.cap }}</span>{{ block.rest }}</template>
@@ -3242,14 +3284,14 @@ watch([compressionRecord, round], () => {
 .pool-group-head:hover { background: var(--fe-panel-2); }
 .pool-group-count { flex-shrink: 0; border-radius: 999px; background: var(--fe-panel-3); padding: 1px 7px; color: var(--fe-ink-2); font-size: 10px; font-weight: 800; }
 .pool-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 6px; border-top: 1px dashed color-mix(in srgb, var(--fe-border) 60%, var(--fe-panel)); padding: 8px; }
-.pool-card { display: flex; min-width: 0; flex-direction: column; gap: 2px; border: 1px solid var(--fe-border); border-radius: var(--fe-radius); background: color-mix(in srgb, var(--fe-panel) 60%, white); padding: 6px 8px; text-align: left; transition: border-color 120ms ease, background-color 120ms ease, transform 100ms ease; }
+.pool-card { display: flex; min-width: 0; flex-direction: column; gap: 2px; border: 1px solid var(--fe-border); border-radius: var(--fe-radius); background: var(--fe-panel); padding: 6px 8px; text-align: left; transition: border-color 120ms ease, background-color 120ms ease, transform 100ms ease; }
 .pool-card:hover { border-color: var(--fe-border-strong); transform: translateY(-1px); }
 .pool-card.selected { border-color: var(--fe-accent); background: color-mix(in srgb, var(--fe-accent) 8%, var(--fe-panel)); box-shadow: 0 0 0 1px var(--fe-accent) inset; }
 .pool-card strong { color: var(--fe-ink); font-size: 11.5px; font-weight: 800; }
 .pool-card small { color: var(--fe-ink-3); font-size: 10px; }
 .pool-empty { margin-top: 8px; color: var(--fe-ink-3); font-size: 11px; text-align: center; }
 /* —— 角色简介卡：悬停/选中下拉候选时显示 —— */
-.pool-preview-card { margin-top: 6px; border: 1px solid color-mix(in srgb, var(--fe-border) 60%, var(--fe-panel)); border-left: 3px solid var(--fe-accent); border-radius: var(--fe-radius); background: color-mix(in srgb, var(--fe-panel) 60%, white); padding: 7px 9px; }
+.pool-preview-card { margin-top: 6px; border: 1px solid color-mix(in srgb, var(--fe-border) 60%, var(--fe-panel)); border-left: 3px solid var(--fe-accent); border-radius: var(--fe-radius); background: var(--fe-panel); padding: 7px 9px; }
 .participation-scale { display: flex; justify-content: space-between; margin-top: 1px; padding: 0 2px; font-size: 8px; color: var(--fe-border-strong); letter-spacing: 0.5px; }
 .nemesis-bar-row { display: flex; align-items: center; gap: 4px; margin-top: 3px; }
 .nemesis-bar-label { font-size: 8px; color: var(--fe-ink-3); flex-shrink: 0; }
@@ -3398,7 +3440,10 @@ watch([compressionRecord, round], () => {
 .mobile-tab { display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--fe-ink-3); font-size: 10px; transition: color 140ms ease; }
 .mobile-tab.active { color: var(--fe-accent); font-weight: 700; }
 
-.chat-message { animation: message-in 260ms ease-out both; }
+/* fill 用 backwards 而非 both：both 会让 to 帧的 opacity:1/transform:none 在动画
+   结束后永久压过内联的轮盘淡化样式（动画优先级高于 inline），导致「距焦点越远
+   越淡」从未真正生效。backwards 保留入场起始帧，结束即释放控制权。 */
+.chat-message { animation: message-in 260ms ease-out backwards; }
 .member-card { animation: message-in 220ms ease-out both; }
 
 /* 轮盘式叙事：距当前焦点越远越淡化，过渡自然。 */
