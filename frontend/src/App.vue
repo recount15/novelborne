@@ -637,13 +637,40 @@ const distillProgress = ref<DistillProgress | null>(null)
 const sessionEnhanced = computed(() =>
   String(state.value.mode ?? '').startsWith('强化') || enhanced.value)
 let distillTimer: ReturnType<typeof setInterval> | null = null
+let distillMisses = 0
+
+/** 会话在服务端已不存在（连续 404）：清理本地状态回到全新开局。
+ *  玩家正看到的那局聊天记录随之丢弃——存档也被清理时本地已无可恢复之源，
+ *  比留在永远 404 的死会话里更诚实。 */
+function handleStaleSession(): void {
+  if (distillTimer) {
+    clearInterval(distillTimer)
+    distillTimer = null
+  }
+  distillProgress.value = null
+  sessionId.value = null
+  state.value = {}   // options 是由 state 推导的 computed，清 state 即清选项
+  chat.value = []
+  askThread.value = []
+  status.value = '上次会话已在服务端失效，已回到全新开局（刷新前的游玩记录可在存档列表读取）'
+  error.value = ''
+}
 
 async function refreshDistillProgress(): Promise<void> {
   if (!sessionId.value) return
   try {
     distillProgress.value = await fetchDistillProgress(sessionId.value)
-  } catch {
-    // 轮询失败静默：下一轮自然重试，不打断游玩。
+    distillMisses = 0
+  } catch (err) {
+    // 轮询失败静默重试；但连续 404 说明会话在服务端已不存在（存档被清/服务
+    // 重置后无档可回填），继续轮询只会刷日志——达到阈值自动退出到新局。
+    if (err instanceof Error && err.message.includes('404')) {
+      distillMisses += 1
+      if (distillMisses >= 3) {
+        distillMisses = 0
+        handleStaleSession()
+      }
+    }
   }
 }
 

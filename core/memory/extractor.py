@@ -12,7 +12,10 @@ from typing import Any, Mapping
 _DATE_RE = re.compile(r"(\d{2,4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日")
 _MD_RE = re.compile(r"(?<!\d)(\d{1,2})\s*月\s*(\d{1,2})\s*日")
 _CLOCK_RE = re.compile(r"(?<!\d)([01]?\d|2[0-3])\s*[:：]\s*([0-5]\d)(?!\d)")
+_CN_DIGITS = {"一": 1, "两": 2, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7,
+              "八": 8, "九": 9, "十": 10, "十一": 11, "十二": 12}
 _HOUR_RE = re.compile(r"(?<!\d)([01]?\d|2[0-3])\s*点(?:钟)?")
+_CN_HOUR_RE = re.compile(r"([一两二三四五六七八九十]{1,2})点(?:钟)?(?:(半)|([一两二三四五])十?分?)?")
 _PHASES = ("凌晨", "清晨", "早晨", "上午", "正午", "中午", "午后", "下午", "傍晚", "黄昏", "入夜", "夜里", "深夜", "半夜")
 _NEXT_DAY = ("次日", "第二天", "翌日", "隔日", "第二日")
 _DAY_AFTER = ("第三天", "两天后", "后天")
@@ -87,8 +90,23 @@ def extract_time(text: str, current: Mapping[str, Any] | None = None) -> dict[st
         hour_hit = _HOUR_RE.search(source)
         if hour_hit:
             patch["clock"] = f"{int(hour_hit.group(1)):02d}:00"
-    phase = next((p for p in _PHASES if p in source), "")
-    if phase:
+        else:
+            # 中文数字时刻（「三点」「卯时三刻」口语化为「三点」）：叙事里比
+            # 阿拉伯数字更常见，原先完全不认。
+            cn_hit = _CN_HOUR_RE.search(source)
+            if cn_hit and cn_hit.group(1) in _CN_DIGITS:
+                hour = _CN_DIGITS[cn_hit.group(1)]
+                minute = 30 if cn_hit.group(2) else 0
+                if cn_hit.group(3):
+                    minute = _CN_DIGITS.get(cn_hit.group(3), 0) * 10
+                patch["clock"] = f"{hour:02d}:{minute:02d}"
+    # 相位取「就近」命中词（最后一次出现），而非固定优先级首个：叙事结尾
+    # 通常是场景的当前状态，开头/中段的相位词常属背景叙述（实测「药铺半夜
+    # 煎药」出现在口供转述里，把场景从半夜后误标回半夜前的午后）。
+    # 显式时刻（clock）命中时相位降为兜底——「三更时分」类表达优先采信数字。
+    phase_hits = [p for p in _PHASES if p in source]
+    phase = phase_hits[-1] if phase_hits else ""
+    if phase and "clock" not in patch:
         patch["day_phase"] = phase
     day_index = int(current.get("day_index", 0) or 0)
     if any(word in source for word in _DAY_AFTER):

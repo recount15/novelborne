@@ -23,6 +23,7 @@
 | `var/fulltest_glm.py` | 基础模式：开局→穿越表→回合→问答→存档 | 14/14 |
 | `var/fulltest_enhanced.py` | 强化模式：上传→切章→四槽穿越→蒸馏→确认→回合 | 8/8 |
 | `var/gaptest_c.py` | 端点盲区：角色库 CRUD 全周期、任务三端点、金手指推荐、作弊码双码、gf-designer 规格存取、models/fetch、并发 409 | 25/25 |
+| `var/gaptest_d.py` | 碎锚状态机全路径（成功/超时失败/冷却复活/旧档退款/shatter_now，引擎层直驱零模型）+ playtest 三端点实机 | 22/22 |
 | `var/repro_agent_stall.py` | 故障复现长跑：强化+类Agent+丰富度拉满的多回合健康（选项产出/蒸馏推进/ask 锁语义） | 12/12 |
 
 要点：
