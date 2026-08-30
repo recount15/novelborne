@@ -127,7 +127,7 @@ map_server/map_engine/map_periph.md）。
 |---|---|---|
 | __init__.py | 门面：_LAZY_EXPORTS + __getattr__ 惰性加载 | app、server、fate_engine、ui、services、tools |
 | agent_mode.py | 类Agent 自检提示词装配/问题清单解析/修订指令 | app |
-| anchor_distiller.py | 后台单章锚点蒸馏线程：九字段解析/引文对齐/校验落盘 | app、tools |
+| anchor_distiller.py | 后台单章锚点蒸馏线程：九字段解析/引文对齐/校验落盘；重试耗尽时原文摘录式兜底合成 | app、tools |
 | autoplay.py | 托管子智能体：性格驱动选线（单回合、不改状态） | server |
 | break_anchor.py | 全局碎锚：积势进度与发起门禁、多阶段任务、成功降锚（不扣积势）/失败冷却 | app、server、ask_service |
 | budget.py | 章节回合预算转发口（实现在 chapter_tools） | engine 门面 |
