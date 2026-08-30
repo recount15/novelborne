@@ -15,14 +15,30 @@ frontend/node_modules/
 frontend/dist/
 frontend/dist-*/
 
-# ---- 打包产物 ----
+# ---- 打包产物 / 本地测试输出 ----
 build/dist/
 build/build/
 build/pkg/
 build/pkg_win/
+dist/
+release/
+outputs/
+.zcode/
+frontend/android/
+frontend/.capacitor/
 *.spec.bak
 *.zip
 *.7z
+*.apk
+*.aab
+*.db
+*.db-wal
+*.db-shm
+
+# ---- 私有恢复 sidecar（绝不提交或公开发布）----
+private-recovery/
+archive/private-recovery/
+Novelborne-local-recovery*.zip
 
 # ---- 本地配置与密钥 ----
 config.json

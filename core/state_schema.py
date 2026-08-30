@@ -31,6 +31,7 @@ TRANSACTIONAL_KEYS: frozenset[str] = frozenset({
     "last_style", "last_trope", "last_compatibility_k",
     # token 统计
     "tok_in", "tok_out", "tok_cache", "tok_last", "tok_est",
+    "tok_measured_in", "tok_measured_out", "tok_estimated_in", "tok_estimated_out", "tok_mixed",
     # 回合管线：碎锚进度 / 积势扣减标志 / 性格 pending 若不回滚，
     # 会与已回滚的 round、ripples 脱节（凭空退积势、重复结算）。
     "skill_profiles", "break_anchor", "broken_anchors", "anchors_shattered_from",

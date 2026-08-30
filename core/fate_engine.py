@@ -771,7 +771,13 @@ def stream_reply(client, model, system_prompt, history, usage_box=None, extra_kw
             u = chunk.usage
             usage_box["prompt"] = getattr(u, "prompt_tokens", 0) or 0
             usage_box["completion"] = getattr(u, "completion_tokens", 0) or 0
-            usage_box["cache_hit"] = getattr(u, "prompt_cache_hit_tokens", 0) or 0
+            cache_hit = getattr(u, "prompt_cache_hit_tokens", 0) or 0
+            details = getattr(u, "prompt_tokens_details", None)
+            if not cache_hit and details is not None:
+                cache_hit = getattr(details, "cached_tokens", 0) or 0
+                if isinstance(details, dict):
+                    cache_hit = details.get("cached_tokens", 0) or 0
+            usage_box["cache_hit"] = int(cache_hit or 0)
         if not getattr(chunk, "choices", None):
             continue
         delta = chunk.choices[0].delta

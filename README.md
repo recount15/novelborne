@@ -20,7 +20,7 @@ python run_app.py
 
 程序启动后自动打开 `http://127.0.0.1:8000`：前端页面与 `/api` 接口在同一端口，**一个进程即是全部**。在左侧连接模型服务（填 API Key 或配置环境变量），选择作品与角色，即可开局。
 
-**手机远程使用（局域网）**：默认监听 `0.0.0.0`，手机与电脑连同一 Wi-Fi 后，点顶栏手机图标扫码（或输入启动横幅打印的局域网地址）即可在手机上游玩；仅本机使用可加 `--host 127.0.0.1`。首次访问可能需在 Windows 防火墙放行 Python。
+**手机远程使用（局域网）**：默认监听 `0.0.0.0`，手机与电脑连同一 Wi-Fi 后，点顶栏手机图标扫码即可接续当前电脑会话；两端重新获得焦点时会从服务端拉取权威公开状态。仅本机使用可加 `--host 127.0.0.1`。同一 Wi-Fi 内持有二维码的人可控制该会话，勿将二维码或 session 链接公开转发。首次访问可能需在 Windows 防火墙放行 Python。
 
 **多实例并行**：同一台机器可同时运行多份程序——`python run_app.py --port 8010 --var var/cluster/a --no-browser` 指定独立端口与数据目录（config、存档、会话、上传、日志、SQLite 全部隔离），适合集群测试或多人共用一台机器。
 
@@ -58,6 +58,10 @@ python run_app.py
 - **九风格与桥段库**：行动型/谋略型/苟稳型/规则型/义守型/乐趣型/探索型/情感型/成长型，检索通用桥段模板实例化。
 - **长局自维护**：每 5 回合生成人物近况摘要；每 10 回合评价 + 压缩对话历史，token 消耗不随回合数无限增长。
 - **刷新不丢档**：会话自动落盘，刷新页面或重启服务后自动恢复聊天与开局设定（API Key 不落盘，恢复后重填即可）。
+- **我的原著阅读器**：羽毛笔打开正文优先的沉浸式阅读界面；书库、目录和阅读设置按需抽屉展开，支持字号/行距/版心/纸白护眼夜读、章节翻页、键盘方向键和按书恢复阅读位置。
+- **移动主题与 Token 口径**：手机网页/Android 底部“主题”可展开全部主题；运行状态将 Token 标为实测、含估算或估算，避免混合累计被误标为纯实测。
+- **四端中台接线**：网页版、Windows 窗口版、手机网页和 Android 壳层共享主题、类型契约与业务 API；平台能力集中在 `frontend/src/kernel/`，壳层不重复接线。
+
 - **锚点蒸馏容错**：模型输出的形式问题（空项、超长项、章号错位、改写引文）由形式修正层自动修复；失败自动退避重试，右侧进度窗实时可见；重试耗尽仍失败时由原文摘录式兜底锚点保底（内容全部取自原文、九字段严校验合规）。
 - **固定 6+1 选项**：每回合 6 个可选行动 + 1 个自由输入，程序逐回合解析校验。
 
@@ -95,17 +99,31 @@ novelborne/
 ├── tools/              # 试玩流水线与维护脚本
 ├── scripts/            # 一次性数据迁移脚本（历史 data/ 布局时代产物）
 ├── build/              # exe 构建脚本与 PyInstaller spec（产物在根 dist\）
-├── frontend/           # Vue 3 + TypeScript + Tailwind 前端
+├── frontend/           # Vue 3 + TypeScript + Tailwind 四端前端
+│   ├── src/kernel/     # ApiClient + PlatformAdapter 中台固定接线
+│   ├── src/shells/     # web/windows/mobile-web/android 独立壳层
+│   └── src/components/ # 共享业务内容组件（含原著阅读器）
+│   ├── capacitor.config.ts # Android APK 薄壳配置（远端 API，不内嵌 Python）
+│   └── android/            # Capacitor 生成的 Gradle 工程（构建后出现，勿手改）
 └── standards/          # 项目规范（AI 协作宪法：架构/代码/数据/接口/测试/提交/文件）
 ```
 
-## 五、构建可执行版
+## 五、四端构建
+
+- 网页版：`python run_app.py`，FastAPI 同源托管前端。
+- Windows 窗口版：`build\build_windows_windowed.bat`，产出 `dist\FateEngineWindowed\`；自定义标题栏和三键仅由 pywebview 壳提供。
+- 手机网页：手机与服务端同一局域网，使用顶栏二维码访问响应式移动壳；公网部署应使用 HTTPS 和鉴权。
+- Android APK：执行 `build\build_android.bat`。脚本会在 `frontend/` 安装 Capacitor、构建 `VITE_PLATFORM=android` 目标、生成/同步 `frontend/android/` 并打开 Android Studio。需要本机安装 JDK 17+、Android SDK 和 Android Studio。APK 只打包移动前端，远端 FastAPI 必须使用 HTTPS 与鉴权；不将 Python、模型运行时或 API Key 打进包内。
 
 ```bat
 build\build_windows.bat
+build\build_windows_windowed.bat
+build\build_android.bat
 ```
 
-产物在 `dist\FateEngine\`（含 Python 运行时、assets、前端），整个文件夹拷贝分发即可；运行数据由程序在 exe 同级 `var/` 下自动创建。
+产物在 `dist\FateEngine\`（含 Python 运行时、assets、前端），整个文件夹拷贝分发即可；运行数据由程序在 exe 同级 `var/` 下自动创建。公共发布包不含存档、数据库、日志、上传文本、测试输出或私有恢复包。
+
+**本机私有恢复**：外部恢复包不得提交、不得上传至 GitHub/Gitee、不得放进公开发布包。将通过校验的 `Novelborne-private-recovery-v2.zip` 与 `FateEngineWindowed.exe` 放到本机同一目录后，可运行 `FateEngineWindowed.exe --restore-private <ZIP路径> --restore-components data,personas,rules`；旧版无 manifest 的恢复包只能 inspect，不能写入恢复。
 
 ## 六、测试
 

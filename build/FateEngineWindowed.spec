@@ -13,13 +13,15 @@ import os
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 # spec 位于 build/ 下，数据与入口都锚定项目根（SPECPATH 的上一级）。
-ROOT = os.path.dirname(SPECPATH)  # noqa: F821  SPECPATH 由 PyInstaller 注入
+ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(SPEC)), os.pardir))  # noqa: F821
 
 datas = [(os.path.join(ROOT, 'assets'), 'assets'),
-         (os.path.join(ROOT, 'frontend', 'dist'), 'frontend/dist')]
+         (os.path.join(ROOT, 'frontend', 'dist'), 'frontend/dist'),
+         (os.path.join(ROOT, 'frontend', 'public', 'favicon.ico'), '.'),
+         (os.path.join(ROOT, 'LICENSE'), 'LICENSE')]
 binaries = []
 hiddenimports = ['core', 'core.server', 'core.app', 'core.fate_engine',
-                 'pywebview', 'webview', 'clr_loader', 'pythonnet']
+                 'tools.private_recovery', 'pywebview', 'webview', 'clr_loader', 'pythonnet']
 for _pkg in ('core.engine', 'core.api', 'core.ui', 'core.memory', 'core.lore', 'core.prompts'):
     hiddenimports += collect_submodules(_pkg)
 for _pkg in ('gradio', 'gradio_client', 'openai', 'fastapi', 'uvicorn', 'multipart',
@@ -59,6 +61,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name='FateEngineWindowed',
+    icon=os.path.join(ROOT, 'build', 'icon.ico'),
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

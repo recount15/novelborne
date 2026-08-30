@@ -18,6 +18,10 @@ export const THEME_IDS = [
   "zitan",
   "huanghuali",
   "titanium",
+  "rainbow",
+  "grove",
+  "magic",
+  "haunt",
 ] as const;
 
 export type ThemeId = (typeof THEME_IDS)[number] | "classic";
@@ -82,6 +86,22 @@ export const THEME_META: Record<ThemeId, { label: string; swatch: string }> = {
   titanium: {
     label: "钛合金",
     swatch: "linear-gradient(135deg, #dfe3e7 0%, #9aa4ac 55%, #3d6ea5 100%)",
+  },
+  rainbow: {
+    label: "雨后彩虹",
+    swatch: "linear-gradient(135deg, #f0f5f8 0%, #3178c6 35%, #2e9c74 65%, #e0a83c 100%)",
+  },
+  grove: {
+    label: "林间雅居",
+    swatch: "linear-gradient(135deg, #eef1e6 0%, #7c8a68 45%, #3c6e47 100%)",
+  },
+  magic: {
+    label: "魔法奇景",
+    swatch: "linear-gradient(135deg, #f1ecfa 0%, #9a7cc8 45%, #6d3fc4 100%)",
+  },
+  haunt: {
+    label: "鬼怪惊魂",
+    swatch: "linear-gradient(135deg, #141a19 0%, #5b6b67 50%, #7fd8b0 100%)",
   },
   classic: {
     label: "经典牛皮纸",

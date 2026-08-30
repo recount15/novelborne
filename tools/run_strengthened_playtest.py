@@ -19,7 +19,7 @@ import core.engine.plot_summary
 import core.engine.anchor_distiller
 import core.engine.persistence
 
-BOOK = ROOT / "assets" / "data" / "samples" / "强化试玩书.txt"
+BOOK = ROOT / "assets" / "data" / "samples" / "边城档案.txt"
 # 运行时可写根目录隔离到系统临时目录，测试结束自动清理，不污染项目目录。
 TMP = Path(tempfile.mkdtemp(prefix="fate_playtest_"))
 atexit.register(shutil.rmtree, str(TMP), ignore_errors=True)
@@ -97,8 +97,8 @@ app.fe.make_client = lambda api_key, provider, base_url: fake
 app.fe.WRITABLE_DIR = str(TMP)
 
 # 先真实走本地 TXT 切章和剧情摘要链
-idx = engine.chapter_tools.split_file(BOOK, book_id="强化试玩书_playtest", output_root=TMP)
-book_dir = TMP / "books" / "强化试玩书_playtest"
+idx = engine.chapter_tools.split_file(BOOK, book_id="边城档案_playtest", output_root=TMP)
+book_dir = TMP / "books" / "边城档案_playtest"
 print("SPLIT", idx["source_encoding"], len(idx["chapters"]), [(x["idx"], x["chars"], x["turn_budget"]) for x in idx["chapters"]])
 summary = engine.plot_summary.generate_plot_summary(book_dir, model=lambda prompt: {"premise":"北墙裂痕牵出失踪军械","genre":"边城悬疑"}, max_samples=3, max_chars_per_chapter=2500)
 print("SUMMARY", summary["chapter_count"], summary["selected_chapters"], summary["summary"])

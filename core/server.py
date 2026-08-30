@@ -10,10 +10,12 @@ import re
 import socket
 import threading
 import time
+import uuid
 from pathlib import Path
 from typing import Any, Iterator
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -48,6 +50,15 @@ from core.engine import gf_designer  # noqa: E402
 FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
 sessions = SessionManager(PROJECT_ROOT)
 app = FastAPI(title="书中行 API", version="2.0.0")
+_cors_origins = [item.strip() for item in os.getenv("FATE_CORS_ORIGINS", "").split(",") if item.strip()]
+if _cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["*"]
+    )
 
 
 class StartRequest(BaseModel):
@@ -518,13 +529,17 @@ def _restore_session_from_disk(session_id: str):
         if not candidates:
             return None
         latest = max(candidates, key=lambda item: str(item.get("saved_at") or ""))
-        restored = engine.persistence.load_state(str(latest.get("save_id") or "latest"),
-                                                 root=fe.WRITABLE_DIR)
+        restored = engine.persistence.load_state_strict(
+            str(latest.get("save_id") or "latest"),
+            root=fe.WRITABLE_DIR,
+            session_id=session_id,
+        )
         if not restored or not restored.get("system"):
             return None
         # 存档里不带 game_ready（它是流式提交时才写入内存的），
         # 回填时与 load 端点一致置位，否则前端会把恢复后的会话误判为未开局。
         restored["game_ready"] = True
+        restored["session_id"] = session_id
         session = sessions.create(session_id)
         session.state = restored
         return session
@@ -604,8 +619,8 @@ def _stream_response(
                     if operation != "start" or ready:
                         session.state = dict(raw_state)
                         session.state["game_ready"] = True
-                        # 会话标识注入 state：自动存档按会话隔离归属。
-                        session.state.setdefault("session_id", session.session_id)
+                        # 会话对象是归属唯一真源：读档 state 可能携带旧会话，必须覆盖。
+                        session.state["session_id"] = session.session_id
                         if operation == "start" and api_key_on_commit is not None:
                             session.api_key = api_key_on_commit
                         start_committed = True
@@ -684,14 +699,29 @@ def _lan_addresses() -> list[str]:
     return addrs
 
 
-def _lan_info(port: int | None) -> dict[str, Any]:
+def _lan_session_id(value: str | None) -> str | None:
+    """只接受 SessionManager 使用的 UUID，避免二维码携带任意未校验参数。"""
+    if not value:
+        return None
+    try:
+        return str(uuid.UUID(str(value)))
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
+def _lan_info(port: int | None, session_id: str | None = None) -> dict[str, Any]:
     addresses = _lan_addresses()
     port = int(port or 8000)
     primary = addresses[0] if addresses else None
+    linked_session = _lan_session_id(session_id)
+    url = f"http://{primary}:{port}" if primary else None
+    if url and linked_session:
+        url = f"{url}/?session={linked_session}"
     return {
         "addresses": addresses,
         "port": port,
-        "url": f"http://{primary}:{port}" if primary else None,
+        "url": url,
+        "session_id": linked_session,
         "listening_lan": os.getenv("FATE_API_HOST", "127.0.0.1") not in {"127.0.0.1", "localhost"}
         or _LAN_LISTENING,
         "hint": "手机与电脑连同一 Wi-Fi 后扫码访问；若无法打开，请检查系统防火墙是否放行该端口。"
@@ -705,15 +735,15 @@ _LAN_LISTENING = os.getenv("FATE_API_HOST", "127.0.0.1") in {"0.0.0.0", "::"}
 
 
 @app.get("/api/lan-info")
-def lan_info(request: Request) -> dict[str, Any]:
-    """局域网访问信息：地址、端口、二维码链接（手机扫码远程使用）。"""
-    return _lan_info(request.url.port)
+def lan_info(request: Request, session_id: str | None = None) -> dict[str, Any]:
+    """局域网访问信息；指定 session 时二维码可接续电脑当前对局。"""
+    return _lan_info(request.url.port, session_id)
 
 
 @app.get("/api/lan-qrcode.png", include_in_schema=False)
-def lan_qrcode(request: Request) -> Response:
-    """局域网访问二维码（内容 http://<局域网IP>:<端口>）。"""
-    info = _lan_info(request.url.port)
+def lan_qrcode(request: Request, session_id: str | None = None) -> Response:
+    """局域网访问二维码，可携带已校验的 session UUID。"""
+    info = _lan_info(request.url.port, session_id)
     url = info.get("url")
     if not url:
         raise HTTPException(status_code=503, detail="未检测到局域网地址，无法生成二维码")
@@ -1222,7 +1252,9 @@ def _resolve_book_dir(book_id: str) -> Path:
     """按 book_id 定位 var/books 下的切章目录：精确匹配优先，其次唯一前缀匹配。"""
     book_id = str(book_id or "").strip()
     books_root = Path(fe.WRITABLE_DIR) / "books"
-    if not book_id or not books_root.is_dir():
+    if not book_id or Path(book_id).name != book_id or book_id in {".", ".."}:
+        raise HTTPException(status_code=400, detail="book_id 只能是单层目录名")
+    if not books_root.is_dir():
         raise HTTPException(status_code=404, detail="未找到切章书库，请先上传并成功切章")
     exact = books_root / book_id
     if exact.is_dir():
@@ -1231,6 +1263,89 @@ def _resolve_book_dir(book_id: str) -> Path:
     if len(matches) == 1:
         return matches[0]
     raise HTTPException(status_code=404, detail=f"未找到书目：{book_id}（匹配 {len(matches)} 个）")
+
+
+def _book_display_name(book_id: str) -> str:
+    """把 ``<upload_uuid>_<原文件名>`` 还原为玩家可读书名。"""
+    text = str(book_id or "")
+    head, sep, tail = text.partition("_")
+    return tail if sep and len(head) >= 16 else text
+
+
+def _book_record(book_dir: Path, *, include_chapters: bool = False) -> dict[str, Any]:
+    """读取一本已切章原著的安全公开元数据；损坏目录返回最小记录。"""
+    index_path = book_dir / "chapter_index.json"
+    data: dict[str, Any] = {}
+    try:
+        raw = json.loads(index_path.read_text(encoding="utf-8"))
+        if isinstance(raw, dict):
+            data = raw
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        pass
+    chapters = []
+    for row in data.get("chapters") or []:
+        if not isinstance(row, dict):
+            continue
+        idx = int(row.get("idx") or row.get("chapter") or len(chapters) + 1)
+        chapters.append({
+            "index": idx,
+            "title": str(row.get("title") or f"第 {idx} 章"),
+            "chars": int(row.get("chars") or 0),
+        })
+    stat = book_dir.stat()
+    result = {
+        "book_id": book_dir.name,
+        "name": _book_display_name(book_dir.name),
+        "chapter_count": len(chapters),
+        "source_chars": int(data.get("source_chars") or 0),
+        "updated_at": stat.st_mtime,
+    }
+    if include_chapters:
+        result["chapters"] = chapters
+    return result
+
+
+@app.get("/api/books")
+def list_user_books() -> dict[str, Any]:
+    """列出 var/books 下玩家已上传并成功切章的原著（阅读器数据源）。"""
+    root = Path(fe.WRITABLE_DIR) / "books"
+    if not root.is_dir():
+        return {"books": []}
+    books = []
+    for book_dir in root.iterdir():
+        if not book_dir.is_dir() or not (book_dir / "chapter_index.json").is_file():
+            continue
+        try:
+            books.append(_book_record(book_dir))
+        except OSError:
+            continue
+    books.sort(key=lambda row: float(row.get("updated_at") or 0), reverse=True)
+    return {"books": books}
+
+
+@app.get("/api/books/{book_id}")
+def user_book_detail(book_id: str) -> dict[str, Any]:
+    """返回一本玩家原著的章节目录，不返回整书正文。"""
+    return {"book": _book_record(_resolve_book_dir(book_id), include_chapters=True)}
+
+
+@app.get("/api/books/{book_id}/chapters/{chapter_index}")
+def user_book_chapter(book_id: str, chapter_index: int) -> dict[str, Any]:
+    """读取指定章节正文；只允许 chapter_index.json 中登记的章节。"""
+    if chapter_index < 1:
+        raise HTTPException(status_code=400, detail="章节号必须大于 0")
+    book_dir = _resolve_book_dir(book_id)
+    record = _book_record(book_dir, include_chapters=True)
+    entry = next((row for row in record.get("chapters", [])
+                  if int(row.get("index") or 0) == chapter_index), None)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"找不到章节：{chapter_index}")
+    path = book_dir / "chapters" / f"{chapter_index:04d}.txt"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise HTTPException(status_code=404, detail=f"章节文件不可读：{chapter_index}") from exc
+    return {"book_id": book_dir.name, "chapter": {**entry, "text": text}}
 
 
 @app.post("/api/books/quick-distill")
@@ -1814,6 +1929,7 @@ def load_any_save(request: LoadRequest) -> dict[str, Any]:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     restored["game_ready"] = True
+    restored["session_id"] = session.session_id
     session.state = restored
     metadata = engine.persistence.save_metadata(request.save_id, root=fe.WRITABLE_DIR)
     return {
@@ -1835,6 +1951,7 @@ def load(session_id: str, request: LoadRequest) -> dict[str, Any]:
         if not restored or not restored.get("system"):
             raise HTTPException(status_code=404, detail="未找到可恢复的存档")
         restored["game_ready"] = True
+        restored["session_id"] = session.session_id
         session.state = restored
         metadata = engine.persistence.save_metadata(request.save_id, root=fe.WRITABLE_DIR)
         return {

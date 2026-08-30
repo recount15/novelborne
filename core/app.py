@@ -2278,7 +2278,9 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
                 state["opening_started"] = True
                 state["opening_confirmed"] = True
         chatbot[-1] = {"role": "assistant", "content": fe.strip_hidden(acc)}
-        yield _out_send(chatbot, dict(state, history=history))
+        # 历史必须先写回持久 state：流事件可携带临时副本，但重启恢复只读取 state。
+        state["history"] = history
+        yield _out_send(chatbot, state)
 
         # —— 运行日志：提取引擎日志段写入临时文件；缺失则程序补记（代码级保证不漏回合）——
         if enhanced:
@@ -2360,9 +2362,11 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
         narrative, options_block = _finalize_options(state, final_display)
         chatbot[-1] = {"role": "assistant",
                        "content": (narrative + "\n\n" + options_block).strip() if options_block else narrative}
+        # 十回合压缩可能改变 history；最终落盘和事件必须使用同一版本。
+        state["history"] = history
         engine.persistence.save_state(state, root=fe.WRITABLE_DIR, start_params=state.get("start_params"),
                            session_id=str(state.get("session_id") or "") or None)
-        yield _out_send(chatbot, dict(state, history=history))
+        yield _out_send(chatbot, state)
     except Exception as e:  # noqa: BLE001
         if enhanced:
             for key, value in transaction_snapshot.items():

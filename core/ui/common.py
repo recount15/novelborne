@@ -47,18 +47,28 @@ def _append_log(path, text):
 
 
 def _accum_tokens(state, usage_box, est_in=0, est_out=0):
-    """累计 token；usage 缺失（旧 API/异常）时按字符数粗估并标注。"""
-    if usage_box.get("prompt"):
-        state["tok_in"] = state.get("tok_in", 0) + usage_box["prompt"]
-        state["tok_out"] = state.get("tok_out", 0) + usage_box.get("completion", 0)
-        state["tok_cache"] = state.get("tok_cache", 0) + usage_box.get("cache_hit", 0)
-        state["tok_last"] = (usage_box["prompt"], usage_box.get("completion", 0))
-        state["tok_est"] = False
+    """累计 token，并保留实测与估算来源，避免最后一次调用篡改整局口径。"""
+    measured_in = int(usage_box.get("prompt") or 0)
+    measured_out = int(usage_box.get("completion") or 0)
+    if measured_in or measured_out:
+        state["tok_in"] = state.get("tok_in", 0) + measured_in
+        state["tok_out"] = state.get("tok_out", 0) + measured_out
+        state["tok_cache"] = state.get("tok_cache", 0) + int(usage_box.get("cache_hit") or 0)
+        state["tok_measured_in"] = state.get("tok_measured_in", 0) + measured_in
+        state["tok_measured_out"] = state.get("tok_measured_out", 0) + measured_out
+        state["tok_last"] = (measured_in, measured_out)
     else:
-        state["tok_in"] = state.get("tok_in", 0) + est_in
-        state["tok_out"] = state.get("tok_out", 0) + est_out
-        state["tok_last"] = (est_in, est_out)
-        state["tok_est"] = True
+        estimated_in = max(0, int(est_in or 0))
+        estimated_out = max(0, int(est_out or 0))
+        state["tok_in"] = state.get("tok_in", 0) + estimated_in
+        state["tok_out"] = state.get("tok_out", 0) + estimated_out
+        state["tok_estimated_in"] = state.get("tok_estimated_in", 0) + estimated_in
+        state["tok_estimated_out"] = state.get("tok_estimated_out", 0) + estimated_out
+        state["tok_last"] = (estimated_in, estimated_out)
+    has_estimate = bool(state.get("tok_estimated_in") or state.get("tok_estimated_out"))
+    has_measured = bool(state.get("tok_measured_in") or state.get("tok_measured_out"))
+    state["tok_est"] = has_estimate and not has_measured
+    state["tok_mixed"] = has_estimate and has_measured
 
 
 # ---------- 章节预算 / 机械进度 ----------

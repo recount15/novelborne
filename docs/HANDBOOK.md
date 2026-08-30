@@ -10,8 +10,10 @@
 - 多实例：`python run_app.py --port 8010 --var var/cluster/a --no-browser`
 - 模型服务：内置 DeepSeek/通义/Kimi/智谱/OpenAI 及自定义 OpenAI 兼容预设，
   页面左栏填 Key 即用；**各家平等，代码不偏向任何提供商**。
-- Windows 免安装版：`build\build_windows.bat` 产出 `dist\FateEngine\`（PyInstaller
-  onedir，含 assets + 前端 dist；运行数据在 exe 同级 var/ 自动创建）。
+- Windows 免安装版：`build\build_windows.bat` 产出 `dist\FateEngine\`（PyInstaller onedir，含 assets + 前端 dist；运行数据在 exe 同级 var/ 自动创建）。
+- Windows 窗口版：`build\build_windows_windowed.bat` 产出 `dist\FateEngineWindowed\`，pywebview 自定义标题栏与三键只在此壳生效。
+- 手机网页：局域网二维码打开移动网页壳；公网使用必须配置 HTTPS 与鉴权。
+- Android：`build\build_android.bat` 在 `frontend/` 安装 Capacitor 依赖、以 `VITE_PLATFORM=android` 构建并生成 `frontend/android/`。需要 JDK 17+、Android SDK 和 Android Studio；远端 API 必须是 HTTPS 且有鉴权，APK 不内嵌 Python 服务。
 
 ## 2. 回归闸门（改代码后必须全绿才算完）
 
@@ -37,7 +39,20 @@
   `git checkout assets/rules/work_library.md` + 清 `assets/data/characters/user/`
 - 闸门跑前**重启 8000 实例**载入新代码
 
-## 3. 发布流程（GitHub + Gitee）
+## 3. 四端中台与实机验收
+
+- 前端固定接线入口：`frontend/src/kernel/apiClient.ts` 统一 base URL、错误、JSON、上传和 NDJSON；`frontend/src/kernel/platform.ts` 统一窗口、存储、外部打开和平台标识。
+- 四端壳层：`frontend/src/shells/WebShell.vue`、`WindowsShell.vue`、`MobileWebShell.vue`、`AndroidShell.vue`。共享工作台和主题，壳层独立负责布局与平台能力；Web 不渲染窗控，Windows 才调用 pywebview bridge。
+- 后端模型横切接线：`core/services/model_gateway.py` 统一 provider、凭据优先级、客户端和模型调用；API Key 仍只在内存中使用。
+- 阅读器实机路径：打开羽毛笔 → 书库 → 章节 → 阅读设置 → 下一章/上一章 → 关闭或 Esc。已验证桌面正文加载、手机 390×844 无横向溢出、章节标题不重复。
+- Android 当前是 Capacitor 构建骨架，不宣称已生成 APK；安装依赖后执行 `build\build_android.bat`，必须通过 `CAP_SERVER_URL` 指向 HTTPS 远端 API。
+- 2026-08-30 验证：`npm run build`、`VITE_PLATFORM=android npm run build`、Python `compileall`、`git diff --check` 通过；浏览器真实页面检查通过。端口 8000 已有实例时，使用独立 Vite 端口验证 UI。
+- 第二阶段平台验收：Web 壳实测完整主题选择器可切换；mobile-web 在 844px 横屏仍保持单面板与底部导航；Android 壳在 390px 实测无横向溢出、隐藏扫码入口且可打开原著阅读器。
+- 会话接续：LAN 二维码携带当前 UUID session，扫码端优先从 `?session=` 恢复；焦点/可见性恢复时使用 `/api/sessions/{id}/state` 同步，流式忙碌时不覆盖本端 state。
+- Token 口径：`tok_measured_*` 与 `tok_estimated_*` 分开累计；UI 以实测/含估算/估算显示，`prompt_tokens_details.cached_tokens` 也纳入缓存统计。
+- 私有恢复：`tools/private_recovery.py` 只读取本机 sidecar，不包含任何恢复数据；缺少 manifest 的旧 ZIP 仅允许 inspect。公开发布前运行 `python tools/audit_release.py <发布目录>`，确认没有 var、数据库、日志、私有恢复包或 IP vault。
+
+## 4. 发布流程（GitHub + Gitee）
 
 1. 闸门全绿 + `git status` 干净 → commit
 2. 重建 exe（见上）→ 冒烟：exe 起独立端口 → health → 一次基础开局

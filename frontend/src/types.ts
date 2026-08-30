@@ -470,6 +470,28 @@ export interface CharacterLibraryImportResult {
   total: number
 }
 
+export interface UserBookMeta {
+  book_id: string
+  name: string
+  chapter_count: number
+  source_chars: number
+  updated_at: number
+}
+
+export interface UserBookChapterMeta {
+  index: number
+  title: string
+  chars: number
+}
+
+export interface UserBookDetail extends UserBookMeta {
+  chapters: UserBookChapterMeta[]
+}
+
+export interface UserBookChapter extends UserBookChapterMeta {
+  text: string
+}
+
 export interface NovelChapter {
   index: number
   title: string

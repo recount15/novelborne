@@ -1,3 +1,4 @@
+import { apiClient } from './kernel/apiClient'
 import type {
   BootstrapData,
   CharacterDesignerGenerateResult,
@@ -26,7 +27,14 @@ import type {
   SaveResult,
   StreamEvent,
   UploadInfo,
+  UserBookMeta,
+  UserBookDetail,
+  UserBookChapter,
 } from './types'
+
+function apiFetch(input: string, init?: RequestInit): Promise<Response> {
+  return fetch(apiClient.url(input), init)
+}
 
 async function responseError(response: Response): Promise<Error> {
   try {
@@ -38,7 +46,7 @@ async function responseError(response: Response): Promise<Error> {
 }
 
 export async function getBootstrap(): Promise<BootstrapData> {
-  const response = await fetch('/api/bootstrap')
+  const response = await apiFetch('/api/bootstrap')
   if (!response.ok) throw await responseError(response)
   return response.json() as Promise<BootstrapData>
 }
@@ -47,18 +55,20 @@ export interface LanInfo {
   addresses: string[]
   port: number
   url: string | null
+  session_id: string | null
   listening_lan: boolean
   hint: string
 }
 
-export async function fetchLanInfo(): Promise<LanInfo> {
-  const response = await fetch('/api/lan-info')
+export async function fetchLanInfo(sessionId?: string | null): Promise<LanInfo> {
+  const query = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : ''
+  const response = await apiFetch(`/api/lan-info${query}`)
   if (!response.ok) throw await responseError(response)
   return response.json() as Promise<LanInfo>
 }
 
 async function postJson<T>(url: string, body: unknown, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     ...init,
     method: init?.method ?? 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -107,7 +117,7 @@ export async function uploadFile(
   form.append('file', file)
   form.append('kind', kind)
   if (sessionId) form.append('session_id', sessionId)
-  const response = await fetch('/api/uploads', { method: 'POST', body: form })
+  const response = await apiFetch('/api/uploads', { method: 'POST', body: form })
   if (!response.ok) throw await responseError(response)
   return response.json() as Promise<{ session_id: string; upload: UploadInfo }>
 }
@@ -149,7 +159,7 @@ export async function readNdjson(
   signal: AbortSignal,
   onEvent: (event: StreamEvent) => void,
 ): Promise<void> {
-  const response = await fetch(url, {
+  const response = await apiFetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -172,6 +182,27 @@ export async function readNdjson(
     if (done) break
   }
   if (buffer.trim()) onEvent(JSON.parse(buffer) as StreamEvent)
+}
+
+export async function listUserBooks(): Promise<UserBookMeta[]> {
+  const response = await apiFetch('/api/books')
+  if (!response.ok) throw await responseError(response)
+  const data = await response.json() as { books: UserBookMeta[] }
+  return data.books ?? []
+}
+
+export async function fetchUserBook(bookId: string): Promise<UserBookDetail> {
+  const response = await apiFetch(`/api/books/${encodeURIComponent(bookId)}`)
+  if (!response.ok) throw await responseError(response)
+  const data = await response.json() as { book: UserBookDetail }
+  return data.book
+}
+
+export async function fetchUserBookChapter(bookId: string, chapterIndex: number): Promise<UserBookChapter> {
+  const response = await apiFetch(`/api/books/${encodeURIComponent(bookId)}/chapters/${chapterIndex}`)
+  if (!response.ok) throw await responseError(response)
+  const data = await response.json() as { chapter: UserBookChapter }
+  return data.chapter
 }
 
 export function askQuestion(sessionId: string, question: string): Promise<{ answer: string }> {
@@ -207,7 +238,7 @@ export function autoplayChoice(sessionId: string): Promise<{ choice: string; rea
 }
 
 export async function saveSession(sessionId: string, saveId: string): Promise<SaveResult> {
-  const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/save`, {
+  const response = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}/save`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ save_id: saveId }),
@@ -217,7 +248,7 @@ export async function saveSession(sessionId: string, saveId: string): Promise<Sa
 }
 
 export async function listSaves(): Promise<SaveMeta[]> {
-  const response = await fetch('/api/saves')
+  const response = await apiFetch('/api/saves')
   if (!response.ok) throw await responseError(response)
   const body = await response.json() as { saves: SaveMeta[] }
   return body.saves
@@ -228,7 +259,7 @@ export function loadAnySave(saveId: string): Promise<LoadSaveResult> {
 }
 
 export async function loadSession(sessionId: string, saveId: string): Promise<Record<string, unknown>> {
-  const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/load`, {
+  const response = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}/load`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ save_id: saveId }),
@@ -239,7 +270,7 @@ export async function loadSession(sessionId: string, saveId: string): Promise<Re
 }
 
 export async function getCharacterDesignerSchema(): Promise<CharacterDesignerSchema> {
-  const response = await fetch('/api/character-designer/schema')
+  const response = await apiFetch('/api/character-designer/schema')
   if (!response.ok) throw await responseError(response)
   return response.json() as Promise<CharacterDesignerSchema>
 }
@@ -316,7 +347,7 @@ export interface PoolResult {
 export async function fetchCharacterPool(slot: CharacterPoolSlot, gender?: CharacterGender): Promise<PoolResult> {
   const params = new URLSearchParams({ slot })
   if (gender) params.set('gender', gender)
-  const response = await fetch(`/api/characters/pool?${params.toString()}`)
+  const response = await apiFetch(`/api/characters/pool?${params.toString()}`)
   if (!response.ok) throw await responseError(response)
   return response.json() as Promise<PoolResult>
 }
@@ -324,7 +355,7 @@ export async function fetchCharacterPool(slot: CharacterPoolSlot, gender?: Chara
 // 单卡完整简介：悬停/选中时渲染角色简介卡（信息比列表项更完整）。
 export async function fetchCharacterPoolDetail(cardId: string, slot: CharacterPoolSlot): Promise<PoolCardEntry> {
   const params = new URLSearchParams({ slot })
-  const response = await fetch(`/api/characters/pool/${encodeURIComponent(cardId)}/detail?${params.toString()}`)
+  const response = await apiFetch(`/api/characters/pool/${encodeURIComponent(cardId)}/detail?${params.toString()}`)
   if (!response.ok) throw await responseError(response)
   return response.json() as Promise<PoolCardEntry>
 }
@@ -342,7 +373,7 @@ export function createCharacterCard(
 }
 
 export async function listCharacterLibrary(): Promise<CharacterLibraryListResult> {
-  const response = await fetch('/api/character-library')
+  const response = await apiFetch('/api/character-library')
   if (!response.ok) throw await responseError(response)
   return response.json() as Promise<CharacterLibraryListResult>
 }
@@ -352,7 +383,7 @@ export function updateCharacterCard(cardId: string, payload: CharacterLibraryUps
 }
 
 export async function deleteCharacterCard(cardId: string): Promise<{ id: string; removed: string }> {
-  const response = await fetch(`/api/character-library/${encodeURIComponent(cardId)}`, { method: 'DELETE' })
+  const response = await apiFetch(`/api/character-library/${encodeURIComponent(cardId)}`, { method: 'DELETE' })
   if (!response.ok) throw await responseError(response)
   return response.json() as Promise<{ id: string; removed: string }>
 }
@@ -366,13 +397,13 @@ export function exportSaveNovel(saveId: string, style: string, connection: Model
 }
 
 export async function fetchDistillProgress(sessionId: string): Promise<DistillProgress> {
-  const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/distill/progress`)
+  const response = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}/distill/progress`)
   if (!response.ok) throw await responseError(response)
   return response.json() as Promise<DistillProgress>
 }
 
 export async function fetchSessionState(sessionId: string): Promise<{ session_id: string; state: Record<string, unknown> }> {
-  const response = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/state`)
+  const response = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}/state`)
   if (!response.ok) throw await responseError(response)
   return response.json() as Promise<{ session_id: string; state: Record<string, unknown> }>
 }

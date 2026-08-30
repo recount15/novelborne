@@ -1,7 +1,17 @@
 import { createApp } from 'vue'
-import App from './App.vue'
 import './assets/main.css'
-// 霞鹜文楷 GB（OFL-1.1 开源，分片 woff2 按需加载）：标题与叙事正文的楷体书卷气
 import '@free-fonts/lxgw-wenkai-gb/lxgw-wenkai-gb.css'
+import { detectPlatform } from './kernel/platform'
+import AndroidShell from './shells/AndroidShell.vue'
+import MobileWebShell from './shells/MobileWebShell.vue'
+import WebShell from './shells/WebShell.vue'
+import WindowsShell from './shells/WindowsShell.vue'
 
-createApp(App).mount('#app')
+const shells = {
+  web: WebShell,
+  windows: WindowsShell,
+  'mobile-web': MobileWebShell,
+  android: AndroidShell,
+}
+
+createApp(shells[detectPlatform()]).mount('#app')

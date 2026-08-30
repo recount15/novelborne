@@ -41,8 +41,13 @@ import {
 } from 'lucide-vue-next'
 import CharacterDesigner from './views/CharacterDesigner.vue'
 import NovelExportModal from './components/NovelExportModal.vue'
+import OriginalReaderModal from './components/OriginalReaderModal.vue'
 import SiameseCat from './components/SiameseCat.vue'
+import ThemePicker from './components/ThemePicker.vue'
+import LanQrModal from './components/LanQrModal.vue'
 import { THEME_META, applyTheme, currentTheme, type ThemeId } from './themeSwitch'
+import { platform } from './kernel/platform'
+import { useNarrativeView } from './kernel/useNarrativeView'
 import {
   acceptQuest,
   askQuestion,
@@ -92,7 +97,12 @@ import type {
 } from './types'
 
 type MobilePanel = 'setup' | 'story' | 'state'
+type WorkbenchVariant = 'web' | 'windows' | 'mobile-web' | 'android'
 type RosterRole = '伙伴' | '主线'
+
+const props = withDefaults(defineProps<{ variant?: WorkbenchVariant }>(), {
+  variant: 'web',
+})
 type SkillMode = 'describe' | 'upload'
 type PoolSlotKey = '主角栏' | '伴侣栏' | '伙伴栏' | '宿敌栏'
 
@@ -110,36 +120,14 @@ const error = ref('')
 const status = ref('等待配置')
 const busy = ref(false)
 const sessionId = ref<string | null>(null)
-// —— 窗口化模式（pywebview 壳）：渲染无边框自定义标题栏 ——
-const isWindowed = computed(() => typeof window !== 'undefined' && 'pywebview' in window)
-const webMinimized = ref(false)
+// 窗口壳由入口显式传入 variant；pywebview 仅由 PlatformAdapter 执行窗控。
+const isWindowed = computed(() => props.variant === 'windows')
+const isMobileShell = computed(() => props.variant === 'mobile-web' || props.variant === 'android')
+const showsLanAccess = computed(() => props.variant === 'web' || props.variant === 'windows')
 function winControl(action: 'minimize' | 'toggle' | 'close'): void {
-  // 窗口化：走 pywebview js_api；Web 版：浏览器内诚实映射——
-  // 最大化=全屏切换（F11 等价）；最小化=收起为悬浮徽章；关闭=尝试关页，
-  // 被浏览器拦截时回到全新开局（会话已落盘，刷新即可恢复）。
-  const api = (window as unknown as { pywebview?: { api?: { minimize?: () => void; toggle_maximize?: () => void; close?: () => void } } }).pywebview?.api
-  if (api) {
-    if (action === 'minimize') api.minimize?.()
-    else if (action === 'toggle') api.toggle_maximize?.()
-    else api.close?.()
-    return
-  }
-  if (action === 'toggle') {
-    if (document.fullscreenElement) void document.exitFullscreen()
-    else void document.documentElement.requestFullscreen().catch(() => {})
-  } else if (action === 'minimize') {
-    webMinimized.value = true
-  } else {
-    window.close()
-    window.setTimeout(() => {
-      window.localStorage.removeItem('fate_session_id')
-      sessionId.value = null
-      state.value = {}
-      chat.value = []
-      askThread.value = []
-      status.value = '已收起对局（存档与自动恢复不受影响）。刷新页面即可重新开始。'
-    }, 120)
-  }
+  if (action === 'minimize') platform.minimizeWindow()
+  else if (action === 'toggle') platform.toggleMaximize()
+  else platform.closeWindow()
 }
 const novelUpload = ref<UploadInfo | null>(null)
 const personaUpload = ref<UploadInfo | null>(null)
@@ -204,19 +192,35 @@ const exportOpen = ref(false)
 const questKind = ref<QuestKind>('short')
 const questDifficulty = ref(0.5)
 const questEstimate = ref<QuestEstimate | null>(null)
-// Lomsting 遗物：右下角羽毛笔，点击在新页面展开铭文（所见即所抄）。
-const openLomsting = () => {
-  window.open('/lomsting.html', '_blank', 'noopener')
+// —— 小猫隐藏入口：连续点击 19 次后，作弊码面板从小猫上方浮现。 ——
+const catTapCount = ref(0)
+let catTapTimer: number | undefined
+function tapCat(): void {
+  catTapCount.value += 1
+  if (catTapTimer) window.clearTimeout(catTapTimer)
+  catTapTimer = window.setTimeout(() => { catTapCount.value = 0 }, 8000)
+  if (catTapCount.value >= 19) {
+    catTapCount.value = 0
+    // 羊皮纸哥特体铭文页：新页面打开（Web/窗口版共用；窗口壳会交给
+    // 系统浏览器）。浏览器若拦截弹窗，回退到当前页导航，入口仍可用。
+    const opened = window.open('/lomsting.html', '_blank', 'noopener')
+    if (!opened) window.location.assign('/lomsting.html')
+  }
 }
+
+// —— 羽毛笔：应用内「我的原著」章节阅读器（Web/窗口版共用）。 ——
+const readerOpen = ref(false)
+const openOriginalReader = () => { readerOpen.value = true }
 // 局域网远程使用：手机扫码访问本机服务。
 const lanQrOpen = ref(false)
 const lanInfo = ref<LanInfo | null>(null)
 const lanBusy = ref(false)
+const mobileThemeOpen = ref(false)
 const openLanQr = async () => {
   lanQrOpen.value = true
   lanBusy.value = true
   try {
-    lanInfo.value = await fetchLanInfo()
+    lanInfo.value = await fetchLanInfo(sessionId.value)
   } catch (err) {
     error.value = `获取局域网信息失败：${(err as Error).message}`
     lanQrOpen.value = false
@@ -630,18 +634,16 @@ watch(sessionId, (id) => {
   else window.localStorage.removeItem(SESSION_KEY)
 })
 
-async function tryRestoreSession(): Promise<void> {
-  if (typeof window === 'undefined') return
-  const id = window.localStorage.getItem(SESSION_KEY)
-  if (!id) return
+async function restoreSession(id: string, source: 'link' | 'storage' | 'sync' = 'storage'): Promise<boolean> {
+  if (!id) return false
   try {
     const data = await fetchSessionState(id)
     const restored = (data?.state ?? {}) as Record<string, unknown>
     const history = Array.isArray(restored.history) ? restored.history as ChatMessage[] : []
     const usable = restored.game_ready === true || history.length > 0
     if (!usable) {
-      window.localStorage.removeItem(SESSION_KEY)
-      return
+      if (source !== 'sync') window.localStorage.removeItem(SESSION_KEY)
+      return false
     }
     sessionId.value = id
     state.value = restored
@@ -655,13 +657,32 @@ async function tryRestoreSession(): Promise<void> {
     for (const key of ['mode', 'difficulty', 'convergence', 'golden_finger'] as const) {
       if (typeof sp[key] === 'string' && sp[key]) (form.value as Record<string, unknown>)[key] = sp[key]
     }
-    status.value = '已恢复上次会话（刷新不丢档；如需模型回复请在连接区重填 API Key）'
-    mobilePanel.value = 'story'
-    await scrollToBottom()
+    if (source !== 'sync') {
+      status.value = source === 'link'
+        ? '已接续电脑端会话（同一 Wi-Fi 设备可控制当前对局）'
+        : '已恢复上次会话（刷新不丢档；如需模型回复请在连接区重填 API Key）'
+      mobilePanel.value = 'story'
+      await scrollToBottom()
+    }
+    return true
   } catch {
-    // 会话已不存在（存档也被清理）：静默走全新开局流程。
-    window.localStorage.removeItem(SESSION_KEY)
+    // URL 会话不存在时不清本机已保存会话，避免无效链接破坏原恢复入口。
+    if (source === 'storage') window.localStorage.removeItem(SESSION_KEY)
+    return false
   }
+}
+
+async function tryRestoreSession(): Promise<void> {
+  if (typeof window === 'undefined') return
+  const linked = new URLSearchParams(window.location.search).get('session')
+  if (linked && await restoreSession(linked, 'link')) return
+  const stored = window.localStorage.getItem(SESSION_KEY)
+  if (stored) await restoreSession(stored, 'storage')
+}
+
+async function syncSessionFromServer(): Promise<void> {
+  if (busy.value || !sessionId.value) return
+  await restoreSession(sessionId.value, 'sync')
 }
 
 // —— 锚点蒸馏进度：右侧小窗口数据源（强化模式开局前后持续轮询） ——
@@ -720,9 +741,32 @@ function syncDistillPolling(): void {
 
 watch([sessionId, sessionEnhanced], syncDistillPolling, { immediate: true })
 onBeforeUnmount(() => {
+  window.removeEventListener('focus', syncSessionFromServer)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+  if (catTapTimer) window.clearTimeout(catTapTimer)
   if (distillTimer) {
     clearInterval(distillTimer)
     distillTimer = null
+  }
+})
+
+// —— 本局 Token 用量：实测与估算来源分开累计，避免混合值被误标为实测。 ——
+function fmtTok(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return '0'
+  if (n >= 10000) return (n / 10000).toFixed(1) + '万'
+  if (n >= 1000) return (n / 1000).toFixed(1) + '千'
+  return String(Math.round(n))
+}
+const tokenUsage = computed(() => {
+  const s = state.value as Record<string, unknown>
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+  const last = Array.isArray(s.tok_last) ? (s.tok_last as number[]) : [0, 0]
+  const measured = num(s.tok_measured_in) + num(s.tok_measured_out)
+  const estimated = num(s.tok_estimated_in) + num(s.tok_estimated_out)
+  return {
+    in: num(s.tok_in), out: num(s.tok_out), cache: num(s.tok_cache),
+    lastIn: num(last[0]), lastOut: num(last[1]),
+    source: measured && estimated ? 'mixed' : measured ? 'measured' : estimated ? 'estimated' : 'unknown',
   }
 })
 
@@ -740,106 +784,8 @@ const modelConnection = computed(() => ({
   model: form.value.model,
 }))
 
-interface NarrativeBlock {
-  kind: 'chapter' | 'para'
-  text: string
-  dropCap: boolean
-  cap: string
-  rest: string
-}
-
-const CHAPTER_HEADING = /^第[零〇一二三四五六七八九十百千万0-9０-９]+[章节卷回部]/
-
-function narrativeBlocks(content: string): NarrativeBlock[] {
-  const lines = content.split(/\n+/).map((line) => line.trim()).filter(Boolean)
-  const blocks: NarrativeBlock[] = []
-  let firstPara = true
-  for (const line of lines) {
-    if (line.length <= 42 && CHAPTER_HEADING.test(line)) {
-      blocks.push({ kind: 'chapter', text: line, dropCap: false, cap: '', rest: '' })
-      continue
-    }
-    const chars = Array.from(line)
-    const dropCap = firstPara && chars.length > 12
-    firstPara = false
-    blocks.push({
-      kind: 'para',
-      text: line,
-      dropCap,
-      cap: dropCap ? chars[0] ?? '' : '',
-      rest: dropCap ? chars.slice(1).join('') : '',
-    })
-  }
-  return blocks
-}
-
-// 叙事块解析缓存：键为正文字符串。流式期间只有最后一条在变，历史条目直接命中。
-const narrativeCache = new Map<string, NarrativeBlock[]>()
-const NARRATIVE_CACHE_MAX = 200
-
-function narrativeBlocksCached(content: string): NarrativeBlock[] {
-  const hit = narrativeCache.get(content)
-  if (hit) return hit
-  const blocks = narrativeBlocks(content)
-  if (narrativeCache.size >= NARRATIVE_CACHE_MAX) {
-    // 先进先出淘汰：Map 保持插入顺序，删最旧一条即可。
-    const oldest = narrativeCache.keys().next().value
-    if (oldest !== undefined) narrativeCache.delete(oldest)
-  }
-  narrativeCache.set(content, blocks)
-  return blocks
-}
-
-function fadeOpacity(distance: number): number {
-  if (distance <= 0) return 1
-  const steps = [0.72, 0.52, 0.36, 0.24, 0.15]
-  return steps[Math.min(distance - 1, steps.length - 1)] ?? 0.15
-}
-
-/** 叙事列表的渲染视图：一次遍历产出每条的块、焦点距离与轮盘样式。
- *
- * 原先模板对每条消息调用 narrativeBlocks/assistantDistanceFrom/wheelStyle 三个
- * 方法，而 assistantDistanceFrom 每次向后扫描全表——整表是 O(N²)，且每个流式
- * chunk 都会重算全部消息的正文分块。改为单个 computed：距离由尾部反向一次扫出，
- * 分块走内容级缓存，流式期间只有最后一条需要重算。
- */
-const chatView = computed(() => {
-  const items = chat.value
-  const rows: Array<{
-    role: string
-    content: string
-    blocks: NarrativeBlock[]
-    distance: number
-    isFocus: boolean
-    style: Record<string, string>
-  }> = []
-  // 反向一次扫描：distance = 该条之后 assistant 条数。
-  const distances = new Array<number>(items.length)
-  let seen = 0
-  for (let i = items.length - 1; i >= 0; i--) {
-    distances[i] = seen
-    if (items[i].role !== 'user') seen++
-  }
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i]
-    const isUser = item.role === 'user'
-    const distance = distances[i]
-    const opacity = isUser ? Math.max(0.55, fadeOpacity(distance)) : fadeOpacity(distance)
-    const scale = distance > 0 ? Math.max(0.96, 1 - distance * 0.012) : 1
-    rows.push({
-      role: item.role,
-      content: item.content,
-      blocks: isUser ? [] : narrativeBlocksCached(item.content),
-      distance,
-      isFocus: !isUser && distance === 0,
-      style: {
-        opacity: String(opacity),
-        transform: distance > 0 ? `scale(${scale})` : 'none',
-      },
-    })
-  }
-  return rows
-})
+// 叙事渲染（正文分块缓存 + 反向一次扫描的焦点距离）由共享 kernel 维护。
+const { chatView } = useNarrativeView(chat)
 
 async function onDesignerSaved(label: string): Promise<void> {
   // 设计器产物入数据库；刷新四栏池让新卡立即出现在候选中。
@@ -1790,9 +1736,15 @@ onMounted(async () => {
     booting.value = false
   }
   void refreshSaves()
-  // 前端就绪后尝试恢复上次会话（localStorage 记忆 + 服务端磁盘回填）。
+  // URL session 优先接续扫码来源；没有时再回退本机 localStorage。
   void tryRestoreSession()
+  window.addEventListener('focus', syncSessionFromServer)
+  document.addEventListener('visibilitychange', onVisibilityChange)
 })
+
+function onVisibilityChange(): void {
+  if (document.visibilityState === 'visible') void syncSessionFromServer()
+}
 
 watch(() => form.value.companion_count, () => resizeRoster('伙伴'))
 watch(() => form.value.heroine_count, () => resizeRoster('主线'))
@@ -1833,21 +1785,29 @@ watch([compressionRecord, round], () => {
 
 <template>
   <div
-    class="app-root h-dvh min-h-[640px] bg-(--fe-bg) text-(--fe-ink)"
-    :class="[fontSize === 'large' ? 'font-large' : '', reduceMotion ? 'reduce-motion' : '']"
+    class="app-root h-dvh bg-(--fe-bg) text-(--fe-ink)"
+    :class="[`app-root--${props.variant}`, fontSize === 'large' ? 'font-large' : '', reduceMotion ? 'reduce-motion' : '', isWindowed ? 'windowed-root' : '']"
   >
-    <!-- 应用标题栏（两种模式都渲染）：窗口化=无边框窗的窗控；Web=浏览器内
-         诚实映射（全屏/收起徽章/关闭回退）。双击标题区最大化或切全屏。 -->
-    <div class="titlebar app-titlebar flex h-10 shrink-0 select-none items-center gap-3 px-4">
+    <!-- 窗控三键（仅窗口化模式）：最小化/最大化还原/关闭，实调 Win32 窗口
+         操作；Web 版不渲染此栏，用回原生浏览器窗控。 -->
+    <div v-if="isWindowed" class="titlebar app-titlebar flex h-10 shrink-0 select-none items-center gap-3 px-4">
       <div class="titlebar-logo grid size-5 place-items-center">
         <BookOpen :size="13" />
       </div>
       <span class="titlebar-title">书中织梦 <em>Novelborne</em></span>
+      <span class="cat-secret-host relative inline-flex self-stretch items-center">
+        <SiameseCat title="喵" @tap="tapCat" />
+      </span>
       <span
         class="titlebar-drag flex-1 self-stretch"
         title="双击最大化 / 还原"
         @dblclick="winControl('toggle')"
       />
+      <!-- 窗口化下原 header 被隐藏：主题选择器与手机扫码入口在此补齐 -->
+      <ThemePicker :themes="THEME_META" :model-value="activeTheme" @update:model-value="selectTheme" />
+      <button v-if="showsLanAccess" class="titlebar-btn" title="手机扫码远程使用" @click="openLanQr">
+        <Smartphone :size="14" />
+      </button>
       <button class="titlebar-btn" title="最小化" @click="winControl('minimize')">
         <Minus :size="14" />
       </button>
@@ -1859,7 +1819,7 @@ watch([compressionRecord, round], () => {
       </button>
     </div>
 
-    <header class="app-header relative z-10 flex h-14 items-center border-b border-(--fe-border) bg-(--fe-panel) px-3 sm:px-4">
+    <header v-if="!isWindowed" class="app-header relative z-10 flex h-14 items-center border-b border-(--fe-border) bg-(--fe-panel) px-3 sm:px-4">
       <div class="flex min-w-0 items-center gap-2.5">
         <div class="seal-logo grid size-8 shrink-0 place-items-center rounded-full text-(--fe-accent-ink)">
           <BookOpen :size="17" />
@@ -1869,7 +1829,9 @@ watch([compressionRecord, round], () => {
             <h1 class="truncate text-sm font-bold">书中织梦</h1>
             <p class="title-loom truncate text-[10px] text-(--fe-ink-3)">Novelborne · 生于书卷</p>
           </div>
-          <SiameseCat title="喵" />
+          <span class="cat-secret-host relative inline-flex self-stretch items-center">
+            <SiameseCat title="喵" @tap="tapCat" />
+          </span>
         </div>
       </div>
 
@@ -1879,22 +1841,7 @@ watch([compressionRecord, round], () => {
       </div>
 
       <div class="ml-auto flex items-center gap-2">
-        <div class="theme-picker hidden items-center gap-1.5 sm:flex" role="radiogroup" aria-label="主题选择">
-          <button
-            v-for="(meta, id) in THEME_META"
-            :key="id"
-            type="button"
-            class="theme-choice"
-            :class="{ active: activeTheme === id }"
-            :aria-label="meta.label"
-            :aria-pressed="activeTheme === id"
-            :title="meta.label"
-            @click="selectTheme(id)"
-          >
-            <span class="theme-swatch" :style="{ background: meta.swatch }" />
-            <span class="theme-label">{{ meta.label }}</span>
-          </button>
-        </div>
+        <ThemePicker class="hidden sm:flex" :themes="THEME_META" :model-value="activeTheme" @update:model-value="selectTheme" />
         <div class="flex items-center gap-1.5 lg:hidden">
         <button class="icon-button" title="配置" @click="mobilePanel = 'setup'">
           <PanelLeft :size="16" />
@@ -1903,7 +1850,7 @@ watch([compressionRecord, round], () => {
           <PanelRight :size="16" />
         </button>
         </div>
-        <button class="icon-button" title="手机扫码远程使用" @click="openLanQr">
+        <button v-if="showsLanAccess" class="icon-button" title="手机扫码远程使用" @click="openLanQr">
           <Smartphone :size="16" />
         </button>
       </div>
@@ -1917,10 +1864,10 @@ watch([compressionRecord, round], () => {
       </div>
     </Transition>
 
-    <main class="grid h-[calc(100dvh-56px)] min-h-[584px] grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)_300px] xl:grid-cols-[300px_minmax(420px,1fr)_320px]">
+    <main class="app-main grid min-h-0 grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)_300px] xl:grid-cols-[300px_minmax(420px,1fr)_320px]">
       <aside
         class="panel-left scrollbar overflow-y-auto border-r border-(--fe-border) bg-(--fe-panel-2) pb-20 lg:block lg:pb-4"
-        :class="mobilePanel === 'setup' ? 'block' : 'hidden'"
+        :class="mobilePanel === 'setup' ? 'block panel--active' : 'hidden'"
       >
         <section class="border-b border-(--fe-border) p-3">
           <button class="section-toggle" @click="basicOpen = !basicOpen">
@@ -2660,7 +2607,7 @@ watch([compressionRecord, round], () => {
 
       <section
         class="story-panel theme-decor relative flex min-h-0 min-w-0 flex-col bg-(--fe-panel-3) pb-16 lg:flex lg:pb-0"
-        :class="mobilePanel === 'story' ? 'flex' : 'hidden'"
+        :class="mobilePanel === 'story' ? 'flex panel--active' : 'hidden'"
       >
         <div class="flex h-11 shrink-0 items-center border-b border-[color-mix(in_srgb,_var(--fe-border)_60%,_var(--fe-panel))] px-4">
           <MessageSquareText :size="15" class="mr-2 text-(--fe-accent)" />
@@ -2896,7 +2843,7 @@ watch([compressionRecord, round], () => {
 
       <aside
         class="panel-right scrollbar overflow-y-auto border-l border-(--fe-border) bg-(--fe-panel-2) pb-20 lg:block lg:pb-4"
-        :class="mobilePanel === 'state' ? 'block' : 'hidden'"
+        :class="mobilePanel === 'state' ? 'block panel--active' : 'hidden'"
       >
         <div class="flex h-11 items-center border-b border-(--fe-border) bg-(--fe-panel) px-3">
           <Gauge :size="15" class="mr-2 text-(--fe-ok)" />
@@ -2912,6 +2859,14 @@ watch([compressionRecord, round], () => {
           <div class="metric border-t">
             <span>故事丰富度</span>
             <strong>{{ stateRichnessLabel }}</strong>
+          </div>
+          <div class="metric col-span-2 border-t" title="最近一次调用：入 {{ tokenUsage.lastIn.toLocaleString() }} · 出 {{ tokenUsage.lastOut.toLocaleString() }}">
+            <span>本局 Token{{ tokenUsage.source === 'measured' ? '' : tokenUsage.source === 'mixed' ? '（含估算）' : '（估算）' }}</span>
+            <strong class="metric-token">
+              入 {{ fmtTok(tokenUsage.in) }} · 出 {{ fmtTok(tokenUsage.out) }}<template v-if="tokenUsage.cache"> · 缓存 {{ fmtTok(tokenUsage.cache) }}</template>
+              <em v-if="tokenUsage.source === 'measured'" class="metric-token-badge">实测</em>
+              <em v-else-if="tokenUsage.source === 'mixed'" class="metric-token-badge">含估算</em>
+            </strong>
           </div>
         </section>
 
@@ -3141,10 +3096,11 @@ watch([compressionRecord, round], () => {
     <!-- Lomsting 遗物：羽毛笔（点击在新页面展开铭文，所见即所抄） -->
     <button
       type="button"
-      class="fixed bottom-3 right-3 z-40 hidden cursor-pointer select-none items-center justify-center bg-transparent p-0 lg:flex"
+      class="reader-trigger fixed bottom-3 right-3 z-40 flex cursor-pointer select-none items-center justify-center bg-transparent p-0"
       style="user-select: none; -webkit-user-select: none; border: none;"
-      aria-label="Lomsting"
-      @click="openLomsting"
+      aria-label="打开我的原著阅读器"
+      title="我的原著"
+      @click="openOriginalReader"
     >
       <span class="flex size-6 items-center justify-center rounded text-(--fe-ink-3) opacity-60 transition-opacity duration-200 hover:opacity-100">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -3155,40 +3111,20 @@ watch([compressionRecord, round], () => {
       </span>
     </button>
 
-    <!-- 局域网远程使用：手机扫码弹层 -->
     <Transition name="pop">
-      <div
-        v-if="lanQrOpen"
-        class="fixed inset-0 z-50 grid place-items-center bg-black/40 px-4"
-        @click.self="lanQrOpen = false"
-      >
-        <div class="w-full max-w-xs rounded-lg border border-(--fe-border) bg-(--fe-panel) p-4 shadow-xl">
-          <div class="flex items-center gap-2 border-b border-(--fe-border) pb-2.5">
-            <Smartphone :size="15" class="text-(--fe-ok)" />
-            <h2 class="text-xs font-bold">手机扫码远程使用</h2>
-            <button class="ml-auto text-(--fe-ink-3)" title="关闭" @click="lanQrOpen = false"><X :size="15" /></button>
-          </div>
-          <div class="pt-3 text-center">
-            <LoaderCircle v-if="lanBusy" class="mx-auto animate-spin text-(--fe-ink-3)" :size="22" />
-            <template v-else-if="lanInfo?.url">
-              <img
-                :src="'/api/lan-qrcode.png?port=' + lanInfo.port"
-                alt="局域网访问二维码"
-                class="mx-auto block w-44 rounded border border-(--fe-border) bg-white p-1.5"
-              />
-              <p class="mt-2.5 break-all font-mono text-xs font-bold text-(--fe-ink-2)">{{ lanInfo.url }}</p>
-              <p class="mt-1.5 text-[11px] leading-relaxed text-(--fe-ink-3)">{{ lanInfo.hint }}</p>
-              <p v-if="!lanInfo.listening_lan" class="mt-1.5 text-[11px] text-(--fe-danger)">
-                当前服务只监听本机回环地址，手机无法访问：请去掉 --host 127.0.0.1（默认 0.0.0.0）后重启。
-              </p>
-            </template>
-            <p v-else class="py-4 text-xs text-(--fe-ink-3)">未检测到局域网地址：请确认电脑已连接 Wi-Fi / 路由器。</p>
-          </div>
-        </div>
+      <LanQrModal v-if="lanQrOpen" :info="lanInfo" :loading="lanBusy" @close="lanQrOpen = false" />
+    </Transition>
+
+    <Transition name="pop">
+      <div v-if="mobileThemeOpen" class="mobile-theme-sheet" @click.self="mobileThemeOpen = false">
+        <section role="dialog" aria-modal="true" aria-label="主题选择">
+          <header><strong>界面主题</strong><button title="关闭" aria-label="关闭" @click="mobileThemeOpen = false"><X :size="17" /></button></header>
+          <ThemePicker compact :themes="THEME_META" :model-value="activeTheme" @update:model-value="selectTheme" />
+        </section>
       </div>
     </Transition>
 
-    <nav class="fixed inset-x-0 bottom-0 z-20 grid h-16 grid-cols-3 border-t border-(--fe-border) bg-(--fe-panel) lg:hidden">
+    <nav v-if="isMobileShell || !isWindowed" class="app-bottom-nav fixed inset-x-0 bottom-0 z-20 grid h-16 grid-cols-4 border-t border-(--fe-border) bg-(--fe-panel)" :class="isMobileShell ? '' : 'lg:hidden'">
       <button class="mobile-tab" :class="mobilePanel === 'setup' ? 'active' : ''" @click="mobilePanel = 'setup'">
         <Menu :size="18" /><span>配置</span>
       </button>
@@ -3198,7 +3134,12 @@ watch([compressionRecord, round], () => {
       <button class="mobile-tab" :class="mobilePanel === 'state' ? 'active' : ''" @click="mobilePanel = 'state'">
         <Gauge :size="18" /><span>状态</span>
       </button>
+      <button class="mobile-tab" :class="mobileThemeOpen ? 'active' : ''" @click="mobileThemeOpen = !mobileThemeOpen">
+        <Palette :size="18" /><span>主题</span>
+      </button>
     </nav>
+
+    <OriginalReaderModal v-if="readerOpen" @close="readerOpen = false" />
 
     <CharacterDesigner
       v-if="currentView === 'designer'"
@@ -3214,27 +3155,12 @@ watch([compressionRecord, round], () => {
       :connection="modelConnection"
       @close="exportOpen = false"
     />
-
-    <!-- Web 版「最小化」收起态：全屏收起，只留一枚居中徽章，点击还原 -->
-    <Transition name="pop">
-      <div v-if="webMinimized" class="fixed inset-0 z-50 grid place-items-center bg-(--fe-bg)">
-        <button
-          type="button"
-          class="flex items-center gap-2.5 rounded-full border border-(--fe-border) bg-(--fe-panel) px-5 py-2.5 shadow-lg transition-transform hover:scale-105"
-          title="还原窗口"
-          @click="webMinimized = false"
-        >
-          <BookOpen :size="15" class="text-(--fe-accent)" />
-          <span class="text-xs font-bold">书中织梦 · Novelborne</span>
-          <span class="text-[10px] text-(--fe-ink-3)">已收起 · 点击还原</span>
-        </button>
-      </div>
-    </Transition>
   </div>
 </template>
 
 <style scoped>
 .app-header { box-shadow: var(--fe-shadow-1); }
+.windowed-root .app-main { height: calc(100dvh - 40px); min-height: 600px; }
 
 /* —— 无边框窗口标题栏（pywebview + DWM 圆角）—— */
 .app-titlebar {
@@ -3284,11 +3210,10 @@ watch([compressionRecord, round], () => {
 .titlebar-btn:active { transform: scale(.9); }
 .titlebar-close { margin-right: -4px; }
 .titlebar-close:hover { background: #e81123; color: #fff; }
-.theme-picker { max-width: min(48vw, 560px); overflow-x: auto; }
-.theme-choice { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--fe-border); border-radius: var(--fe-radius); background: var(--fe-panel); padding: 3px 6px; color: var(--fe-ink-2); font-size: 10px; white-space: nowrap; transition: border-color var(--fe-motion) ease, background-color var(--fe-motion) ease, color var(--fe-motion) ease; }
-.theme-choice:hover, .theme-choice.active { border-color: var(--fe-accent); color: var(--fe-accent); }
-.theme-choice.active { background: var(--fe-accent-soft); color: color-mix(in srgb, var(--fe-accent) 78%, var(--fe-ink)); font-weight: 700; }
-.theme-swatch { width: 14px; height: 14px; flex: 0 0 auto; border: 1px solid color-mix(in srgb, var(--fe-ink) 20%, transparent); border-radius: 999px; }
+.mobile-theme-sheet { position: fixed; inset: 0; z-index: 45; display: flex; align-items: end; background: rgb(0 0 0 / 32%); }
+.mobile-theme-sheet section { width: 100%; max-height: min(58dvh, 440px); overflow: hidden auto; border-top: 1px solid var(--fe-border); border-radius: 14px 14px 0 0; background: var(--fe-panel); box-shadow: var(--fe-shadow-2); padding: 12px 14px calc(14px + env(safe-area-inset-bottom, 0px)); }
+.mobile-theme-sheet header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; color: var(--fe-ink-2); font-size: 13px; }.mobile-theme-sheet header button { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 50%; color: var(--fe-ink-3); }.mobile-theme-sheet header button:hover { background: var(--fe-panel-2); color: var(--fe-ink); }
+.mobile-theme-sheet :deep(.theme-picker) { display: grid; max-width: none; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }.mobile-theme-sheet :deep(.theme-choice) { min-height: 38px; justify-content: start; font-size: 11px; }
 .theme-decor { isolation: isolate; background: var(--fe-decor-stage); }
 .theme-decor::after { z-index: -1; }
 
@@ -3576,6 +3501,18 @@ watch([compressionRecord, round], () => {
 .metric { padding: 12px; border-color: var(--fe-border); }
 .metric span { display: block; color: var(--fe-ink-3); font-size: 10px; }
 .metric strong { display: block; margin-top: 2px; font-size: 15px; }
+.metric-token { font-size: 13px !important; }
+.metric-token-badge {
+  margin-left: 5px;
+  border: 1px solid color-mix(in srgb, var(--fe-ok) 45%, transparent);
+  border-radius: 4px;
+  padding: 0 4px;
+  color: var(--fe-ok);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+  vertical-align: 1px;
+}
 .state-section { border-bottom: 1px solid var(--fe-border); padding: 12px; }
 .state-section h3 { display: flex; align-items: center; gap: 7px; margin-bottom: 10px; font-size: 12px; font-weight: 700; }
 .compact-list { overflow: hidden; border: 1px solid var(--fe-border); border-radius: var(--fe-radius); background: var(--fe-panel); }

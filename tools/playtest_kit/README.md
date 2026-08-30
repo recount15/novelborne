@@ -43,7 +43,7 @@ python tools/playtest_kit/run_tests.py pilot --rounds 2
 - **供应商 / base_url / 模型**：全部 CLI 参数或 `FATE_PROVIDER` / `FATE_BASE_URL`
   / `FATE_MODEL` 环境变量；api_server 端点则由请求体字段决定。
 - **原著 TXT**：优先级 启动配置 `txt_path` > `PLAYTEST_TXT` 环境变量 >
-  缺省 `data/samples/强化试玩书.txt`。
+  缺省 `data/samples/边城档案.txt`。
 - **API key**：只经内存 / 环境变量传递；日志与报告仅写掩码。
 
 ## 与主程序的契约边界
@@ -61,7 +61,7 @@ PLAYTEST_MONITOR = PROJECT_ROOT / "tools" / "playtest_kit" / "monitor.html"
 ## 数据边界声明
 
 - 本包不携带任何小说文本、锚点 JSON、样本正文或报告数据；
-- 缺省试玩样本在仓库中的唯一权威位置是 `data/samples/强化试玩书.txt`
-  （2967 B，三章节小型边城悬疑故事，供本地切章/蒸馏链路回归用）；
+- 缺省原创样本在仓库中的唯一权威位置是 `data/samples/边城档案.txt`
+  （三章节小型边城悬疑故事，供本地切章/蒸馏链路回归用）；
 - 各脚本运行产物（报告 JSON、回合日志 jsonl、正文样本 txt）一律写入
   项目根 `outputs/` 目录。

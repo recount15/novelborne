@@ -1,11 +1,12 @@
 <template>
   <!-- 暹罗小猫（seal point）：奶油身 + 深棕脸罩/耳/尾，蓝眼。
        纯 SVG + CSS 动画：尾巴摇摆、呼吸、眨眼、偶尔抖耳；hover 时摇尾加速。 -->
-  <span
+  <button
+    type="button"
     class="siamese-cat inline-flex shrink-0 select-none items-end"
-    role="img"
     aria-label="暹罗小猫"
     :title="title"
+    @click="emit('tap')"
   >
     <svg viewBox="0 0 64 52" width="40" height="34" xmlns="http://www.w3.org/2000/svg">
       <!-- 尾巴：origin 在尾根，左右摇摆 -->
@@ -70,11 +71,12 @@
         />
       </g>
     </svg>
-  </span>
+  </button>
 </template>
 
 <script setup lang="ts">
 defineProps<{ title?: string }>()
+const emit = defineEmits<{ tap: [] }>()
 </script>
 
 <style>
@@ -82,10 +84,19 @@ defineProps<{ title?: string }>()
    类名 cat- 前缀防冲突。 */
 
 .siamese-cat {
-  /* 落在纸上的重量感：极轻暖墨落影（六主题均为浅色纸底，固定暖影安全） */
+  appearance: none;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+  /* 落在纸上的重量感：极轻暖墨落影 */
   filter: drop-shadow(0 1.5px 1px rgba(76, 54, 42, 0.2));
-  transition: filter 300ms ease;
+  transition: filter 300ms ease, transform 120ms ease;
 }
+.siamese-cat:active { transform: scale(.93); }
+.siamese-cat:focus-visible { outline: 2px solid var(--fe-focus-ring); outline-offset: 2px; border-radius: 6px; }
 
 .siamese-cat:hover {
   filter: drop-shadow(0 2.5px 2px rgba(76, 54, 42, 0.28));

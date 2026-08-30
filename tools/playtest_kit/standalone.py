@@ -40,7 +40,7 @@ def build_config(argv: list[str] | None) -> dict[str, Any]:
                         "https://api.deepseek.com"))
     parser.add_argument("--model", default=os.environ.get("FATE_MODEL", "deepseek-chat"))
     parser.add_argument("--txt", default=os.environ.get(
-        "FATE_TXT", "data/samples/强化试玩书.txt"),
+        "FATE_TXT", "data/samples/边城档案.txt"),
         help="原著 TXT 路径（相对项目根或绝对路径）")
     parser.add_argument("--rounds", dest="rounds_opt", type=int, default=None,
                         help="最大回合数")

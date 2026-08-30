@@ -14,6 +14,10 @@
 @import "./themes/zitan.css";
 @import "./themes/huanghuali.css";
 @import "./themes/titanium.css";
+@import "./themes/rainbow.css";
+@import "./themes/grove.css";
+@import "./themes/magic.css";
+@import "./themes/haunt.css";
 
 @theme {
   --color-paper: #f3edde;
@@ -71,6 +75,47 @@ html {
 * { box-sizing: border-box; }
 html, body, #app { min-width: 320px; min-height: 100%; height: 100%; margin: 0; }
 body { overflow: hidden; font-size: 15px; line-height: 1.6; }
+
+/* 四端壳层共享尺寸契约：业务组件只读平台变量，不直接猜测设备。 */
+.app-root {
+  --app-header-height: 56px;
+  --app-bottom-nav-height: 0px;
+  --app-safe-top: env(safe-area-inset-top, 0px);
+  --app-safe-right: env(safe-area-inset-right, 0px);
+  --app-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --app-safe-left: env(safe-area-inset-left, 0px);
+}
+.app-root--windows { --app-header-height: 40px; }
+.app-root--mobile-web, .app-root--android {
+  --app-header-height: 56px;
+  --app-bottom-nav-height: 64px;
+}
+.app-main { height: calc(100dvh - var(--app-header-height) - var(--app-safe-top)); }
+.app-bottom-nav { height: calc(var(--app-bottom-nav-height) + var(--app-safe-bottom)); padding-bottom: var(--app-safe-bottom); }
+
+/* 手机网页和 Android 由壳层固定为单面板，横屏/平板不回退为桌面三栏。 */
+.app-root--mobile-web .app-main,
+.app-root--android .app-main { grid-template-columns: minmax(0, 1fr) !important; }
+.app-root--mobile-web .panel-left,
+.app-root--mobile-web .story-panel,
+.app-root--mobile-web .panel-right,
+.app-root--android .panel-left,
+.app-root--android .story-panel,
+.app-root--android .panel-right { display: none !important; }
+.app-root--mobile-web .panel--active,
+.app-root--android .panel--active { display: flex !important; }
+.app-root--mobile-web .panel-left.panel--active,
+.app-root--mobile-web .panel-right.panel--active,
+.app-root--android .panel-left.panel--active,
+.app-root--android .panel-right.panel--active { display: block !important; }
+.app-root--mobile-web .panel-left,
+.app-root--mobile-web .panel-right,
+.app-root--android .panel-left,
+.app-root--android .panel-right { border-right: 0; padding-bottom: calc(var(--app-bottom-nav-height) + var(--app-safe-bottom)); }
+.app-root--mobile-web .story-panel,
+.app-root--android .story-panel { padding-bottom: calc(var(--app-bottom-nav-height) + var(--app-safe-bottom)); }
+.app-root--mobile-web .reader-trigger,
+.app-root--android .reader-trigger { right: calc(12px + var(--app-safe-right)); bottom: calc(12px + var(--app-bottom-nav-height) + var(--app-safe-bottom)); }
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; }

@@ -1,7 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
-datas = [('assets', 'assets'), ('frontend/dist', 'frontend/dist')]
+ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(SPEC)), os.pardir))  # noqa: F821
+
+datas = [(os.path.join(ROOT, 'assets'), 'assets'),
+         (os.path.join(ROOT, 'frontend', 'dist'), 'frontend/dist'),
+         (os.path.join(ROOT, 'LICENSE'), 'LICENSE')]
 binaries = []
 hiddenimports = ['core', 'core.server', 'core.app', 'core.fate_engine']
 # core.engine 等子包使用 __getattr__ 惰性导入，静态分析追踪不到，
@@ -35,7 +40,7 @@ datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 
 a = Analysis(
-    ['run_app.py'],
+    [os.path.join(ROOT, 'run_app.py')],
     pathex=[],
     binaries=binaries,
     datas=datas,
@@ -55,6 +60,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name='FateEngine',
+    icon=os.path.join(ROOT, 'build', 'icon.ico'),
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

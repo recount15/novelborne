@@ -1,0 +1,90 @@
+/* ============================================================
+ * Theme: grove · 林间雅居（亮色）
+ * 竹青米白底 · 竹叶疏影纹理 · 松绿行动色 + 原木点缀 · 圆角 10px
+ * 动效 210ms · color-scheme: light
+ * 红线自查：仅 [data-theme="grove"] 前缀 + .theme-decor 钩子；
+ *          纹理全部内联 SVG data-URI / CSS 渐变；26 键契约齐备；
+ *          正文 --fe-ink(#2c3326) on --fe-bg(#eef1e6) ≈ 11.3:1，
+ *          on --fe-panel(#f8faf2) ≈ 12.1:1；--fe-ink-2(#4f5942) ≈ 6.8:1；
+ *          --fe-ink-3(#6d7860) ≈ 4.6:1；
+ *          --fe-accent-ink(#f6faf3) on --fe-accent(#3c6e47) ≈ 5.8:1；
+ *          --fe-ok(#2f7a4e) ≈ 5.0:1、--fe-warn(#8f6a08) ≈ 4.7:1、
+ *          --fe-danger(#a04a2c) ≈ 5.3:1
+ * ============================================================ */
+
+[data-theme="grove"] {
+  color-scheme: light;
+
+  /* ---- 表面：竹青米白 + 竹叶疏影 ---- */
+  --fe-bg: #eef1e6;
+  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cg fill='none' stroke='%233c6e47' stroke-opacity='0.07' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M30 60c26-8 44 4 52 22M78 82c4 14 2 26-6 38'/%3E%3Cpath d='M56 66l-20-10M64 74l-24 2M70 82l-18 14'/%3E%3Cpath d='M150 130c-24-6-38 6-44 22M106 152c-2 12 0 20 6 30'/%3E%3Cpath d='M128 134l20-8M120 144l22 4M114 154l14 12'/%3E%3C/g%3E%3C/svg%3E");
+  --fe-panel: #f8faf2;
+  --fe-panel-2: #ebefe0;
+  --fe-panel-3: #e0e6d0;
+
+  /* ---- 描边：竹青线 ---- */
+  --fe-border: #d4dcc4;
+  --fe-border-strong: #7c8a68;
+
+  /* ---- 文字：竹墨 ---- */
+  --fe-ink: #2c3326;
+  --fe-ink-2: #4f5942;
+  --fe-ink-3: #6d7860;
+
+  /* ---- 行动色：松绿 ---- */
+  --fe-accent: #3c6e47;
+  --fe-accent-strong: #2f5738;
+  --fe-accent-ink: #f6faf3;
+  --fe-accent-soft: #e6efe2;
+
+  /* ---- 语义色 ---- */
+  --fe-ok: #2f7a4e;
+  --fe-warn: #8f6a08;
+  --fe-danger: #a04a2c;
+
+  /* ---- 焦点与阴影：林间柔影 ---- */
+  --fe-focus-ring: #3c6e47;
+  --fe-shadow-1: 0 1px 3px rgb(44 51 38 / 10%);
+  --fe-shadow-2: 0 12px 28px rgb(44 51 38 / 14%), 0 2px 6px rgb(60 110 71 / 8%);
+
+  /* ---- 字体：山居书卷 ---- */
+  --fe-font-sans: "Microsoft YaHei", "HarmonyOS Sans SC", "PingFang SC", system-ui, sans-serif;
+  --fe-font-serif: "LXGW WenKai GB", "KaiTi", "Noto Serif SC", serif;
+
+  /* ---- 形状与动效 ---- */
+  --fe-radius: 10px;
+  --fe-motion: 210ms;
+
+  /* ---- 装饰：竹居雅舍舞台 + 晨光穿林 ---- */
+  --fe-decor-stage: linear-gradient(170deg, #f4f7ec 0%, #eff2e4 55%, #e9ecdb 100%);
+  --fe-decor-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='280' height='280'%3E%3Cg fill='none' stroke='%233c6e47' stroke-opacity='0.05' stroke-width='1.8' stroke-linecap='round'%3E%3Cpath d='M60 40c30-10 50 6 58 26M118 66c5 16 3 30-6 44'/%3E%3Cpath d='M92 46l-22-11M102 56l-27 2M110 66l-20 16'/%3E%3Cpath d='M200 180c-27-7-43 7-50 25M150 205c-2 13 0 23 7 34'/%3E%3Cpath d='M178 188l23-9M169 200l25 4M162 212l16 13'/%3E%3C/g%3E%3C/svg%3E"), radial-gradient(60% 44% at 84% 4%, rgb(224 190 120 / 10%), transparent 70%);
+}
+
+[data-theme="grove"] .theme-decor {
+  background: var(--fe-decor-stage);
+}
+
+[data-theme="grove"] .theme-decor::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: var(--fe-decor-overlay);
+  background-repeat: repeat, no-repeat;
+  background-size: 280px auto, 100% 100%;
+}
+
+/* 页角图样：左上「月洞窗棂」（雅居圆窗+格线），右下斜出竹枝披叶。 */
+[data-theme="grove"] .theme-decor::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='190' height='190'%3E%3Cg fill='none' stroke='%237c8a68' stroke-opacity='0.18'%3E%3Ccircle cx='85' cy='80' r='52' stroke-width='2.4'/%3E%3Ccircle cx='85' cy='80' r='46' stroke-width='1.2'/%3E%3Cpath d='M85 34v92M39 80h92M53 48l64 64M117 48L53 112' stroke-width='1'/%3E%3C/g%3E%3Cg fill='none' stroke='%233c6e47' stroke-opacity='0.14' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M20 150c22-4 36-14 46-30'/%3E%3C/g%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='170'%3E%3Cg fill='none' stroke='%233c6e47' stroke-opacity='0.16' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M180 20C130 30 96 60 84 110M120 44c-18-2-32 2-42 12M112 74c-18 0-30 6-38 16M100 100c-16 4-26 12-32 22'/%3E%3C/g%3E%3Cg fill='%233c6e47' fill-opacity='0.12'%3E%3Cpath d='M128 38c10-8 22-8 28-2-8 8-20 10-28 2zM104 60c-12-2-22 4-26 12 12 2 22-4 26-12zM92 96c-12 0-22 6-25 14 12 2 22-4 25-14zM82 126c-11 3-18 11-20 19 11 1 19-9 20-19z'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left top, right bottom;
+  background-size: 190px auto, 200px auto;
+}

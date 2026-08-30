@@ -24,6 +24,7 @@ core/server.py ──────────── API 层（54 路由）：参
     │                        断 app↔server↔engine 三方循环）
     │       ask_service.py   问答/作弊码状态机（ask 端点业务全量内聚）
     │       game_setup.py    开局装配纯函数（作品来源/宿敌/名册/阵营势差）
+│       model_gateway.py  provider/凭据/客户端/蒸馏调用的唯一运行时接线
     │
     ├── core/state_schema.py 状态契约：TRANSACTIONAL_KEYS（回合事务键唯一来源）
     │                        + start_setting()（顶层键优先、start_params 兜底）
@@ -42,8 +43,12 @@ core/server.py ──────────── API 层（54 路由）：参
     ├── core/lore/    动态世界书（LoreInjector/load_entries）
     └── core/prompts/ 提示词加载器
 
-frontend/ ── Vue 3 + TS + Tailwind 单页应用（src/App.vue 为单体，
-             Phase 5 拆 composables）；构建产物 dist/ 由后端同端口托管
+frontend/ ── Vue 3 + TS + Tailwind 四端前端：
+             kernel/ 为 ApiClient + PlatformAdapter 中台固定接线；
+             shells/ 为 web/windows/mobile-web/android 独立 UI 壳；
+             App.vue 当前仍是共享工作台内容层，按阶段拆 composables；
+             构建产物 dist/ 由后端同端口托管
+capacitor.config.ts ── Android 薄壳配置：只加载前端并连接远端 API
 
 assets/ ──── 全部静态数据：rules/（作品库+运行时规则）、data/（角色卡/
              桥段库×5/技能/金手指/samples 样书）、prompts/、lore/
@@ -111,6 +116,23 @@ map_server/map_engine/map_periph.md）。
 | core/fate_engine.py | 模型接入门面：provider 配置/OpenAI 兼容客户端/思考参数、作品库（W 条目）解析、personas 扫描、上传读取、BASE_DIR/WRITABLE_DIR | app、server、services、ui、engine/gf_designer |
 | core/state_schema.py | TRANSACTIONAL_KEYS（回合事务键唯一来源）+ start_setting() 双读收敛 | app |
 
+### 前端中台与四端壳层
+
+| 文件/目录 | 实际职责 | 约束 |
+|---|---|---|
+| frontend/src/kernel/apiClient.ts | 统一 base URL、JSON、上传、NDJSON、错误转换 | 业务组件不得直接拼接 API 接线 |
+| frontend/src/kernel/platform.ts | PlatformAdapter：窗口控制、存储、外部打开、运行形态识别 | 不把 pywebview/Android 能力泄漏到共享组件 |
+| frontend/src/kernel/useNarrativeView.ts | 叙事正文分块缓存、焦点距离与流式渲染视图 | O(N) 反向扫描，跨壳复用 |
+| frontend/src/components/ThemePicker.vue | 20 主题的共享选择器 | Web/Windows 顶栏复用，不复制主题按钮 |
+| frontend/src/components/LanQrModal.vue | 局域网二维码共享展示组件 | 仅 Web/Windows 入口可打开 |
+| frontend/src/shells/WebShell.vue | 桌面浏览器壳 | 不渲染窗口三键 |
+| frontend/src/shells/WindowsShell.vue | pywebview 窗口壳 | 三键只由 Windows bridge 实现 |
+| frontend/src/shells/MobileWebShell.vue | 手机网页壳 | 触控、安全区、底部导航独立优化 |
+| frontend/src/shells/AndroidShell.vue | Capacitor APK 壳 | 只含前端，远端 API 由环境配置 |
+| frontend/src/components/OriginalReaderModal.vue | 四端共享正文优先阅读器 | 书库/目录/设置按需抽屉，阅读位置按书保存 |
+
+固定接线原则：共享业务只依赖 `kernel` 与领域组件；正式构建和原生壳以显式 `variant` 负责排列、导航和平台能力，禁止以 UA 或 pywebview 注入时机决定产品形态；未指定目标的普通浏览器开发入口才以触控能力作为 mobile-web 回退。后端 API URL、错误和 NDJSON 由 `ApiClient` 统一处理。移动网页/Android 壳固定单面板并使用安全区变量，横屏不回退三栏。
+
 ### core/api/ 与 core/services/
 
 | 文件 | 实际职责 | 上游 |
@@ -120,6 +142,7 @@ map_server/map_engine/map_periph.md）。
 | services/registries.py | DistillerRegistry + 角色池缓存中立收编（断 app/server/engine 循环） | app、server、ask_service、engine/character_library |
 | services/ask_service.py | ask 端点业务全量：规则问答装配脱敏、作弊码三愿/永久通路状态机、领域异常 | server |
 | services/game_setup.py | 开局装配纯函数：作品来源解析/宿敌人格/名册装配/阵营势差 | app |
+| services/model_gateway.py | provider、凭据优先级、客户端与模型调用的唯一运行时接线 | server、services |
 
 ### core/engine/（38 模块）
 

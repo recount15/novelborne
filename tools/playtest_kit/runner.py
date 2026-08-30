@@ -20,7 +20,7 @@ OUT_DIR = ROOT / "outputs"
 # 数据与工具分离：默认样本 TXT 放 data/samples/（不属于本工具包）。
 # 可用 PLAYTEST_TXT 环境变量覆盖；runner 启动配置里也可用 txt_path 字段注入。
 TXT_PATH = Path(os.environ.get(
-    "PLAYTEST_TXT", str(ROOT / "assets" / "data" / "samples" / "强化试玩书.txt")))
+    "PLAYTEST_TXT", str(ROOT / "assets" / "data" / "samples" / "边城档案.txt")))
 REPORT_PATH = OUT_DIR / "playtest_monitor_report.json"
 
 

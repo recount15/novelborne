@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import os
 import socket
+import sys
 import threading
 import time
 
@@ -30,6 +31,48 @@ def _free_port(default: int) -> int:
             return s.getsockname()[1]
         except OSError:
             return default
+
+
+def _apply_window_icon(icon_path, title_keyword: str = "书中织梦") -> None:
+    """Win32 WM_SETICON 设置窗口/任务栏品牌图标（pywebview 无 icon 形参）。
+
+    与圆角同线程调用；窗口可能尚未创建，按标题轮询查找。
+    """
+    if not icon_path:
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        shell32 = ctypes.windll.shell32
+        hicon = shell32.ExtractIconW(None, icon_path, 0)
+        if not hicon:
+            return
+        WM_SETICON, ICON_BIG, ICON_SMALL = 0x0080, 1, 0
+
+        @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        def _enum(hwnd, _):
+            nonlocal target
+            n = user32.GetWindowTextLengthW(hwnd)
+            if n and user32.IsWindowVisible(hwnd):
+                buf = ctypes.create_unicode_buffer(n + 1)
+                user32.GetWindowTextW(hwnd, buf, n + 1)
+                if title_keyword in buf.value:
+                    target = hwnd
+                    return False
+            return True
+
+        for _ in range(50):
+            target = None
+            user32.EnumWindows(_enum, 0)
+            if target is not None:
+                user32.SendMessageW(wintypes.HWND(target), WM_SETICON, ICON_BIG, hicon)
+                user32.SendMessageW(wintypes.HWND(target), WM_SETICON, ICON_SMALL, hicon)
+                return
+            time.sleep(0.1)
+    except Exception:  # noqa: BLE001  图标是美化项，失败不影响功能
+        pass
 
 
 def _apply_round_corners(title_keyword: str = "书中织梦") -> None:
@@ -121,7 +164,25 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=None, help="端口（默认自动挑选空闲口）")
     parser.add_argument("--no-lan", action="store_true", help="仅本机监听（默认 0.0.0.0，手机可扫码）")
     parser.add_argument("--var", default=None, help="运行数据目录（默认项目根 var/）")
+    parser.add_argument("--restore-private", default=None, help="仅本机：校验并恢复私有 sidecar ZIP")
+    parser.add_argument("--restore-target", default=None, help="私有恢复目标目录（默认应用根）")
+    parser.add_argument("--restore-components", default="data,personas,rules", help="私有恢复组件，逗号分隔")
+    parser.add_argument("--restore-overwrite", action="store_true", help="私有恢复时允许覆盖已有文件")
     args = parser.parse_args()
+
+    if args.restore_private:
+        from pathlib import Path
+        from tools.private_recovery import RecoveryError, restore
+
+        target = Path(args.restore_target) if args.restore_target else Path(__file__).resolve().parent
+        components = {item.strip() for item in args.restore_components.split(",") if item.strip()}
+        try:
+            report = restore(Path(args.restore_private), target, components, overwrite=args.restore_overwrite, dry_run=False)
+            print(f"私有恢复完成：{len(report['restored'])} 个文件，跳过 {len(report['skipped'])} 个。")
+            return
+        except RecoveryError as exc:
+            print(f"私有恢复失败：{exc}", file=sys.stderr)
+            raise SystemExit(2)
 
     if args.var:
         os.environ["FATE_VAR_DIR"] = args.var
@@ -145,6 +206,19 @@ def main() -> None:
 
     import webview
 
+    def _icon_path():
+        """品牌图标（火漆徽标）：源码运行取 frontend/public，打包后取
+        PyInstaller 捆绑目录；缺失时返回 None 用默认图标。"""
+        for base in (os.path.dirname(os.path.abspath(__file__)),
+                     getattr(sys, "_MEIPASS", "")):
+            if not base:
+                continue
+            for rel in (os.path.join("frontend", "public", "favicon.ico"), "favicon.ico"):
+                p = os.path.join(base, rel)
+                if os.path.isfile(p):
+                    return p
+        return None
+
     holder: dict = {}
     api = WindowApi(holder)
     window = webview.create_window(
@@ -155,9 +229,22 @@ def main() -> None:
         js_api=api,
     )
     holder["win"] = window
-    # 圆角在事件循环启动后由后台线程施加（FindWindow 需窗口已创建）
+    # 圆角 + 品牌图标在事件循环启动后由后台线程施加（需窗口已创建）
+    _icon = _icon_path()
     threading.Thread(target=_apply_round_corners, daemon=True).start()
-    webview.start()  # 阻塞至关窗
+    if _icon:
+        threading.Thread(target=_apply_window_icon, args=(_icon,), daemon=True).start()
+
+    def _poke_first_paint():
+        # WebView2 偶发「首帧不绘制」：页面已加载但画面停在黑底，手动刷新
+        # 才恢复（实测）。loaded 事件后 evaluate 一次 DOM 触发重绘即可。
+        time.sleep(2.0)
+        try:
+            window.evaluate("void document.body.offsetWidth")
+        except Exception:  # noqa: BLE001  窗口可能已被关掉
+            pass
+
+    webview.start(func=_poke_first_paint)  # 阻塞至关窗
     server.should_exit = True
     thread.join(timeout=5)
 
