@@ -10,6 +10,10 @@
 @import "./themes/cthulhu.css";
 @import "./themes/sweetheart.css";
 @import "./themes/fortune.css";
+@import "./themes/carbon.css";
+@import "./themes/zitan.css";
+@import "./themes/huanghuali.css";
+@import "./themes/titanium.css";
 
 @theme {
   --color-paper: #f3edde;

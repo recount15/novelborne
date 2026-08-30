@@ -112,12 +112,34 @@ const busy = ref(false)
 const sessionId = ref<string | null>(null)
 // —— 窗口化模式（pywebview 壳）：渲染无边框自定义标题栏 ——
 const isWindowed = computed(() => typeof window !== 'undefined' && 'pywebview' in window)
+const webMinimized = ref(false)
 function winControl(action: 'minimize' | 'toggle' | 'close'): void {
+  // 窗口化：走 pywebview js_api；Web 版：浏览器内诚实映射——
+  // 最大化=全屏切换（F11 等价）；最小化=收起为悬浮徽章；关闭=尝试关页，
+  // 被浏览器拦截时回到全新开局（会话已落盘，刷新即可恢复）。
   const api = (window as unknown as { pywebview?: { api?: { minimize?: () => void; toggle_maximize?: () => void; close?: () => void } } }).pywebview?.api
-  if (!api) return
-  if (action === 'minimize') api.minimize?.()
-  else if (action === 'toggle') api.toggle_maximize?.()
-  else api.close?.()
+  if (api) {
+    if (action === 'minimize') api.minimize?.()
+    else if (action === 'toggle') api.toggle_maximize?.()
+    else api.close?.()
+    return
+  }
+  if (action === 'toggle') {
+    if (document.fullscreenElement) void document.exitFullscreen()
+    else void document.documentElement.requestFullscreen().catch(() => {})
+  } else if (action === 'minimize') {
+    webMinimized.value = true
+  } else {
+    window.close()
+    window.setTimeout(() => {
+      window.localStorage.removeItem('fate_session_id')
+      sessionId.value = null
+      state.value = {}
+      chat.value = []
+      askThread.value = []
+      status.value = '已收起对局（存档与自动恢复不受影响）。刷新页面即可重新开始。'
+    }, 120)
+  }
 }
 const novelUpload = ref<UploadInfo | null>(null)
 const personaUpload = ref<UploadInfo | null>(null)
@@ -1814,9 +1836,9 @@ watch([compressionRecord, round], () => {
     class="app-root h-dvh min-h-[640px] bg-(--fe-bg) text-(--fe-ink)"
     :class="[fontSize === 'large' ? 'font-large' : '', reduceMotion ? 'reduce-motion' : '']"
   >
-    <!-- 无边框窗口标题栏（仅窗口化模式渲染）：macOS 弧形边框由 DWM 圆角提供，
-         双击标题区最大化/还原，右缘三键为 Windows 习惯的窗控位。 -->
-    <div v-if="isWindowed" class="titlebar app-titlebar flex h-10 shrink-0 select-none items-center gap-3 px-4">
+    <!-- 应用标题栏（两种模式都渲染）：窗口化=无边框窗的窗控；Web=浏览器内
+         诚实映射（全屏/收起徽章/关闭回退）。双击标题区最大化或切全屏。 -->
+    <div class="titlebar app-titlebar flex h-10 shrink-0 select-none items-center gap-3 px-4">
       <div class="titlebar-logo grid size-5 place-items-center">
         <BookOpen :size="13" />
       </div>
@@ -1837,7 +1859,7 @@ watch([compressionRecord, round], () => {
       </button>
     </div>
 
-    <header v-if="!isWindowed" class="app-header relative z-10 flex h-14 items-center border-b border-(--fe-border) bg-(--fe-panel) px-3 sm:px-4">
+    <header class="app-header relative z-10 flex h-14 items-center border-b border-(--fe-border) bg-(--fe-panel) px-3 sm:px-4">
       <div class="flex min-w-0 items-center gap-2.5">
         <div class="seal-logo grid size-8 shrink-0 place-items-center rounded-full text-(--fe-accent-ink)">
           <BookOpen :size="17" />
@@ -3192,6 +3214,22 @@ watch([compressionRecord, round], () => {
       :connection="modelConnection"
       @close="exportOpen = false"
     />
+
+    <!-- Web 版「最小化」收起态：全屏收起，只留一枚居中徽章，点击还原 -->
+    <Transition name="pop">
+      <div v-if="webMinimized" class="fixed inset-0 z-50 grid place-items-center bg-(--fe-bg)">
+        <button
+          type="button"
+          class="flex items-center gap-2.5 rounded-full border border-(--fe-border) bg-(--fe-panel) px-5 py-2.5 shadow-lg transition-transform hover:scale-105"
+          title="还原窗口"
+          @click="webMinimized = false"
+        >
+          <BookOpen :size="15" class="text-(--fe-accent)" />
+          <span class="text-xs font-bold">书中织梦 · Novelborne</span>
+          <span class="text-[10px] text-(--fe-ink-3)">已收起 · 点击还原</span>
+        </button>
+      </div>
+    </Transition>
   </div>
 </template>
 

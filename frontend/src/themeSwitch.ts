@@ -14,6 +14,10 @@ export const THEME_IDS = [
   "cthulhu",
   "sweetheart",
   "fortune",
+  "carbon",
+  "zitan",
+  "huanghuali",
+  "titanium",
 ] as const;
 
 export type ThemeId = (typeof THEME_IDS)[number] | "classic";
@@ -62,6 +66,22 @@ export const THEME_META: Record<ThemeId, { label: string; swatch: string }> = {
   fortune: {
     label: "马上发财",
     swatch: "linear-gradient(135deg, #faf1da 0%, #c02b1a 50%, #b8860b 100%)",
+  },
+  carbon: {
+    label: "碳纤维",
+    swatch: "linear-gradient(135deg, #111316 0%, #2e343b 55%, #d93636 100%)",
+  },
+  zitan: {
+    label: "紫檀木",
+    swatch: "linear-gradient(135deg, #1d1410 0%, #4a3325 55%, #d9a441 100%)",
+  },
+  huanghuali: {
+    label: "黄花梨",
+    swatch: "linear-gradient(135deg, #f2e5cd 0%, #c9a468 55%, #7a4a1d 100%)",
+  },
+  titanium: {
+    label: "钛合金",
+    swatch: "linear-gradient(135deg, #dfe3e7 0%, #9aa4ac 55%, #3d6ea5 100%)",
   },
   classic: {
     label: "经典牛皮纸",
