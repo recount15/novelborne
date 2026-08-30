@@ -565,7 +565,12 @@ def _start_background_distillation(state, client, model, sync_first=False):
             _record_distill_failure(state, sync_error, current_chapter)
         return
     def model_fn(prompt):
-        return _distill_model(client, model, prompt, state.get("request_kwargs"), state.get("provider", "deepseek"))
+        # 后台蒸馏不持会话锁，用 300s 超时：主流式生成与蒸馏共用同一 Key 时
+        # 上游排队是常态，120s 会把排队中的请求掐死导致蒸馏停滞。
+        return engine.distill.distill_model(
+            client, model, prompt, state.get("request_kwargs"),
+            state.get("provider", "deepseek"),
+            timeout=engine.distill.BACKGROUND_SUBCALL_TIMEOUT)
     distiller = engine.anchor_distiller.AnchorDistiller(book_dir, model_fn)
     sync_error = None
     current_chapter = state.get("current_chapter", 1)

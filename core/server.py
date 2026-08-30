@@ -1738,6 +1738,19 @@ def distill_progress(session_id: str) -> dict[str, Any]:
     done_count = max(done_count, done_on_disk)
     running = any(v.get("status") == "in_progress" for v in per_chapter.values())
     failed = [int(k) for k, v in per_chapter.items() if v.get("status") == "failed"]
+    # 惰性自愈：重试封顶的失败章原本要等「下一回合」的 enqueue 才复活，
+    # 但回合可能被质检/门禁循环长时间占住（实测 agent 模式下蒸馏因此停滞）。
+    # 前端会轮询本端点，借轮询触发重入队；60s 冷却避免高频轰炸上游。
+    if distiller is not None and failed and not running:
+        now = time.monotonic()
+        last = getattr(distiller, "_requeue_poll_at", 0.0)
+        if now - last >= 60.0:
+            try:
+                distiller._requeue_poll_at = now
+                distiller.enqueue(current, lookahead=6, lookback=-1, total=total or None)
+                distiller.start()
+            except Exception:  # noqa: BLE001  自愈失败不影响进度汇报
+                pass
     if running:
         summary = f"后台蒸馏中 · 已完成 {done_count} 章"
     elif failed and not chapters:

@@ -9,16 +9,22 @@ from __future__ import annotations
 from typing import Any
 
 
-#: 内部子调用的单请求读超时（秒）。客户端级默认 300s 对子调用过长：
-#: 这些调用多在持会话锁状态下发生（托管选线、任务/碎锚结算、宿敌回合、
-#: 压缩、蒸馏），慢响应会让其他端点一直 409；且降级阶梯会把等待放大数倍。
+#: 内部子调用的单请求读超时（秒）。客户端级默认 300s 对**持锁**子调用过长：
+#: 托管选线、任务/碎锚结算、宿敌回合、压缩、自检都在持会话锁状态下发生，
+#: 慢响应会让其他端点一直 409；且降级阶梯会把等待放大数倍。
 #: 调用方显式传 timeout 的（quest_offer 120s、break_anchor_offer 30s）不受影响。
 DEFAULT_SUBCALL_TIMEOUT = 120.0
+
+#: 后台线程子调用超时（秒）：锚点蒸馏等**不持会话锁**的通道用。主流式生成
+#: 与后台蒸馏共用同一 Key 时上游会排队，120s 会把排队中的合法请求掐死
+#: （实测：agent 模式长回合期间蒸馏连续超时→重试封顶→停滞）；300s 与
+#: openai 客户端级读超时一致，即恢复本通道 2026-08-30 之前的行为。
+BACKGROUND_SUBCALL_TIMEOUT = 300.0
 
 
 def distill_model(client, model: str, prompt: str,
                   extra_kwargs: dict | None = None,
-                  provider: str = "deepseek") -> str:
+                  provider: str = "deepseek", timeout: float | None = None) -> str:
     """兼容性阶梯调用：完整参数 → 剥思考参数 → 剥采样参数 → 流式累积。
 
     别家服务的 OpenAI 兼容层参数支持差异很大，按四级降级重试直到某级成功；
@@ -40,7 +46,9 @@ def distill_model(client, model: str, prompt: str,
         thinking["thinking"] = {"type": "enabled"}
     # 输出预算：九字段锚点 JSON 等结构化输出 2000 tokens 偏紧（思考型模型
     # 还会占用思考链），放宽到 4000；空正文仍会降级到无预算的裸参数级。
-    timeout = thinking.get("timeout", DEFAULT_SUBCALL_TIMEOUT)
+    # 超时优先级：显式形参 > extra_kwargs 携带 > 持锁默认 120s。
+    if timeout is None:
+        timeout = thinking.get("timeout", DEFAULT_SUBCALL_TIMEOUT)
     thinking.pop("timeout", None)
     full = dict(model=model, messages=[{"role": "user", "content": prompt}],
                 temperature=0.1, max_tokens=4000)
