@@ -1,100 +1,151 @@
-# 接手手册（HANDBOOK）
+# Novelborne 接手与发布手册
 
-> 目标读者：接手本项目的开发者。按顺序读完即可独立运行、测试、发布。
+本文面向维护者，描述 v2.0.1 的运行、架构、测试与发布纪律。用户说明见根目录 `README.md`。
 
-## 1. 环境与运行
+## 1. 环境与启动
 
-- 依赖：Python 3.10+（`pip install -r requirements.txt`）、Node 18+（仅构建前端）
-- 源码运行：`python run_app.py`（自动打开 http://127.0.0.1:8000）
-- 前端开发热更：`cd frontend && npm install && npm run dev`（:5173 代理 /api 到 :8000）
-- 多实例：`python run_app.py --port 8010 --var var/cluster/a --no-browser`
-- 模型服务：内置 DeepSeek/通义/Kimi/智谱/OpenAI 及自定义 OpenAI 兼容预设，
-  页面左栏填 Key 即用；**各家平等，代码不偏向任何提供商**。
-- Windows 免安装版：`build\build_windows.bat` 产出 `dist\FateEngine\`（PyInstaller onedir，含 assets + 前端 dist；运行数据在 exe 同级 var/ 自动创建）。
-- Windows 窗口版：`build\build_windows_windowed.bat` 产出 `dist\FateEngineWindowed\`，pywebview 自定义标题栏与三键只在此壳生效。
-- 手机网页：局域网二维码打开移动网页壳；公网使用必须配置 HTTPS 与鉴权。
-- Android：`build\build_android.bat` 在 `frontend/` 安装 Capacitor 依赖、以 `VITE_PLATFORM=android` 构建并生成 `frontend/android/`。需要 JDK 17+、Android SDK 和 Android Studio；远端 API 必须是 HTTPS 且有鉴权，APK 不内嵌 Python 服务。
+- Python 3.10+
+- Node.js 18+
+- Windows 构建：PyInstaller、pywebview、pythonnet、clr-loader
+- Android 构建：JDK 17+、Android SDK、Android Studio；没有完整环境时不得发布 APK
 
-## 2. 回归闸门（改代码后必须全绿才算完）
+```bash
+pip install -r requirements.txt
+cd frontend
+npm install
+npm run build
+cd ..
+python run_app.py
+```
 
-三件套脚本（在 `var/` 下，git 忽略；key 走对话传递不落盘，用前自行填入）：
+默认监听 `0.0.0.0:8000`，本机浏览器打开 `127.0.0.1:8000`。多实例必须分别指定端口和运行数据目录：
 
-| 脚本 | 覆盖 | 通过线 |
-|---|---|---|
-| `var/gaptest_api.py` | 47 端点中的只读面 + 静态页 + 错误优雅性 | 15/15 |
-| `var/fulltest_glm.py` | 基础模式：开局→穿越表→回合→问答→存档 | 14/14 |
-| `var/fulltest_enhanced.py` | 强化模式：上传→切章→四槽穿越→蒸馏→确认→回合 | 8/8 |
-| `var/gaptest_c.py` | 端点盲区：角色库 CRUD 全周期、任务三端点、金手指推荐、作弊码双码、gf-designer 规格存取、models/fetch、并发 409 | 25/25 |
-| `var/gaptest_d.py` | 碎锚状态机全路径（成功/超时失败/冷却复活/旧档退款/shatter_now，引擎层直驱零模型）+ playtest 三端点实机 | 22/22 |
-| `var/repro_agent_stall.py` | 故障复现长跑：强化+类Agent+丰富度拉满的多回合健康（选项产出/蒸馏推进/ask 锁语义） | 12/12 |
+```bash
+python run_app.py --port 8010 --var var/cluster/a --no-browser
+```
 
-要点：
-- NDJSON 流的 `delta` 是**增量块**，必须累加拼接（脚本已内置）
-- 强化模式两步确认：聊天框发"确认金手指：X"→"确认开局"
-- 机械门禁与弹性门限（2026-08-30 起）：定向重写一稿后仍不过时**不再回滚**，
-  由 `engine/elastic_gate.py` 代码层修复（剥残留代码块 + 补足选项数）后放行，
-  提示为"弹性放行（…已代码修复形式问题后放行）"——合法引擎行为，不是 bug；
-  真错误只认"模型服务失败/调用失败"
-- 测试会向作品库蒸馏 W02 与测试角色卡，脚本尾部自动清理；若残留，
-  `git checkout assets/rules/work_library.md` + 清 `assets/data/characters/user/`
-- 闸门跑前**重启 8000 实例**载入新代码
+## 2. 强化模式回合链
 
-## 3. 四端中台与实机验收
+```text
+机制上下文
+→ 导演蓝图
+→ 段落生成 ∥ 选项生成
+→ 空级批改
+→ 失败空定向重填
+→ 确定性兜底
+→ 代码组装
+→ 全局答卷整合润色
+→ 角色/任务/碎锚/宿敌/收束结算
+→ 持久化
+```
 
-- 前端固定接线入口：`frontend/src/kernel/apiClient.ts` 统一 base URL、错误、JSON、上传和 NDJSON；`frontend/src/kernel/platform.ts` 统一窗口、存储、外部打开和平台标识。
-- 四端壳层：`frontend/src/shells/WebShell.vue`、`WindowsShell.vue`、`MobileWebShell.vue`、`AndroidShell.vue`。共享工作台和主题，壳层独立负责布局与平台能力；Web 不渲染窗控，Windows 才调用 pywebview bridge。
-- 后端模型横切接线：`core/services/model_gateway.py` 统一 provider、凭据优先级、客户端和模型调用；API Key 仍只在内存中使用。
-- 阅读器实机路径：打开羽毛笔 → 书库 → 章节 → 阅读设置 → 下一章/上一章 → 关闭或 Esc。已验证桌面正文加载、手机 390×844 无横向溢出、章节标题不重复。
-- Android 当前是 Capacitor 构建骨架，不宣称已生成 APK；安装依赖后执行 `build\build_android.bat`，必须通过 `CAP_SERVER_URL` 指向 HTTPS 远端 API。
-- 2026-08-30 验证：`npm run build`、`VITE_PLATFORM=android npm run build`、Python `compileall`、`git diff --check` 通过；浏览器真实页面检查通过。端口 8000 已有实例时，使用独立 Vite 端口验证 UI。
-- 第二阶段平台验收：Web 壳实测完整主题选择器可切换；mobile-web 在 844px 横屏仍保持单面板与底部导航；Android 壳在 390px 实测无横向溢出、隐藏扫码入口且可打开原著阅读器。
-- 会话接续：LAN 二维码携带当前 UUID session，扫码端优先从 `?session=` 恢复；焦点/可见性恢复时使用 `/api/sessions/{id}/state` 同步，流式忙碌时不覆盖本端 state。
-- Token 口径：`tok_measured_*` 与 `tok_estimated_*` 分开累计；UI 以实测/含估算/估算显示，`prompt_tokens_details.cached_tokens` 也纳入缓存统计。
-- 私有恢复：`tools/private_recovery.py` 只读取本机 sidecar，不包含任何恢复数据；缺少 manifest 的旧 ZIP 仅允许 inspect。公开发布前运行 `python tools/audit_release.py <发布目录>`，确认没有 var、数据库、日志、私有恢复包或 IP vault。
+规则：
 
-## 4. 发布流程（GitHub + Gitee）
+- 质量检测落在具体生成空，不做整篇语义门禁；
+- 整回合只检查 JSON、代码围栏、系统标记、隐藏日志和选项块等格式污染；
+- 全局润色采用事实锁定、接缝整合、文学润色、输出整理四步，不设质量门；
+- 润色失败、空返回或格式污染时保留初步组装稿；
+- API 并发硬上限 10，限流自动退避，达不到目标并发时排队；
+- 普通模式继续使用 legacy 路径。
 
-1. 闸门全绿 + `git status` 干净 → commit
-2. 重建 exe（见上）→ 冒烟：exe 起独立端口 → health → 一次基础开局
-3. 打包 zip（121MB）+ 7z 极限压缩（97.9MB，Gitee 附件限 100MB）
-4. GitHub：release（tag vX.Y.Z）上传双包；Gitee：同名仓库 release 传 7z
-5. 仓库可见性、凭据管理：token 只用于推送/建仓，用后建议吊销
-6. **版权红线**：`ip_vault/`、`var/`、恢复包 zip 绝不入库（.gitignore 已挡，
-   发布前 `git status` 复核）
+## 3. 目录与依赖方向
 
-## 4. 已知问题与设计备忘
+```text
+server/app/services → engine → assets
+```
 
-- ~~quick_distill 无独立超时~~ **已解决（2026-08-30）**：`engine/distill.py`
-  的 `distill_model` 统一 `DEFAULT_SUBCALL_TIMEOUT=120s`，覆盖全部内部子调用
-  （蒸馏/托管/任务与碎锚结算/宿敌回合/压缩）；调用方显式传 timeout 的沿用其值
-- **glm-5.2 合规性**：正文超体量 ~10% 且未收锚时机械门禁会拒绝（引擎按
-  设计工作）；提示词对体量/锚点的引导可继续调优
-- **弹性门限（2026-08-30）**：门禁两稿（原稿+定向重写）仍不过时不再回滚
-  整回合——代码层修复形式问题后放行（`engine/elastic_gate.py`）：
-  剥离模型残留的代码围栏/JSON/系统自检段；解析选项不足 6 个时从正文
-  行动句与中性模板确定性合成补足（替代原 option_repair 模型补发，
-  省一次调用）。放行原因记入 `state.elastic_repair` 与 scene_gate_reason，
-  前端/存档可查。「⚠️ 本回合未通过机械门禁」的整轮回滚提示自此不再出现
-- **锚点蒸馏弹性兜底（2026-08-30）**：单章蒸馏重试耗尽仍不过校验时，
-  从原文确定性合成「原文摘录式锚点」落盘（quotes 逐字取自原文、九字段
-  全过 validate_anchor 严校验），主线推进不再因模型输出病态而空缺锚点；
-  模型正常产出时路径不变
-- **sessions 无淘汰**：/api/saves/load 每次新建会话，内存只增不减——
-  Phase 3 服务层拆分时补 TTL 淘汰
-- **流式锁语义**：生成器 finally 释放会话锁，客户端不读完流锁不释放——
-  Phase 3 重构项
-- **性别栏杆已破除**（2026-08-30）：穿越不受性别限制，叙事以附身角色
-  生理性别为准；gender_guard.py 现为"穿越保障"，旧探测函数已下线
-- **金手指设计器规格目录**：assets/data/golden_fingers/user（曾指向
-  core/data 孤儿路径致规格不可见，已修——同类路径问题见 Phase 4 paths 统一）
+- `core/server.py`：HTTP、LAN/QR、会话、静态托管；
+- `core/app.py`：开局与回合事务状态机；
+- `core/services/`：中台编排门面；
+- `core/engine/`：纯机制和校验；
+- `assets/`：公开规则、提示词、数据和剧情丰度模板；
+- `var/`：运行数据，绝不进入仓库/Release；
+- `tests/`：单元与集成回归；
+- `tools/`：试玩和审计工具。
 
-## 5. 文档地图与规范
+除已声明惰性例外外，engine 不得反向 import app/server。
 
-见《DOC_STANDARDS.md》：什么文档放哪、何时更新、怎么写。
+## 4. 发布测试门禁
 
-## 6. 接手第一周建议路线
+```bash
+python -m unittest discover -s . -p "test_*.py"
+cd frontend
+npm run build
+cd ..
+python tools/run_strengthened_playtest.py
+set FATE_PLAYTEST_LEGACY=1
+python tools/run_strengthened_playtest.py
+```
 
-1. 跑通环境 + 三件套闸门（熟悉对外行为）
-2. 读 ARCHITECTURE.md 对照代码走一遍 on_start/on_send
-3. 小改动练手：跑闸门→commit 流程走一遍
-4. 接续重构 3d/e（蓝图在 var/refactor/DESIGN.md，每阶段闸门纪律不变）
+重点测试文件：
+
+- `tests/test_lan.py`：LAN 地址、二维码、session 原样接续；
+- `tests/test_papers.py`：六档剧情丰度和 frozen 资产路径；
+- `tests/test_turn_pipeline.py`：蓝图、并发、重填、格式回退、4+2 选项；
+- `tests/test_answer_polish_service.py`：全局润色安全回退；
+- `tests/test_character*.py`：角色证据 patch；
+- `tests/test_directives*.py`：三愿/永久增补铁律账本；
+- `tests/test_opening*.py`：并行开局蒸馏和角色质量门。
+
+真实模型测试必须：
+
+- Key 只通过环境变量传入；
+- 原著只从用户本地路径读取；
+- 临时作品库、角色库、锚点和报告全部放系统临时目录；
+- 输出只保留耗时、字数、重填率、润色率等脱敏指标；
+- 完成后删除脚本、报告、缓存和所有版权文本副本。
+
+## 5. LAN 与二维码验收
+
+源码和两个 Windows 包都必须验证：
+
+1. 监听 `0.0.0.0`；
+2. `/api/health` 返回当前版本；
+3. `/api/lan-info?session_id=<hex>` 保留原始 session ID；
+4. `urls` 包含候选网卡；
+5. `/api/lan-qrcode.png?session_id=...&address=...` 返回 PNG；
+6. 通过实际私网 IP 请求 `/api/health` 成功；
+7. 扫码后的 `/api/sessions/{id}/state` 能恢复同一会话。
+
+多网卡时前端允许切换地址。若同一 Wi-Fi 仍不可达，检查 Windows 防火墙。
+
+## 6. Windows 构建和实机冒烟
+
+```bat
+build\build_windows.bat
+build\build_windows_windowed.bat
+```
+
+构建脚本必须检查 PyInstaller 退出码和最终 EXE 是否存在。发布整个目录：
+
+- `dist/FateEngine/`
+- `dist/FateEngineWindowed/`
+
+每个产物都要独立启动并验证 health、bootstrap、首页、LAN info、二维码和 session；窗口版还需确认 pywebview 主窗口和 Web 内容实际创建。
+
+## 7. 发布清理
+
+不得包含：
+
+- `var/`、数据库、日志、会话、上传原著；
+- `frontend/node_modules/`、`frontend/dist/`；
+- `dist/`、`build/pkg*`（源码仓库）；
+- `.env`、API Key、GitHub/Gitee Token；
+- 真人测试脚本和报告；
+- 私有恢复包、IP vault；
+- 第三方版权原著或摘录。
+
+公开 LICENSE 必须是 BSD 3-Clause，版权持有人不得包含个人邮箱等隐私。
+
+## 8. GitHub + Gitee 发布
+
+1. 源码测试和前端构建通过；
+2. 两个 Windows 包重新构建并独立验证；
+3. 生成源码 ZIP、两个 Windows ZIP 和 SHA256SUMS；
+4. 初始化/更新 Git 仓库并提交公开源码；
+5. 创建、签出并推送 `v2.0.1` tag；
+6. GitHub/Gitee 创建同名 Release，上传同一组已验证资产；
+7. 上传后检查附件大小与 SHA256；
+8. 发布后轮换或吊销个人访问令牌。
+
+仓库简介、topics 和 Release 摘要见 `docs/REPOSITORY_METADATA_v2.0.1.md`。

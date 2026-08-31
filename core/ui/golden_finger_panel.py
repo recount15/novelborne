@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-import gradio as gr
+from core.ui import gradio_compat as gr
 
 from core import fate_engine as fe
 from core import engine

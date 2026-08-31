@@ -19,6 +19,15 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
+from pathlib import Path
+
+
+def _default_var_dir() -> Path:
+    """源码默认项目根 var；PyInstaller 默认 EXE 同级 var（可写且可迁移）。"""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent / "var"
+    return Path(__file__).resolve().parent / "var"
 
 
 def _parse_args() -> argparse.Namespace:
@@ -59,9 +68,12 @@ def _print_lan_banner(port: int) -> None:
 
 def main() -> None:
     args = _parse_args()
-    # --var 必须在导入 core 之前写入环境变量：WRITABLE_DIR 在 import 时固化。
+    # FATE_VAR_DIR 必须在导入 core 之前显式确定：character_db 在 import 时固化
+    # 数据库路径。打包版若不设置会误写 _internal/var（只读捆绑目录）。
     if args.var:
-        os.environ["FATE_VAR_DIR"] = args.var
+        os.environ["FATE_VAR_DIR"] = str(Path(args.var).resolve())
+    elif not os.getenv("FATE_VAR_DIR"):
+        os.environ["FATE_VAR_DIR"] = str(_default_var_dir())
 
     host = args.host or os.getenv("FATE_API_HOST", "0.0.0.0")
     port = args.port or int(os.getenv("FATE_API_PORT", "8000"))

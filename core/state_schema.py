@@ -39,6 +39,12 @@ TRANSACTIONAL_KEYS: frozenset[str] = frozenset({
     "quest", "convergence_state",
     # 宿敌私密容器与传闻跨回合传递
     "nemesis_private", "nemesis_rumor",
+    # 重构 M4：回合内可变、异常需回滚的派生键（此前漏加导致回滚残缺——
+    # round 回滚但 scene_validation/options/agent_meta 残留上一回合结果）。
+    "scene_validation", "scene_gate", "scene_gate_reason", "scene_regen",
+    "elastic_repair", "options", "options_source", "agent_meta",
+    "active_summaries", "anchor_timeline", "directive_meta",
+    "paper_key", "paper_tier", "paper_family", "compose_mode",
 })
 
 

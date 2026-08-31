@@ -22,6 +22,14 @@ import socket
 import sys
 import threading
 import time
+from pathlib import Path
+
+
+def _default_var_dir() -> Path:
+    """源码默认项目根 var；PyInstaller 默认 EXE 同级 var。"""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent / "var"
+    return Path(__file__).resolve().parent / "var"
 
 
 def _free_port(default: int) -> int:
@@ -184,8 +192,12 @@ def main() -> None:
             print(f"私有恢复失败：{exc}", file=sys.stderr)
             raise SystemExit(2)
 
+    # 必须在导入 core.server 之前确定运行数据目录；否则 character_db 会把
+    # 默认 SQLite 写进 PyInstaller 的 _internal/var。
     if args.var:
-        os.environ["FATE_VAR_DIR"] = args.var
+        os.environ["FATE_VAR_DIR"] = str(Path(args.var).resolve())
+    elif not os.getenv("FATE_VAR_DIR"):
+        os.environ["FATE_VAR_DIR"] = str(_default_var_dir())
 
     port = args.port or _free_port(8300)
     host = "127.0.0.1" if args.no_lan else "0.0.0.0"

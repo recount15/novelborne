@@ -13,30 +13,20 @@ hiddenimports = ['core', 'core.server', 'core.app', 'core.fate_engine']
 # 必须用 collect_submodules 全量收编，否则运行到对应机制才报缺模块。
 for _pkg in ('core.engine', 'core.api', 'core.ui', 'core.memory', 'core.lore', 'core.prompts'):
     hiddenimports += collect_submodules(_pkg)
-tmp_ret = collect_all('gradio')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('gradio_client')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('openai')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('fastapi')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('uvicorn')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('multipart')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('httpx')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('pydantic')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('safehttpx')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('groovy')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('qrcode')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('PIL')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+# FastAPI + Vue production runtime. Gradio is a source-only optional legacy UI;
+# do not collect it or its heavy optional ecosystem into Release builds.
+for _pkg in ('openai', 'fastapi', 'uvicorn', 'multipart', 'httpx', 'pydantic',
+             'qrcode', 'PIL'):
+    tmp_ret = collect_all(_pkg)
+    datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+
+# Explicitly exclude unused optional ML/data stacks that PyInstaller hooks may
+# discover from the developer environment. The application imports none of them.
+HEAVY_EXCLUDES = [
+    'gradio', 'gradio_client', 'safehttpx', 'groovy',
+    'torch', 'torchvision', 'torchaudio', 'transformers', 'tensorflow',
+    'cv2', 'pandas', 'scipy', 'sklearn', 'matplotlib', 'plotly',
+]
 
 
 a = Analysis(
@@ -48,7 +38,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=HEAVY_EXCLUDES,
     noarchive=False,
     optimize=0,
 )

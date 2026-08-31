@@ -20,8 +20,7 @@ from typing import Any
 
 from core import engine
 from core import fate_engine as fe
-from core.engine.distill import distill_model
-from core.services import registries
+from core.services import directives_service
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -138,13 +137,7 @@ def handle_ask(state: dict[str, Any], question: str,
         }
     if engine.cheat_code.is_relay_confirm_pending(state):
         if engine.cheat_code.is_confirm_text(question):
-            engine.cheat_code.relay_activate(state)
-            _shatter = engine.break_anchor.shatter_now(state)
-            try:
-                registries.distillers.stop_all()
-            except Exception:  # noqa: BLE001  蒸馏停止失败不阻断通路激活
-                pass
-            state["distill_status"] = "锚点已全部失效，后续蒸馏停止"
+            activation = directives_service.activate_relay(state)
             _persist_cheat_state()
             return {
                 "answer": (
@@ -159,7 +152,7 @@ def handle_ask(state: dict[str, Any], question: str,
                     "积势/碎锚等不可改）。"
                 ),
                 "relay_activated": True,
-                "anchors_shattered_from": _shatter.get("anchors_shattered_from", 0),
+                "anchors_shattered_from": activation.get("anchors_shattered_from", 0),
             }
         if engine.cheat_code.is_cancel_text(question):
             engine.cheat_code.relay_cancel_confirm(state)
@@ -187,36 +180,22 @@ def handle_ask(state: dict[str, Any], question: str,
             "wish_armed": True, "wish_remaining": remaining,
         }
     if engine.cheat_code.is_armed(state):
+        # M5：三愿改走结构化铁律账本。原子性由 directives_service 保证：
+        # 机制护栏/登记（或兜底登记）成功后才 consume；任何客户端错误都不扣费。
         try:
-            clean, rejected = engine.cheat_code.sanitize_wish(question)
-        except ValueError as exc:
-            # 空/超长愿望：拒绝且不消耗次数。
+            result = directives_service.grant_wish(
+                state, question, client=_client(), model=model,
+                request_kwargs=state.get("request_kwargs"), provider=provider,
+                api_key=api_key)
+        except directives_service.DirectiveClientError as exc:
             raise AskClientError(str(exc)) from exc
-        if not clean:
-            raise AskClientError(
-                "愿望在剥离机制诉求后为空——铁律只能修改世界观与剧情，"
-                "不能修改游戏机制。")
-        # 三愿原子性：先调模型生成实现文本，成功才扣次数——失败/空返回
-        # 一律 502 且计数不变、武装保持，玩家可原样重试。
-        wish_prompt = engine.cheat_code.build_wish_prompt(clean)
-        try:
-            granted = distill_model(
-                _client(), model, wish_prompt, state.get("request_kwargs"), provider)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 未预期上游错误：计数保持（门面扣费在最后）
             raise AskUpstreamError(f"愿望实现失败：{exc}") from exc
-        granted = str(granted or "").strip()
+        granted = str(result.get("granted") or "").strip()
         if not granted:
-            raise AskUpstreamError(
-                "愿望实现失败：模型返回为空。本次不消耗次数，请重试。")
-        if api_key and api_key in granted:
-            granted = granted.replace(api_key, "***")
-        # 原子扣费点：生成成功才消耗次数（consume 同时解除武装），立即落盘。
-        engine.cheat_code.consume(state)
-        _persist_cheat_state()
-        remaining = engine.cheat_code.remaining_wishes(state)
-        # 代码保证实现：愿望与实现文本落进 state，每回合注入为铁律。
-        state.setdefault("wish_facts", []).append(
-            {"wish": clean, "granted": granted, "round": state.get("round", 0)})
+            raise AskUpstreamError("愿望实现失败：模型与兜底均未产出。本次不消耗次数，请重试。")
+        remaining = int(result.get("remaining") or 0)
+        rejected = list(result.get("rejected") or [])
         history = state.setdefault("history", [])
         if isinstance(history, list):
             history.append({"role": "assistant", "content": "[外部设定铁律] " + granted})
@@ -229,31 +208,16 @@ def handle_ask(state: dict[str, Any], question: str,
     # 永久增补通路：激活后问答框不再是规则答疑，而是「玩家增补铁律」通道。
     if engine.cheat_code.is_relay_active(state):
         try:
-            clean, rejected = engine.cheat_code.sanitize_wish(question)
-        except ValueError as exc:
+            result = directives_service.append_relay_fact(
+                state, question, client=_client(), model=model,
+                request_kwargs=state.get("request_kwargs"), provider=provider,
+                api_key=api_key)
+        except directives_service.DirectiveClientError as exc:
             raise AskClientError(str(exc)) from exc
-        if not clean:
-            raise AskClientError(
-                "增补在剥离机制诉求后为空——增补只能修改世界观与剧情，"
-                "不能修改游戏机制。")
-        relay_prompt = (
-            "【玩家增补铁律】你是《书中行》命运引擎的设定执行者。玩家通过永久通路"
-            "注入增补。把玩家的输入改写为一条简洁、自洽、可直接注入后续每一回合的"
-            "「既成事实」设定（一句话到三句话），不要解释过程。\n"
-            "增补性质：修改世界观与剧情；无代价；优先级高于一切剧情设定、低于"
-            "游戏机制；不得被剧情否定或回收。\n\n"
-            f"玩家增补：{clean}"
-        )
-        try:
-            fact_text = distill_model(
-                _client(), model, relay_prompt, state.get("request_kwargs"), provider)
         except Exception as exc:  # noqa: BLE001
             raise AskUpstreamError(f"增补生成失败：{exc}") from exc
-        fact_text = str(fact_text or "").strip()
-        if api_key and api_key in fact_text:
-            fact_text = fact_text.replace(api_key, "***")
-        engine.cheat_code.record_relay_fact(
-            state, {"fact": clean, "text": fact_text, "round": state.get("round", 0)})
+        fact_text = str(result.get("text") or "").strip()
+        rejected = list(result.get("rejected") or [])
         _persist_cheat_state()
         notice = f"[增补铁律已生效｜累计 {len(engine.cheat_code.relay_facts(state))} 条]"
         if rejected:
@@ -273,13 +237,15 @@ def handle_ask(state: dict[str, Any], question: str,
     ]
     kwargs = dict(model=model, messages=messages, temperature=0.2, max_tokens=800)
     # 问答不传思考参数：思考链会吃光 800 的 max_tokens 导致回答为空。
-    try:
-        response = _client().chat.completions.create(**kwargs)
-    except Exception:
-        # 兼容不接受温度或 max_tokens 的 OpenAI 兼容服务。
-        kwargs.pop("temperature", None)
-        kwargs.pop("max_tokens", None)
-        response = _client().chat.completions.create(**kwargs)
+    # 问答同样纳入全局并发额度（M5 中台收口）：低并发供应商只排队不报错。
+    with engine.parallel.slot(engine.parallel.PRIORITY_TURN):
+        try:
+            response = _client().chat.completions.create(**kwargs)
+        except Exception:
+            # 兼容不接受温度或 max_tokens 的 OpenAI 兼容服务。
+            kwargs.pop("temperature", None)
+            kwargs.pop("max_tokens", None)
+            response = _client().chat.completions.create(**kwargs)
     answer = ""
     if getattr(response, "choices", None):
         answer = str(response.choices[0].message.content or "").strip()

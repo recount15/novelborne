@@ -53,6 +53,7 @@ export async function getBootstrap(): Promise<BootstrapData> {
 
 export interface LanInfo {
   addresses: string[]
+  urls?: Array<{ address: string; url: string }>
   port: number
   url: string | null
   session_id: string | null

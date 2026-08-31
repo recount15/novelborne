@@ -1,0 +1,59 @@
+{
+  "tier": 2,
+  "family": "small",
+  "stage": "climax",
+  "label": "简明",
+  "target_chars": 650,
+  "tolerance": 0.2,
+  "basic_mode": true,
+  "agent_required": false,
+  "agent_recommended": false,
+  "slots": [
+    "anchor_climax",
+    "character_interaction",
+    "golden_finger",
+    "ripple_cost",
+    "quest_progress",
+    "break_anchor_stage",
+    "directive_landing",
+    "cliffhanger"
+  ],
+  "segments": [
+    {
+      "role": "反应与展开",
+      "window": [
+        190,
+        290
+      ],
+      "slots": [
+        "character_interaction",
+        "golden_finger",
+        "ripple_cost"
+      ],
+      "notes": "承接玩家行动给出直接后果并展开冲突：在场角色点名互动并产生可观测回应，金手指按冷却与代价紧凑落地；本卷任一机制槽在无对应机制命中时，降为一句自然描写带过，不得硬凑；本章预算已入尾声，行文向收束收敛；必含词密度：偏低，核心槽各 1–2 句。"
+    },
+    {
+      "role": "落点与钩子",
+      "window": [
+        350,
+        510
+      ],
+      "slots": [
+        "anchor_climax",
+        "quest_progress",
+        "break_anchor_stage",
+        "directive_landing",
+        "cliffhanger"
+      ],
+      "notes": "本回合主线的落点段：收清代价与铁律兑现，留一个指向下回合可承接事件的具体悬念钩子；收束槽（本章预算尾声）：锚点必须 fulfilled 落地，事件、结果与因果三要素齐全；必含词密度：偏低，核心槽各 1–2 句。"
+    }
+  ],
+  "options": {
+    "count": 6,
+    "factor_split": {
+      "golden_finger": 4,
+      "persona": 2
+    },
+    "preview": true
+  }
+}

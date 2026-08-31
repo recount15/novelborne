@@ -662,9 +662,6 @@ def truncate_partial_options(reply):
     return txt[:cut if cut > 0 else first.start()].rstrip()
 
 
-OPTION_REPAIR_MESSAGE = prompts.load("option_repair.md")
-
-
 # ---------- 运行日志 / 十回合评价 / 历史压缩（代码级保证） ----------
 
 LOG_RE = re.compile(r"<<<LOG>>>(.*?)<<<END>>>", re.S)
@@ -815,14 +812,3 @@ def stream_reply_with_retry(client, model, system_prompt, history, usage_box=Non
         except _ConnError:
             if attempt >= max(0, int(retries)):
                 raise
-
-
-def extract_progress(reply):
-    """从回合日志段解析剧情进度百分比（0–100）；没有则返回 None。"""
-    m = LOG_RE.search(reply or "")
-    if not m:
-        return None
-    p = re.search(r"进度\s*[:：]\s*(\d{1,3})", m.group(1))
-    if not p:
-        return None
-    return max(0, min(100, int(p.group(1))))

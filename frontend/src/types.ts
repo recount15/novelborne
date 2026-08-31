@@ -58,6 +58,18 @@ export interface StoryRichnessConfig {
   tiers: RichnessTier[]
 }
 
+/** 剧情丰度（重构 M4）：双族六档；普通模式仅 basic_ok 档可选，agent_required 档需联动类 Agent 开关。 */
+export interface PaperTierInfo {
+  tier: number
+  label: string
+  family: 'small' | 'large' | string
+  target_chars: number
+  segments: number
+  basic_ok: boolean
+  agent_required: boolean
+  agent_recommended: boolean
+}
+
 export interface BootstrapData {
   providers: ProviderOption[]
   works: string[]
@@ -71,6 +83,8 @@ export interface BootstrapData {
   golden_fingers: string[]
   golden_finger_library?: GoldenFingerLibraryItem[]
   story_richness?: StoryRichnessConfig
+  paper_tiers?: PaperTierInfo[]
+  paper_tier_default?: number
   story_agent_mode?: { label: string; note: string }
   counts?: { works: number; character_pools: number; personas: number; character_models: number }
 }
@@ -88,6 +102,8 @@ export interface ChatMessage {
 export interface GameOption {
   key: 'A' | 'B' | 'C' | 'D' | 'E' | 'F'
   text: string
+  preview?: string
+  factor?: '金手指' | '性格' | '剧情' | string
   factors?: string[]
 }
 
@@ -174,6 +190,7 @@ export interface StartPayload {
   difficulty: string
   convergence: string
   story_richness: number
+  paper_tier?: number
   story_agent_mode: boolean
   golden_finger: string | null
   golden_finger_proposal: Record<string, unknown>

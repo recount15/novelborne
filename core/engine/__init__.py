@@ -149,6 +149,10 @@ _SUBMODULES = (
     "skill_drift", "break_anchor", "name_collision", "gender_guard", "roster_relevance",
     "cheat_code",
     "distill", "elastic_gate",
+    # —— 重构新增（docs/REFACTOR_PLAN.md §10）：机制层模块，编排门面统一在 core/services ——
+    "parallel", "structured", "anchor_distiller", "opening_distill",
+    "papers", "turn_grader", "turn_composer", "turn_blueprint", "agent_refill",
+    "character_state_patch", "directives",
 )
 
 
@@ -168,7 +172,13 @@ def __getattr__(name: str) -> Any:
 
 
 def __dir__() -> list[str]:
-    return sorted(set(__all__) | set(_SUBMODULES))
+    # 只列出磁盘上真实存在的子模块：unittest discover 会遍历 __dir__ 触发
+    # 惰性导入，尚未落地的预登记名（重构分批交付）不能出现在这里。
+    from pathlib import Path
+
+    here = Path(__file__).parent
+    existing = [name for name in _SUBMODULES if (here / (name + ".py")).is_file()]
+    return sorted(set(__all__) | set(existing))
 
 
 __all__ = [

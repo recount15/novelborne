@@ -6,9 +6,12 @@ JSON（dict 或 JSON 字符串）。合格结果写入 ``anchors/NNNN.json``。
 """
 from __future__ import annotations
 
+import heapq
 import json
+import os
 import re
 import threading
+import time
 from pathlib import Path
 from queue import PriorityQueue
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
@@ -21,9 +24,24 @@ _TEXT_FIELDS = ("title", "summary", "world", "ripple")
 _LIST_FIELDS = ("events", "characters", "foreshadowing", "quotes")
 _POLLUTION = re.compile(r"(?:待填写|待补充|TODO|TBD|示例文本|placeholder|<[^>]+>)", re.I)
 
-# 失败自动重试：队列层退避重入队（_distill_one 内部另有 3 次连续尝试）。
+# 失败自动重试：队列层延迟重入队（_distill_one 内部另有 3 次连续尝试）。
 RETRY_LIMIT = 3
 RETRY_DELAYS = (2.0, 8.0, 20.0)
+
+#: 蒸馏 worker 池默认大小（重构 M0：章间并行；实际 API 并发仍受
+#: engine.parallel 动态控制器全局约束，worker 数只是并行度上限之一）。
+DEFAULT_WORKERS = 3
+MAX_WORKERS = 4
+
+
+def default_workers() -> int:
+    """worker 数：环境变量 FATE_DISTILL_WORKERS 优先，默认 3，钳制 1–4。"""
+    raw = str(os.environ.get("FATE_DISTILL_WORKERS") or "").strip()
+    try:
+        number = int(raw) if raw else DEFAULT_WORKERS
+    except ValueError:
+        number = DEFAULT_WORKERS
+    return max(1, min(MAX_WORKERS, number))
 
 Model = Callable[[str], Any]
 
@@ -289,21 +307,36 @@ def validate_anchor(anchor: Dict[str, Any], chapter_text: str, chapter_number: O
 
 
 class AnchorDistiller:
-    """单线程后台队列；可重复启动，已落盘章节自动跳过。"""
+    """多 worker 后台蒸馏池（重构 M0）；可重复启动，已落盘章节自动跳过。
 
-    def __init__(self, chapters_path: Union[str, Path], model: Optional[Model], output_dir: Optional[Union[str, Path]] = None):
+    队列元素为 ``(priority, seq, chapter, ready_at, force)``：
+    ``ready_at`` 用于失败章的**非阻塞**延迟重入队（worker 不再整队等待退避）；
+    ``force`` 标记「文件已存在也要重蒸馏」（救援兜底落盘后，后台模型版
+    稍后覆盖精化）。
+    """
+
+    def __init__(self, chapters_path: Union[str, Path], model: Optional[Model],
+                 output_dir: Optional[Union[str, Path]] = None,
+                 workers: Optional[int] = None):
         self.chapters_path = Path(chapters_path)
         self.output_dir = Path(output_dir) if output_dir else self._default_output()
         self.model = model
-        self._queue: PriorityQueue[Tuple[int, int]] = PriorityQueue()
+        self.workers = default_workers() if workers is None else max(1, int(workers))
+        # (priority, seq, chapter) -> (priority, seq, chapter, ready_at, force)
+        self._queue: PriorityQueue = PriorityQueue()
+        # (ready_at, priority, seq, chapter)：退避到期后由 _promote_delayed 搬回主队列。
+        self._delayed: List[Tuple[float, int, int, int]] = []
         self._queued = set()
         self._status: Dict[int, Dict[str, Any]] = {}
         self._lock = threading.RLock()
         self._stop = threading.Event()
         self._disabled = threading.Event()
-        self._thread: Optional[threading.Thread] = None
+        self._threads: List[threading.Thread] = []
         self._sequence = 0
         self._retry_counts: Dict[int, int] = {}
+        # 章级互斥：distill_now 与 worker 池并发蒸馏同一章时不双写、不重复调用。
+        self._chapter_locks: Dict[int, threading.Lock] = {}
+
 
     def _default_output(self) -> Path:
         return (self.chapters_path / "anchors") if (self.chapters_path / "chapters").is_dir() else self.chapters_path.parent / "anchors"
@@ -352,17 +385,47 @@ class AnchorDistiller:
                     continue
                 self._queued.add(number)
                 self._sequence += 1
-            self._queue.put((abs(number - current), self._sequence, number))
+            self._queue.put((abs(number - current), self._sequence, number, 0.0, False))
             self._set_status(number, "pending")
             added.append(number)
         return added
 
+    def _promote_delayed(self) -> None:
+        """把退避到期的章节搬回主队列（worker 空闲即抢，不再整队等待）。"""
+        now = time.monotonic()
+        with self._lock:
+            matured = []
+            while self._delayed and self._delayed[0][0] <= now:
+                _, priority, seq, number = heapq.heappop(self._delayed)
+                if (self.output_dir / ("%04d.json" % number)).is_file():
+                    self._set_status(number, "done")
+                    continue
+                self._queued.add(number)
+                matured.append((priority, seq, number, 0.0, False))
+            for item in matured:
+                self._queue.put(item)
+
+    def _chapter_guard(self, number: int) -> threading.Lock:
+        """章级互斥锁（按需创建）：同一章并发蒸馏串行化 + 落盘去重。"""
+        with self._lock:
+            lock = self._chapter_locks.get(number)
+            if lock is None:
+                lock = threading.Lock()
+                self._chapter_locks[number] = lock
+            return lock
+
     def start(self) -> "AnchorDistiller":
-        if self._thread and self._thread.is_alive():
+        live = [t for t in self._threads if t.is_alive()]
+        if len(live) >= self.workers:
+            self._threads = live
             return self
         self._stop.clear()
-        self._thread = threading.Thread(target=self._run, name="anchor-distiller", daemon=True)
-        self._thread.start()
+        for index in range(self.workers - len(live)):
+            thread = threading.Thread(target=self._run,
+                                      name="anchor-distiller-%d" % (len(live) + index + 1),
+                                      daemon=True)
+            self._threads.append(thread)
+            thread.start()
         return self
 
     def distill_now(self, number: int) -> Dict[str, Any]:
@@ -383,19 +446,70 @@ class AnchorDistiller:
         with self._lock:
             self._set_status(number, "in_progress")
         try:
-            self._distill_one(number)
+            origin = self._distill_one(number)
         except Exception as exc:  # noqa: BLE001
             with self._lock:
                 self._set_status(number, "failed", str(exc))
             raise
-        with self._lock:
-            self._set_status(number, "done")
+        self._mark_result(number, origin)
         return json.loads(target.read_text(encoding="utf-8"))
+
+    def _mark_result(self, number: int, origin: str) -> None:
+        """按蒸馏来源落状态；兜底版标记 origin 并入队 force 精化。"""
+        if origin == "fallback":
+            note = "模型蒸馏未通过校验，已用原文摘录锚点兜底，后台将自动精化"
+            with self._lock:
+                self._status[number] = {"chapter": number, "status": "done",
+                                        "origin": "fallback", "note": note}
+                self._sequence += 1
+                seq = self._sequence
+                self._queued.add(number)
+                self._queue.put((95, seq, number, 0.0, True))
+        elif origin == "model":
+            with self._lock:
+                self._set_status(number, "done")
+
+    def rescue_now(self, number: int) -> Dict[str, Any]:
+        """同步救援（重构 M0）：模型一卷 → 失败则原文摘录兜底落盘放行。
+
+        任何成功路径都以「锚点文件落盘」为终点；兜底版在状态里标记
+        ``origin=fallback``（文件本体保持严格九字段），并低优先级重新入队
+        （force=True）让后台模型版稍后覆盖精化——保底比空缺好。
+        """
+        number = int(number)
+        target = self.output_dir / ("%04d.json" % number)
+        if target.is_file():
+            return json.loads(target.read_text(encoding="utf-8"))
+        try:
+            return self.distill_now(number)
+        except Exception as exc:  # noqa: BLE001 模型路径失败 → 确定性兜底
+            chapter_file = _chapter_path(self.chapters_path, number)
+            if not chapter_file.is_file():
+                raise
+            full_text = chapter_file.read_text(encoding="utf-8")
+            anchor = validate_anchor(
+                synthesize_anchor_from_text(full_text, number), full_text, number)
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+            temp = target.with_suffix(".json.tmp")
+            temp.write_text(json.dumps(anchor, ensure_ascii=False, indent=2) + "\n",
+                            encoding="utf-8")
+            temp.replace(target)
+            note = "模型蒸馏失败，已用原文摘录锚点兜底放行：%s" % str(exc)[:120]
+            with self._lock:
+                self._status[number] = {"chapter": number, "status": "done",
+                                        "origin": "fallback", "note": note[:200]}
+                # 后台模型版精化：文件已存在故 force=True；低优先级不挤占新章。
+                self._sequence += 1
+                seq = self._sequence
+                self._queued.add(number)
+                self._queue.put((95, seq, number, 0.0, True))
+            return anchor
 
     def _run(self) -> None:
         while not self._stop.is_set():
+            self._promote_delayed()
             try:
-                _, _, number = self._queue.get(timeout=0.1)
+                _, _, number, _ready, force = self._queue.get(timeout=0.1)
             except Exception:
                 continue
             with self._lock:
@@ -406,13 +520,13 @@ class AnchorDistiller:
                 continue
             self._set_status(number, "in_progress")
             try:
-                self._distill_one(number)
-                self._set_status(number, "done")
+                origin = self._distill_one(number, force=force)
+                self._mark_result(number, origin)
                 with self._lock:
                     self._retry_counts.pop(number, None)
             except Exception as exc:
-                # 失败自动快速重试：退避后重新入队（优先级降低，不挤占新章节），
-                # 总重试次数封顶；耗尽后标记失败，等开局/下回合的 enqueue 再触发。
+                # 失败延迟重入队（重构 M0：退避不再阻塞 worker，其他章节继续），
+                # 优先级压低不挤占新章；总重试次数封顶后等 enqueue 再触发。
                 message = str(exc)
                 with self._lock:
                     attempt = self._retry_counts.get(number, 0)
@@ -420,15 +534,17 @@ class AnchorDistiller:
                         delay = RETRY_DELAYS[min(attempt, len(RETRY_DELAYS) - 1)]
                         self._retry_counts[number] = attempt + 1
                         seq = self._sequence = self._sequence + 1
+                        requeue = True
                     else:
-                        delay = None
-                if delay is not None:
+                        delay, seq, requeue = None, None, False
+                if requeue:
                     self._set_status(number, "failed",
                                      "%s；%.0f 秒后自动重试（第 %d/%d 次）"
                                      % (message, delay, attempt + 1, RETRY_LIMIT))
-                    # 可中断等待（stop 时立即退出线程），醒后重新入队。
-                    if not self._stop.wait(delay):
-                        self._queue.put((90 + attempt, seq, number))
+                    with self._lock:
+                        heapq.heappush(
+                            self._delayed,
+                            (time.monotonic() + delay, 90 + attempt, seq, number))
                 else:
                     self._set_status(number, "failed",
                                      "%s；已自动重试 %d 次仍失败，将在下一回合或开局时再次尝试"
@@ -436,11 +552,24 @@ class AnchorDistiller:
             finally:
                 self._queue.task_done()
 
-    def _distill_one(self, number: int, attempts: int = 3) -> None:
+    def _distill_one(self, number: int, attempts: int = 3, force: bool = False) -> str:
+        """蒸馏单章；返回来源 ``"model"|"fallback"|"exists"``。
+
+        章级互斥：distill_now / worker 池 / force 精化并发同一章时串行化；
+        先到者落盘后，后到者（非 force）直接返回，模型只调一次。
+        """
         if self.model is None:
             raise ValueError("未配置模型调用函数")
+        with self._chapter_guard(number):
+            target = self.output_dir / ("%04d.json" % number)
+            if target.is_file() and not force:
+                return "exists"
+            return self._distill_one_locked(number, attempts, target)
+
+    def _distill_one_locked(self, number: int, attempts: int, target: Path) -> str:
         full_text = _chapter_path(self.chapters_path, number).read_text(encoding="utf-8")
         # 单章输入上限（放宽到 3500：2000 只能覆盖长章前 1/3，事件提取不完整）。
+        # 更长章节的全文覆盖由开局流水线的 map-reduce 切块蒸馏（M1）接管。
         source = full_text[:3500]
         prompt = (
             "请仅依据以下单章原文输出严格 JSON，必须包含且只能包含九字段：%s。"
@@ -471,11 +600,10 @@ class AnchorDistiller:
                 last_err = exc
                 continue
             self.output_dir.mkdir(parents=True, exist_ok=True)
-            target = self.output_dir / ("%04d.json" % number)
             temp = target.with_suffix(".json.tmp")
             temp.write_text(json.dumps(anchor, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             temp.replace(target)
-            return
+            return "model"
         # 弹性兜底（2026-08-30）：模型多次蒸馏仍不过校验时，从原文确定性
         # 合成「原文摘录式锚点」——quotes 逐字取自原文（天然通过逐字校验），
         # 其余字段从原文句子与章标题派生，最后仍过 validate_anchor 严校验。
@@ -487,10 +615,10 @@ class AnchorDistiller:
         except Exception as exc:  # noqa: BLE001  兜底合成也失败才真正抛错
             raise last_err or exc
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        target = self.output_dir / ("%04d.json" % number)
         temp = target.with_suffix(".json.tmp")
         temp.write_text(json.dumps(anchor, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         temp.replace(target)
+        return "fallback"
 
     def disable(self) -> None:
         self._disabled.set()
@@ -500,8 +628,12 @@ class AnchorDistiller:
 
     def stop(self, join: bool = True) -> None:
         self._stop.set()
-        if join and self._thread and self._thread.is_alive():
-            self._thread.join(timeout=5)
+        if join:
+            for thread in list(self._threads):
+                if thread.is_alive():
+                    thread.join(timeout=5)
+            with self._lock:
+                self._threads = [t for t in self._threads if t.is_alive()]
 
     def is_disabled(self) -> bool:
         return self._disabled.is_set()

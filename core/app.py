@@ -9,12 +9,13 @@ import json
 import copy
 import re
 import threading
-import gradio as gr
+from core.ui import gradio_compat as gr
 
 from core import fate_engine as fe
 from core import state_schema
 from core.state_schema import start_setting
-from core.services import game_setup, registries
+from core.services import (character_service, directives_service, game_setup,
+                           opening_service, options_service, registries, turn_pipeline)
 import core.engine.plot_summary
 import core.engine.anchor_distiller
 import core.engine.work_distiller
@@ -447,15 +448,31 @@ def _humanize_plot_summary(summary):
     return _clean(data) or "（剧情摘要暂缺）"
 
 
-def _finalize_options(state, acc):
-    """把模型输出解析为结构化字母选项，写入 state["options"]。
+def _finalize_options(state, acc, structured_options=None):
+    """把选项结构化写入 state["options"]，返回 (正文, 文本选项块)。
 
-    返回 (正文, 文本选项块)：选项块已从叙事正文中剥离，文本选项块由调用方
-    决定是否在旧界面末尾重挂展示。纯函数式处理，不调用模型。
+    M2 起``structured_options``（options_service 门面产物，[{key,text,preview,
+    factors}]）优先注入：正文里的残存选项块被剥离，文本块由代码渲染
+    （含后果预告）。缺省走旧路径：从正文解析 A–F。纯函数式处理，不调用模型。
     """
     display = fe.strip_hidden(acc)
-    parsed = engine.parse_options(display)
     factors = engine.collect_option_factors(state)
+    if structured_options:
+        items = [item for item in structured_options
+                 if isinstance(item, dict) and str(item.get("text") or "").strip()]
+        if items:
+            state["options"] = [
+                {"key": str(item.get("key") or "").strip().upper(),
+                 "text": str(item.get("text") or "").strip(),
+                 "preview": str(item.get("preview") or "").strip(),
+                 "factor": str(item.get("factor") or "").strip(),
+                 "factors": item.get("factors")
+                 or engine.match_option_factors(str(item.get("text") or ""), factors)}
+                for item in items]
+            narrative = engine.strip_options_block(display) or display
+            options_block = options_service.render_display_block(state["options"])
+            return narrative, options_block
+    parsed = engine.parse_options(display)
     state["options"] = [
         {"key": item["key"], "text": item["text"],
          "factors": engine.match_option_factors(item["text"], factors)}
@@ -464,6 +481,53 @@ def _finalize_options(state, acc):
     if not parsed:
         return display, ""
     return engine.strip_options_block(display), engine.render_options_block(parsed)
+
+
+def _render_engine_log(state, message, narrative, round_no, rumor=None):
+    """M2：引擎日志由代码渲染（模型不再书写 LOG 段）。
+
+    字段全部取自状态与正则提取器（可证据化），格式与历史 <<<LOG>>> 契约
+    逐字一致（turn_composer.render_log_line）；只写入日志文件，不进展示、
+    不进模型输出。M3 起由蓝图 log_draft 提供更高质量的字段素材。
+    """
+    def _clip(text, limit=80):
+        text = str(text or "").strip().replace("\n", " ")
+        return text[:limit] + ("…" if len(text) > limit else "")
+
+    player_bits = [_clip(message, 60) or "（无行动）"]
+    try:
+        patch = extract_patch(fe.strip_hidden(narrative), action=message,
+                              current=state.get("state_memory") or {}, round_no=round_no) or {}
+    except Exception:  # noqa: BLE001 提取失败不阻断日志
+        patch = {}
+    for category in ("body", "assets", "abilities"):
+        box = patch.get(category) if isinstance(patch.get(category), dict) else {}
+        for key, value in box.items():
+            if isinstance(value, list) and value:
+                player_bits.append(f"{key}×{len(value)}")
+    decision = state.get("gf_decision") if isinstance(state.get("gf_decision"), dict) else {}
+    gf_label = str(decision.get("label")
+                   or (state.get("start_params") or {}).get("golden_finger") or "无")
+    if rumor:
+        nemesis_text = _clip(rumor, 60)
+    elif state.get("nemesis"):
+        nemesis_text = "已开启；本回合无公开动向"
+    else:
+        nemesis_text = "无"
+    world_parts = [f"第{state.get('current_chapter', 1)}章 "
+                   f"{state.get('chapter_round', 1)}/{state.get('turn_budget', 1)}"]
+    lore_hits = state.get("lore_hits") or []
+    if lore_hits:
+        world_parts.append(f"世界书命中{len(lore_hits)}条")
+    anchor_status = ((state.get("scene_validation") or {}).get("anchor") or {}).get("status")
+    beat = f"锚点{anchor_status or 'pending'}"
+    try:
+        progress = int(state.get("progress") or 0)
+    except (TypeError, ValueError):
+        progress = 0
+    return engine.turn_composer.render_log_line(
+        round_no, "；".join(player_bits), _clip(gf_label, 40), nemesis_text,
+        "；".join(world_parts), beat, progress)
 
 
 def _known_anchor_text(state, chapter_number):
@@ -552,9 +616,13 @@ def _start_background_distillation(state, client, model, sync_first=False):
     if old:
         sync_error = None
         current_chapter = state.get("current_chapter", 1)
+        # M0：蒸馏模型调用纳入全局并发预算（后台低优先级；同步补首章
+        # 时在线程内临时提到开局优先级）。重复包装会被 budget_model 原样返回。
+        old.model = engine.parallel.budget_model(old.model, engine.parallel.PRIORITY_BACKGROUND)
         if sync_first:
             try:
-                old.distill_now(current_chapter)
+                with engine.parallel.priority_scope(engine.parallel.PRIORITY_OPENING):
+                    old.distill_now(current_chapter)
             except Exception as exc:  # noqa: BLE001
                 sync_error = exc
         old.enqueue(current_chapter, lookahead=6, lookback=-1, total=state.get("total_chapters"))
@@ -567,17 +635,21 @@ def _start_background_distillation(state, client, model, sync_first=False):
     def model_fn(prompt):
         # 后台蒸馏不持会话锁，用 300s 超时：主流式生成与蒸馏共用同一 Key 时
         # 上游排队是常态，120s 会把排队中的请求掐死导致蒸馏停滞。
-        return engine.distill.distill_model(
-            client, model, prompt, state.get("request_kwargs"),
-            state.get("provider", "deepseek"),
-            timeout=engine.distill.BACKGROUND_SUBCALL_TIMEOUT)
+        # M0：经全局动态并发控制器（后台低优先级；同步救援线程可提级）。
+        return engine.parallel.budget_model(
+            lambda p: engine.distill.distill_model(
+                client, model, p, state.get("request_kwargs"),
+                state.get("provider", "deepseek"),
+                timeout=engine.distill.BACKGROUND_SUBCALL_TIMEOUT),
+            engine.parallel.PRIORITY_BACKGROUND)(prompt)
     distiller = engine.anchor_distiller.AnchorDistiller(book_dir, model_fn)
     sync_error = None
     current_chapter = state.get("current_chapter", 1)
     if sync_first:
         # 同步补齐首章锚点；失败回退到后台异步，但必须保留可诊断状态。
         try:
-            distiller.distill_now(current_chapter)
+            with engine.parallel.priority_scope(engine.parallel.PRIORITY_OPENING):
+                distiller.distill_now(current_chapter)
         except Exception as exc:  # noqa: BLE001
             sync_error = exc
     distiller.enqueue(current_chapter, lookahead=6, lookback=-1, total=state.get("total_chapters"))
@@ -587,6 +659,53 @@ def _start_background_distillation(state, client, model, sync_first=False):
     state["distill_status"] = _distill_lamp(state) or "后台锚点蒸馏运行中"
     if sync_error is not None:
         _record_distill_failure(state, sync_error, current_chapter)
+
+
+def _rescue_anchor(state, target_chapter, api_key):
+    """锚点缺失救援（重构 M0）：模型一卷 → 失败用原文摘录锚点兜底放行。
+
+    返回救援后的锚点文本（失败返回空串，调用方保持原阻断提示——只剩
+    无书目录/无凭据/无章节文件等极端情形）。兜底版标记 origin=fallback，
+    后台模型版以 force 精化覆盖（见 AnchorDistiller.rescue_now）。
+    """
+    if engine.break_anchor.shattered_from(state):
+        return ""
+    chapter_index = state.get("chapter_index") or {}
+    book_dir = _book_dir(chapter_index)
+    if not book_dir or not os.path.isdir(book_dir):
+        return ""
+    provider = state.get("provider") or "deepseek"
+    if not (api_key or "").strip():
+        return ""
+    try:
+        client = fe.make_client(api_key, provider, state.get("base_url"))
+    except Exception:  # noqa: BLE001 无有效凭据时保持旧行为
+        return ""
+    key = os.path.abspath(book_dir)
+    distiller = _DISTILLERS.get(key)
+    if distiller is None:
+        def model_fn(prompt):
+            return engine.distill.distill_model(
+                client, state.get("model") or "", prompt,
+                state.get("request_kwargs"), provider,
+                timeout=engine.distill.BACKGROUND_SUBCALL_TIMEOUT)
+        distiller = engine.anchor_distiller.AnchorDistiller(
+            book_dir, engine.parallel.budget_model(model_fn, engine.parallel.PRIORITY_BACKGROUND))
+        _DISTILLERS[key] = distiller
+        distiller.enqueue(target_chapter, lookahead=6, lookback=-1,
+                          total=state.get("total_chapters"))
+        distiller.start()
+    try:
+        with engine.parallel.priority_scope(engine.parallel.PRIORITY_OPENING):
+            distiller.rescue_now(int(target_chapter))
+    except Exception as exc:  # noqa: BLE001 救援失败：回退旧阻断提示
+        _wiring_log(state, f"第 {target_chapter} 章锚点救援失败：{exc}")
+        return ""
+    state["distill_key"] = key
+    _merge_distill_status(state, distiller.status())
+    state["distill_status"] = _distill_lamp(state) or "后台锚点蒸馏运行中"
+    _wiring_log(state, f"第 {target_chapter} 章锚点经救援补齐（模型一卷或摘录兜底），回合放行")
+    return _current_anchor_text(state, int(target_chapter))
 
 
 # ---------------------------------------------------------------------------
@@ -1285,7 +1404,7 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
              companion_count=0, heroine_count=0, heroine_mode="单女主", enable_nemesis=False,
              nemesis_select="", nemesis_file=None, convergence="较高", novel_display_name=None,
              nemesis_display_name=None, story_richness=None, story_agent_mode=False,
-             roster_card_ids=None, protagonist_gender="unknown", **legacy):
+             paper_tier=None, roster_card_ids=None, protagonist_gender="unknown", **legacy):
     """开始 / 重置：装配规则并生成开场。生成器，流式更新聊天窗。
 
     旧三槽参数（companion_1..3 / heroine_1..3）已下线：全项目无调用方传入，
@@ -1350,6 +1469,22 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
         persona_label = (persona_custom or "").strip()[:20] or "自定义性格"
     convergence = engine.normalize_convergence(convergence)
     story_richness = engine.normalize_richness(story_richness)
+
+    # —— 试卷档位（重构 M4）：paper_tier 显式优先；旧客户端按丰富度就近映射。
+    #     档位门禁双侧校验的第二侧（server 已 400 拦截，这里兜底直接调用 app
+    #     的路径）：普通模式限 1–2 档、第 6 档必须开类 agent；不合法回落默认档。 ——
+    agent_mode_requested = bool(story_agent_mode) and enhanced
+    mode_label = "强化" if enhanced else "普通"
+    if paper_tier is None:
+        paper_tier = engine.papers.map_legacy_richness(story_richness)
+        if not enhanced:
+            paper_tier = min(paper_tier, 2)
+    tier_ok, tier_reason = engine.papers.validate_selection(
+        int(paper_tier), mode_label, agent_mode_requested)
+    tier_note = ""
+    if not tier_ok:
+        tier_note = f"剧情丰度 {paper_tier} 不可用（{tier_reason}），已回落默认档。"
+        paper_tier = 3 if enhanced else 2
 
     # —— 宿敌机制（可选）：上传 MD ＞ 角色模型 ＞ 自定义文本 ——
     nemesis_label, nemesis_persona = game_setup.resolve_nemesis(
@@ -1548,6 +1683,8 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
                             "timepoint": timepoint, "golden_finger": gf,
                             "heroine_mode": heroine_mode, "convergence": convergence,
                             "story_richness": story_richness,
+                            "paper_tier": int(paper_tier),
+                            "compose_mode": bool(enhanced),
                             "story_agent_mode": bool(story_agent_mode) and enhanced,
                             "persona": persona_label,
                             "companions": companions, "heroines": heroines,
@@ -1556,6 +1693,9 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
                             "thinking_mode": thinking_mode, "thinking_param": thinking_param},
            "persona": persona_label, "convergence": convergence, "options": [],
            "story_richness": story_richness,
+           "paper_tier": int(paper_tier),
+           "paper_family": engine.papers.family_for_tier(int(paper_tier)),
+           "compose_mode": bool(enhanced),
            "agent_mode": bool(story_agent_mode) and enhanced,
            "scene_budget": engine.scene_budget(richness=story_richness),
            "richness_tier": engine.richness_tier(story_richness),
@@ -1638,15 +1778,20 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
             status += f" ｜ 穿越对照:已落定{len(_traverse_map)}人"
         if enhanced:
             try:
-                summary_box = engine.plot_summary.generate_plot_summary(
-                    _book_dir(chapter_index),
-                    model=lambda prompt: _distill_model(client, model, prompt, request_kwargs, provider),
-                    max_samples=3, max_chars_per_chapter=2500)
-                summary = summary_box.get("summary")
-                st0["distill"] = {"plot_summary": summary,
-                                  "selected_chapters": summary_box.get("selected_chapters", [])}
+                # —— M1：开局蒸馏+角色入库流水线（opening_service 中台门面）——
+                # plot 多采样并行合并 ∥ 角色抽取（质量门+防编造+入库）∥ 首 3 章
+                # 锚点（第 1 章两遍法、长章 map-reduce 全文覆盖）∥ 作品档案 upsert。
+                # 开局优先级满额并发，全程降级不抛错，结果保留式回写 state。
+                st0.setdefault("provider", provider)
+                st0.setdefault("request_kwargs", request_kwargs)
+                st0.setdefault("novel_name", novel_name or "")
+                opening_summary = opening_service.run_for_state(
+                    st0, client, model, chapters_ahead=3)
+                st0["opening_report"] = opening_summary
+                summary = (st0.get("distill") or {}).get("plot_summary")
                 if not summary:
-                    raise ValueError("模型未返回有效剧情摘要")
+                    raise ValueError(str(
+                        (opening_summary.get("errors") or ["剧情提取未产出有效摘要"])[0]))
                 st0["system"] = system + "\n\n# 剧情大概（开局低成本摘要）\n" + json.dumps(
                     summary, ensure_ascii=False)
                 if _traverse_constraint:
@@ -1677,7 +1822,9 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
                 except Exception as rel_exc:  # noqa: BLE001 精化失败保留初评
                     _wiring_log(st0, f"选角相关度精化失败已跳过：{rel_exc}")
             except Exception as summary_exc:  # noqa: BLE001
-                st0["distill"] = {"plot_summary": None, "error": str(summary_exc)}
+                st0["distill"] = {**(st0.get("distill") or {}),
+                                  "plot_summary": (st0.get("distill") or {}).get("plot_summary"),
+                                  "error": str(summary_exc)}
                 st0["plot_ready"] = False
                 yield _out_start([], dict(st0, system="", history=[]),
                                  f"⚠️ 强化模式剧情提取未完成，禁止正式开局：{summary_exc}",
@@ -1686,7 +1833,9 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
                                  u1=gr.update(visible=True), u2=gr.update(visible=False),
                                  u3=chat_off, u4=gr.update(visible=False))
                 return
-            _start_background_distillation(st0, client, model, sync_first=True)
+            # M1：首 3 章锚点已由开局流水线产出（第 1 章两遍法），后台池从第 4 章
+            # 起接续前瞻（enqueue 自动跳过已落盘章节），不再同步补首章。
+            _start_background_distillation(st0, client, model, sync_first=False)
             # 强化模式在此只完成剧情准备；正式第一幕必须由聊天框两步确认后触发。
             st0["history"] = [
                 {"role": "assistant", "content": _gameplay_briefing(mode, nemesis_on)},
@@ -1701,28 +1850,20 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
             ]
             st0["system"] += "\n\n【开局门禁】等待正式游戏聊天框确认金手指与开局设定后，才生成第一幕。"
             st0["anchor_timeline"] = _anchor_timeline(st0)
-            # —— 快速蒸馏入库：后台线程执行（模型调用可能很慢，绝不阻塞开局完成） ——
-            def _run_work_distill():
-                try:
-                    _wd_result = engine.work_distiller.quick_distill(
-                        _book_dir(chapter_index),
-                        work_title=novel_name,
-                        model=lambda prompt: _distill_model(client, model, prompt, request_kwargs, provider),
-                        plot=summary if isinstance(summary, dict) else None,
-                    )
-                    st0["work_distill"] = _wd_result
-                    fe.invalidate_rules_cache()
-                    _wiring_log(st0, f"快速蒸馏入库完成：{_wd_result.get('work_id')}，角色卡 {_wd_result.get('character_count')} 张")
-                except Exception as _wd_exc:  # noqa: BLE001 蒸馏入库失败只记录，不阻断开局
-                    st0["work_distill"] = {"error": str(_wd_exc)}
-                    _wiring_log(st0, f"快速蒸馏入库失败已跳过：{_wd_exc}")
-            st0["work_distill"] = {"status": "running"}
-            threading.Thread(target=_run_work_distill, daemon=True, name="work-distill").start()
             if st0.get("traverse_receipt"):
                 st0["history"][1]["content"] += "\n\n" + st0["traverse_receipt"]
-            st0["history"][1]["content"] += (
-                "\n\n📚 快速蒸馏已在后台开始：完成后本书自动收录进基础模式作品库，"
-                "书中主要角色（含四维标签）同步入角色库。")
+            # —— M1：作品档案 upsert 与角色卡入库（质量门+防编造+同名覆盖）已并入
+            #     开局流水线（opening_service），旧的 quick_distill 后台线程下线；
+            #     此处只把入库结果整理成玩家可见提示。 ——
+            _wd = st0.get("work_distill") or {}
+            if _wd.get("work_id"):
+                st0["history"][1]["content"] += (
+                    f"\n\n📚 本书已收录进基础模式作品库（{_wd.get('work_id')}）；"
+                    f"书中主要角色过质量门入库 {int(_wd.get('character_count') or 0)} 张，"
+                    "可在角色库中查看。")
+            else:
+                st0["history"][1]["content"] += (
+                    "\n\n📚 作品档案与角色入库本次未完成（不影响开局），原因已记录在运行日志。")
             try:
                 session = engine.persistence.create_session(fe.WRITABLE_DIR, state=st0, start_params=st0["start_params"])
                 st0["session"] = session
@@ -1894,6 +2035,10 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
                 return
             opening_anchor = _current_anchor_text(state, state.get("current_chapter", 1))
             if not opening_anchor:
+                # M0：开局确认零阻塞——首章锚点缺失先走救援（模型一卷→
+                # 摘录兜底放行，后台 force 精化），仅极端失败才提示等待。
+                opening_anchor = _rescue_anchor(state, state.get("current_chapter", 1), api_key)
+            if not opening_anchor:
                 state["scene_validation"] = {
                     "length": None,
                     "interaction": None,
@@ -1935,21 +2080,26 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
     state["scene_budget"] = engine.scene_budget(richness=story_richness)
     state["richness_tier"] = engine.richness_tier(story_richness)
     if enhanced and not current_anchor and not engine.break_anchor.shattered_from(state):
-        state["scene_validation"] = {
-            "length": None,
-            "anchor": {
-                "valid": False,
-                "reason": "anchor_missing",
-                "target_chapter": target_chapter,
-                "anchor_mentioned": False,
-                "causal_marker": False,
-            },
-        }
-        state["scene_gate"] = False
-        state["scene_gate_reason"] = f"目标章节第 {target_chapter} 章缺少已验证剧情锚点，无法提交回合。"
-        chatbot = chatbot + [{"role": "user", "content": message}, {"role": "assistant", "content": f"⚠️ 目标章节第 {target_chapter} 章缺少已验证剧情锚点，已阻断本回合；请等待锚点准备完成后重试。"}]
-        yield _out_send(chatbot, state, msg_update=gr.update(value=""))
-        return
+        # —— M0：锚点缺失不再整回合阻断。救援顺序：同步蒸馏一卷 →
+        # 原文摘录锚点兜底放行（origin=fallback，后台模型版 force 精化覆盖）。
+        # 仅在无书目录/无凭据等极端情形才回退到旧的阻断提示。
+        current_anchor = _rescue_anchor(state, target_chapter, api_key)
+        if not current_anchor:
+            state["scene_validation"] = {
+                "length": None,
+                "anchor": {
+                    "valid": False,
+                    "reason": "anchor_missing",
+                    "target_chapter": target_chapter,
+                    "anchor_mentioned": False,
+                    "causal_marker": False,
+                },
+            }
+            state["scene_gate"] = False
+            state["scene_gate_reason"] = f"目标章节第 {target_chapter} 章缺少已验证剧情锚点，无法提交回合。"
+            chatbot = chatbot + [{"role": "user", "content": message}, {"role": "assistant", "content": f"⚠️ 目标章节第 {target_chapter} 章缺少已验证剧情锚点，已阻断本回合；请等待锚点准备完成后重试。"}]
+            yield _out_send(chatbot, state, msg_update=gr.update(value=""))
+            return
     # 回合事务键与回滚白名单的单一来源：core/state_schema.py（Phase 2 收编）
     transaction_snapshot = {
         key: copy.deepcopy(state.get(key)) for key in state_schema.TRANSACTIONAL_KEYS
@@ -1960,6 +2110,7 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
         state.update(target_chapter_state)
 
     llm_msg = message
+    nemesis_rumor = None  # 强化分支内 pop 覆盖；基础模式保持 None（M2 LOG 渲染用）
     pre_turn_memory = copy.deepcopy(state.get("state_memory"))
     pre_turn_round = r
     _update_runtime_memory(state, message, round_no=r)
@@ -2031,22 +2182,86 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
     yield _out_send(chatbot, dict(state, history=history))
     try:
         client = fe.make_client(api_key, provider, base_url)
-        # 铁律注入（代码级保证）：三愿产物 + 永久增补通路的内容，
-        # 每回合动态拼接进本回合 system——高于一切剧情设定、低于游戏机制。
+        # —— M5：铁律账本按相关性选择注入（未命中不注入，解决 relay 无限累积）。
+        #     旧 wish_facts/relay_facts 在门面内惰性迁移，前端契约不变。 ——
         turn_system = state["system"]
-        _directives = "\n\n".join(
-            block for block in (engine.cheat_code.build_wish_directives(state),
-                                engine.cheat_code.build_relay_directives(state)) if block)
+        _memory = state.get("state_memory") if isinstance(state.get("state_memory"), dict) else {}
+        _location = (_memory.get("location") or {}) if isinstance(_memory.get("location"), dict) else {}
+        _directive_selection = directives_service.select_for_turn(
+            state,
+            anchor_words=engine.turn_blueprint.extract_anchor_terms(current_anchor or ""),
+            present_members=state.get("active_members") or [],
+            locations=[str(_location.get("name") or ""), str(_location.get("region") or "")],
+        )
+        _directives = str(_directive_selection.get("block") or "")
+        state["directive_meta"] = {
+            "selected": len(_directive_selection.get("selected") or []),
+            "total": int(_directive_selection.get("total") or 0),
+            "migrated": _directive_selection.get("migrated") or {},
+        }
         if _directives and _directives not in turn_system:
             turn_system = turn_system + "\n\n" + _directives
+        # —— M3：强化模式试卷管线（feature flag compose_mode）。
+        #     管线内完成导演卷→段卷∥选项卷→逐空批改重填→组装；旧 on_send
+        #     尾部结算/持久化/压缩原样复用。free 阶段返回 LEGACY 走旧单卷路径。
+        assembled_result = None
+        compose_mode = bool(enhanced and state.get("compose_mode"))
+        option_factors = engine.collect_option_factors(state)
+        factors_block = engine.build_option_factors_block(option_factors)
+        context_tail = str(((state.get("history") or [{}])[-1] or {}).get("content") or "")[-600:]
+        if compose_mode:
+            _pipeline_result = turn_pipeline.run_turn(
+                state, client, model, request_kwargs, provider,
+                message=message, system_prompt=turn_system, context_blocks=llm_msg,
+                active_members=state.get("active_members") or [],
+                anchor_text=current_anchor, factors=option_factors,
+                tier=int(state.get("paper_tier") or 0) or None,
+            )
+            if _pipeline_result != turn_pipeline.LEGACY:
+                assembled_result = _pipeline_result
+                state["scene_validation"] = dict(assembled_result.scene_validation or {})
+                _format = (assembled_result.agent_meta or {}).get("format_gate") or {}
+                state["scene_gate"] = bool(_format.get("valid", _format.get("ok", True)))
+                state["scene_gate_reason"] = None if state["scene_gate"] else "组装正文格式门禁未通过"
+                state["agent_meta"] = dict(assembled_result.agent_meta or {})
+                state["options_source"] = assembled_result.options_source or "pipeline"
+                state["paper_key"] = assembled_result.paper_key
+
+        options_box: dict = {}
+        if assembled_result is not None:
+            options_box.update({"options": list(assembled_result.options or []),
+                                "source": assembled_result.options_source or "pipeline"})
+            options_thread = threading.Thread(target=lambda: None,
+                                              name="options-gen-complete", daemon=True)
+            options_thread.start()
+        else:
+            # M2 legacy 路径：选项与正文并行生成。
+            def _generate_options_task():
+                try:
+                    options_box.update(options_service.generate_options(
+                        client, model, request_kwargs, provider,
+                        action=message, factors_block=factors_block,
+                        context_tail=context_tail, factors=option_factors))
+                except Exception as exc:  # noqa: BLE001 选项失败回退正文解析/代码合成
+                    options_box["error"] = str(exc)
+
+            options_thread = threading.Thread(target=_generate_options_task,
+                                              name="options-gen", daemon=True)
+            options_thread.start()
+
         acc = ""
         ub = {}
-        for acc in fe.stream_reply_with_retry(client, model, turn_system, history, usage_box=ub,
-                                               extra_kwargs=request_kwargs, provider=provider,
-                                               thinking_mode=state["thinking_mode"],
-                                               thinking_param=state["thinking_param"]):
-            chatbot[-1] = {"role": "assistant", "content": fe.strip_hidden(acc) or "…"}
+        if assembled_result is not None:
+            acc = str(assembled_result.narrative or "")
+            chatbot[-1] = {"role": "assistant", "content": acc or "…"}
             yield _out_send(chatbot, dict(state, history=history))
+        else:
+            for acc in fe.stream_reply_with_retry(client, model, turn_system, history, usage_box=ub,
+                                                   extra_kwargs=request_kwargs, provider=provider,
+                                                   thinking_mode=state["thinking_mode"],
+                                                   thinking_param=state["thinking_param"]):
+                chatbot[-1] = {"role": "assistant", "content": fe.strip_hidden(acc) or "…"}
+                yield _out_send(chatbot, dict(state, history=history))
         _accum_tokens(state, ub,
                       est_in=int((len(state["system"]) + sum(len(h["content"]) for h in history)) / 1.5),
                       est_out=int(len(acc) / 1.5))
@@ -2054,7 +2269,7 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
         clean_acc = fe.strip_hidden(acc)
         # —— 类 Agent 质量循环：draft → 自检 → 定向修订 → 重过机械门禁 ——
         # 只在强化模式且玩家开启时启用；自检失败不阻断主线，修订最多一轮。
-        agent_mode = bool(enhanced and (state.get("agent_mode")
+        agent_mode = bool(assembled_result is None and enhanced and (state.get("agent_mode")
                                         or start_setting(state, "story_agent_mode")))
         length_text = engine.strip_options_block(clean_acc)
         if agent_mode:
@@ -2127,7 +2342,7 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
                 pass
             if "agent_meta" not in state:
                 state["agent_meta"] = {"enabled": True, "revised": False, "issues": [], "resolved": True}
-        if enhanced:
+        if enhanced and assembled_result is None:
             budget_check = engine.validate_scene_length(length_text, richness=story_richness)
             interaction_check = engine.validate_character_interaction(
                 clean_acc, state.get("active_members") or [])
@@ -2246,9 +2461,22 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
             elif "放行" not in str(state.get("scene_gate_reason")):
                 state["scene_gate_reason"] = None
         _commit_reply_memory(state, acc, message, round_no=r, lore_hits=state.get("lore_hits") or [])
-        # 活跃角色一句话行为摘要：本地提取，状态表可见。
+        # —— M4：组装模式角色状态 patch（中台门面）。evidence 必须是最终正文
+        #     精确子串，校验通过才写 state_memory.relationships；失败只记日志。
+        if assembled_result is not None:
+            _character_meta = character_service.generate_patch(
+                state, client, model, request_kwargs, provider,
+                narrative=clean_acc, active_members=state.get("active_members") or [],
+                round_no=r)
+            state.setdefault("agent_meta", {})["character_patch"] = _character_meta
+            if not _character_meta.get("ok"):
+                _wiring_log(state, f"角色状态 patch 失败已跳过：{_character_meta.get('error') or '未通过校验'}")
+        # 活跃角色一句话行为摘要：legacy 路径本地提取；组装路径优先用角色 patch 摘要。
         try:
-            _summaries = _extract_member_summaries(clean_acc, state.get("active_members") or [])
+            _summaries = ((state.get("active_summaries") or {})
+                          if assembled_result is not None
+                          else _extract_member_summaries(
+                              clean_acc, state.get("active_members") or []))
             if _summaries:
                 state["active_summaries"] = _summaries
                 state["state_panel"] = render_panel(state.get("state_memory")) + "\n" + \
@@ -2300,7 +2528,12 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
             engine.persistence.update_session(state["session"], root=fe.WRITABLE_DIR,
                                        state=state, note=f"第{r}回合已完成")
         log_path = state.get("log", "")
-        entry = fe.extract_log(acc)
+        # —— M2：引擎日志改由代码渲染（模型不再书写 <<<LOG>>>）；
+        #     模型若仍按旧契约附带则优先采用（读档/旧会话兼容）。 ——
+        entry = (str(assembled_result.log_line or "")
+                 if assembled_result is not None else fe.extract_log(acc))
+        if not entry:
+            entry = _render_engine_log(state, message, clean_acc, r, rumor=nemesis_rumor)
         if entry:
             _append_log(log_path, f"\n## 第{r}回合\n- 玩家行动: {message}\n- 引擎日志: {entry}\n")
         else:
@@ -2340,26 +2573,27 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
             else:
                 _append_log(log_path, f"- 十回合评价: 已随第{r}回合回复展示（存档补发失败，本周期不压缩）\n")
 
-        # —— 代码级选项校验（字母 A–F）：不足 6 个时弹性门限接管——
-        # 原先隐式补发一次模型调用（option_repair），两稿思路下改为纯代码修复：
-        # 剥离残缺选项块 + 从正文行动句/中性模板合成补足，零模型成本，
-        # 前端固定 6+1 交互契约由代码保证（elastic_gate.repair_options）。
+        # —— M2：选项由结构化填空生成（与正文并行的线程），join 后注入组装。
+        #     门面内已有回退链（正文残存解析→弹性合成）；此处仅在门面彻底
+        #     失败且模型仍按旧契约输出选项块时走旧的纯代码修复保险丝。 ——
+        options_thread.join(timeout=90)
+        structured_options = (options_box.get("options") or []) if isinstance(options_box, dict) else []
+        if structured_options:
+            state["options_source"] = options_box.get("source", "model")
         final_display = fe.strip_hidden(acc)
-        if not engine.options_ok(final_display):
+        if not structured_options and not engine.options_ok(final_display):
             base = engine.truncate_partial_options(final_display)
             parsed_now = engine.parse_options(base)
             _rep = engine.repair_options(base, parsed_now)
             final_display = (base + "\n\n"
                              + engine.render_options_block(_rep)).strip() if _rep else base
-            chatbot[-1] = {"role": "assistant", "content": final_display or "…"}
             state["elastic_repair"] = {
                 **(state.get("elastic_repair") or {}),
                 "repaired_options": True,
             }
-            yield _out_send(chatbot, dict(state, history=history))
         # —— 选项结构化：选项块从叙事正文剥离写入 state["options"]，由前端按钮渲染；
         #    旧界面在正文末尾重挂规范化文本选项，保持可读。——
-        narrative, options_block = _finalize_options(state, final_display)
+        narrative, options_block = _finalize_options(state, final_display, structured_options or None)
         chatbot[-1] = {"role": "assistant",
                        "content": (narrative + "\n\n" + options_block).strip() if options_block else narrative}
         # 十回合压缩可能改变 history；最终落盘和事件必须使用同一版本。
@@ -2368,6 +2602,12 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
                            session_id=str(state.get("session_id") or "") or None)
         yield _out_send(chatbot, state)
     except Exception as e:  # noqa: BLE001
+        # M3 前置修复：回滚前先收拢选项生成线程——不 join 会泄漏在途模型调用，
+        # 用户立刻重试时叠加多个并发额度占用。短超时后放弃等待（daemon 线程）。
+        try:
+            options_thread.join(timeout=10)
+        except Exception:  # noqa: BLE001 线程未启动/已结束均忽略
+            pass
         if enhanced:
             for key, value in transaction_snapshot.items():
                 state[key] = copy.deepcopy(value)
@@ -2449,6 +2689,12 @@ def _load_ui(state):
 
 
 def build_app():
+    """历史 Gradio 界面（源码可选）。生产 FastAPI/Vue 与 Windows 包不调用。"""
+    # 动态导入避免 PyInstaller 静态收编整套 Gradio 可选生态；需要旧界面时
+    # 安装 requirements-legacy.txt 后直接在源码环境调用即可。
+    from importlib import import_module
+
+    gr = import_module("gradio")
     with gr.Blocks(
         title="书中行 · 命运引擎",
         css=ui_theme.gradio_css(),

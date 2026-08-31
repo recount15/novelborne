@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import re
@@ -49,7 +50,7 @@ from core.engine import gf_designer  # noqa: E402
 
 FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
 sessions = SessionManager(PROJECT_ROOT)
-app = FastAPI(title="书中行 API", version="2.0.0")
+app = FastAPI(title="书中行 API", version="2.0.1")
 _cors_origins = [item.strip() for item in os.getenv("FATE_CORS_ORIGINS", "").split(",") if item.strip()]
 if _cors_origins:
     app.add_middleware(
@@ -98,6 +99,9 @@ class StartRequest(BaseModel):
         ge=engine.participation.RICHNESS_MIN,
         le=engine.participation.RICHNESS_MAX,
     )
+    # 试卷档位（重构 M4）：1–6 双族六档；普通模式限 1–2、第 6 档必须开类 agent。
+    # 缺省时服务端按 story_richness 就近映射（旧客户端兼容）。
+    paper_tier: int | None = Field(default=None, ge=1, le=6)
     # 类 Agent 生成模式：draft → 自检 → 定向修订循环（仅强化模式生效）。
     story_agent_mode: bool = False
     # 四栏角色卡选择（规格 §7）：[{"slot": "主角|主线|伙伴|宿敌", "card_id": ...}]，可选。
@@ -346,6 +350,23 @@ def bootstrap_payload() -> dict[str, Any]:
                 for bound, label, note in engine.participation.RICHNESS_TIERS
             ],
         },
+        # 试卷档位（重构 M4）：双族六档由后端统一下发；普通模式前端只渲染
+        # basic_ok 档位，agent_required 档位需前端联动类 Agent 开关。
+        "paper_tiers": [
+            {
+                "tier": paper.tier,
+                "label": paper.label,
+                "family": paper.family,
+                "target_chars": paper.target_chars,
+                "segments": len(paper.segments),
+                "basic_ok": bool(paper.basic_mode),
+                "agent_required": bool(paper.agent_required),
+                "agent_recommended": bool(paper.agent_recommended),
+            }
+            for paper in (
+                engine.papers.get_paper(tier, "setup") for tier in range(1, 7))
+        ],
+        "paper_tier_default": 3,
         # 类 Agent 模式的说明文案统一下发，前端不做硬编码。
         "story_agent_mode": {
             "label": "类 Agent 生成",
@@ -673,59 +694,101 @@ def health() -> dict[str, Any]:
 
 
 def _lan_addresses() -> list[str]:
-    """本机局域网 IPv4 候选（排除回环）。
+    """本机局域网 IPv4 候选（排除回环/链路本地），按可用性排序。
 
-    用 UDP connect 技巧取默认路由出口 IP（不实际发包）；拿不到时退化为
-    解析主机名。多网卡时全部返回，二维码取第一个（通常是主网卡）。
+    旧实现一旦默认路由探测成功就不再枚举其他网卡；VPN/虚拟网卡成为默认
+    路由时，二维码会指向手机无法访问的地址。现在同时收集默认路由与主机
+    全部 IPv4，并把 RFC1918 私网地址排在最前；默认路由仅作为同等级首选。
     """
-    addrs: list[str] = []
+    default_ip = ""
+    candidates: list[str] = []
+
+    def _add(value: str | None) -> None:
+        value = str(value or "").strip()
+        try:
+            addr = ipaddress.ip_address(value)
+        except ValueError:
+            return
+        if not isinstance(addr, ipaddress.IPv4Address):
+            return
+        if addr.is_loopback or addr.is_link_local or addr.is_unspecified or addr.is_multicast:
+            return
+        if value not in candidates:
+            candidates.append(value)
+
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.settimeout(0.5)
+            # connect 不发送数据，只让系统选择当前默认路由出口。
             s.connect(("8.8.8.8", 80))
-            ip = s.getsockname()[0]
-            if ip and not ip.startswith("127."):
-                addrs.append(ip)
+            default_ip = str(s.getsockname()[0] or "")
+            _add(default_ip)
     except OSError:
         pass
-    if not addrs:
-        try:
-            for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-                ip = info[4][0]
-                if ip and not ip.startswith("127.") and ip not in addrs:
-                    addrs.append(ip)
-        except OSError:
-            pass
-    return addrs
+
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            _add(info[4][0])
+    except OSError:
+        pass
+
+    def _rank(value: str) -> tuple[int, int, tuple[int, int, int, int]]:
+        addr = ipaddress.IPv4Address(value)
+        # RFC1918 私网优先于运营商 CGNAT/其他非公网；默认路由在同等级优先。
+        private = (addr in ipaddress.IPv4Network("10.0.0.0/8")
+                   or addr in ipaddress.IPv4Network("172.16.0.0/12")
+                   or addr in ipaddress.IPv4Network("192.168.0.0/16"))
+        octets = tuple(int(part) for part in value.split("."))
+        return (0 if private else 1, 0 if value == default_ip else 1, octets)
+
+    return sorted(candidates, key=_rank)
 
 
 def _lan_session_id(value: str | None) -> str | None:
-    """只接受 SessionManager 使用的 UUID，避免二维码携带任意未校验参数。"""
+    """校验 UUID 会话 ID，**保留服务端实际使用的原始表示**。
+
+    SessionManager 默认创建 ``uuid.uuid4().hex``（32 位、无连字符）；旧代码
+    ``return str(uuid.UUID(value))`` 会改成带连字符形式，二维码链接随后按一个
+    不存在的新 ID 查会话，造成手机端无法接续。这里只验证，不规范化。
+    """
     if not value:
         return None
+    text = str(value).strip()
     try:
-        return str(uuid.UUID(str(value)))
+        uuid.UUID(text)
     except (TypeError, ValueError, AttributeError):
         return None
+    return text
 
 
 def _lan_info(port: int | None, session_id: str | None = None) -> dict[str, Any]:
     addresses = _lan_addresses()
-    port = int(port or 8000)
-    primary = addresses[0] if addresses else None
+    port = int(port or os.getenv("FATE_API_PORT", "8000"))
     linked_session = _lan_session_id(session_id)
-    url = f"http://{primary}:{port}" if primary else None
-    if url and linked_session:
-        url = f"{url}/?session={linked_session}"
+
+    def _url(address: str) -> str:
+        base = f"http://{address}:{port}"
+        return f"{base}/?session={linked_session}" if linked_session else base
+
+    url_entries = [{"address": address, "url": _url(address)} for address in addresses]
+    primary = addresses[0] if addresses else None
+    listening = (os.getenv("FATE_API_HOST", "127.0.0.1") in {"0.0.0.0", "::"}
+                 or _LAN_LISTENING)
+    if primary and not listening:
+        hint = "已检测到局域网地址，但服务只监听本机回环地址；请使用默认 0.0.0.0 监听后重启。"
+    elif primary:
+        hint = ("手机与电脑连同一 Wi-Fi 后扫码访问。若首个地址不可达，可切换其他网卡地址；"
+                "仍无法打开时请在 Windows 防火墙中允许本程序或放行该端口。")
+    else:
+        hint = "未检测到局域网 IPv4：请确认电脑已连接 Wi-Fi/路由器，并检查 VPN/虚拟网卡设置。"
     return {
         "addresses": addresses,
+        "urls": url_entries,
         "port": port,
-        "url": url,
+        "url": url_entries[0]["url"] if url_entries else None,
         "session_id": linked_session,
-        "listening_lan": os.getenv("FATE_API_HOST", "127.0.0.1") not in {"127.0.0.1", "localhost"}
-        or _LAN_LISTENING,
-        "hint": "手机与电脑连同一 Wi-Fi 后扫码访问；若无法打开，请检查系统防火墙是否放行该端口。"
-                if primary else "未检测到局域网地址：请确认电脑已连接 Wi-Fi/路由器。",
+        "listening_lan": listening,
+        "hint": hint,
     }
 
 
@@ -741,10 +804,19 @@ def lan_info(request: Request, session_id: str | None = None) -> dict[str, Any]:
 
 
 @app.get("/api/lan-qrcode.png", include_in_schema=False)
-def lan_qrcode(request: Request, session_id: str | None = None) -> Response:
-    """局域网访问二维码，可携带已校验的 session UUID。"""
+def lan_qrcode(request: Request, session_id: str | None = None,
+               address: str | None = None) -> Response:
+    """局域网访问二维码，可携带已校验的 session UUID，并可指定网卡地址。"""
     info = _lan_info(request.url.port, session_id)
     url = info.get("url")
+    if address:
+        # 只允许服务端枚举出的地址，防止二维码端点被当作任意 URL 编码器。
+        matched = next((item for item in info.get("urls", [])
+                        if item.get("address") == str(address)), None)
+        if matched:
+            url = matched.get("url")
+        else:
+            raise HTTPException(status_code=400, detail="指定的局域网地址不在可用网卡列表中")
     if not url:
         raise HTTPException(status_code=503, detail="未检测到局域网地址，无法生成二维码")
     try:
@@ -1429,6 +1501,16 @@ def start(request: StartRequest) -> StreamingResponse:
         if not checked.get("chapters"):
             sessions.release(session)
             raise HTTPException(status_code=400, detail="强化模式要求可成功识别章节的完整 TXT")
+    # 试卷档位门禁（重构 M4，双侧校验第一侧）：显式 paper_tier 才校验拒绝；
+    # 缺省（旧客户端）由 on_start 按丰富度就近映射并钳制，不在此拦截。
+    if request.paper_tier is not None:
+        mode_label = "强化" if request.mode.startswith("强化") else "普通"
+        agent_on = bool(request.story_agent_mode) and request.mode.startswith("强化")
+        tier_ok, tier_reason = engine.papers.validate_selection(
+            int(request.paper_tier), mode_label, agent_on)
+        if not tier_ok:
+            sessions.release(session)
+            raise HTTPException(status_code=400, detail=tier_reason)
     params = dict(
         provider=provider,
         base_url=request.base_url or config["base_url"],
@@ -1466,6 +1548,7 @@ def start(request: StartRequest) -> StreamingResponse:
         nemesis_display_name=nemesis_display_name,
         convergence=request.convergence,
         story_richness=request.story_richness,
+        paper_tier=request.paper_tier,
         story_agent_mode=request.story_agent_mode,
         roster_card_ids=request.roster_card_ids,
     )

@@ -5,7 +5,7 @@
 - 入口 run_windowed.py（pywebview 无边框窗口 + 0.0.0.0 后端线程）；
 - console=False：双击无黑框，纯窗口应用；
 - 收编 pywebview/pythonnet/clr_loader（WebView2 壳运行时）；
-- gradio 为 core.app 的遗留软依赖仍需收编（collect-all 保证 import 不炸）。
+- Gradio legacy UI is source-only and excluded from production bundles.
 
 产物：dist\FateEngineWindowed\FateEngineWindowed.exe
 """
@@ -24,10 +24,15 @@ hiddenimports = ['core', 'core.server', 'core.app', 'core.fate_engine',
                  'tools.private_recovery', 'pywebview', 'webview', 'clr_loader', 'pythonnet']
 for _pkg in ('core.engine', 'core.api', 'core.ui', 'core.memory', 'core.lore', 'core.prompts'):
     hiddenimports += collect_submodules(_pkg)
-for _pkg in ('gradio', 'gradio_client', 'openai', 'fastapi', 'uvicorn', 'multipart',
-             'httpx', 'pydantic', 'safehttpx', 'groovy', 'qrcode', 'PIL'):
+for _pkg in ('openai', 'fastapi', 'uvicorn', 'multipart',
+             'httpx', 'pydantic', 'qrcode', 'PIL'):
     tmp = collect_all(_pkg)
     datas += tmp[0]; binaries += tmp[1]; hiddenimports += tmp[2]
+HEAVY_EXCLUDES = [
+    'gradio', 'gradio_client', 'safehttpx', 'groovy',
+    'torch', 'torchvision', 'torchaudio', 'transformers', 'tensorflow',
+    'cv2', 'pandas', 'scipy', 'sklearn', 'matplotlib', 'plotly',
+]
 # pywebview 壳三件：collect 在部分环境报 not-a-package（单模块布局），
 # 用 collect_submodules + 动态库钩子兜底，缺了由 hiddenimports 兜住。
 for _pkg in ('pywebview', 'pythonnet', 'clr_loader'):
@@ -49,7 +54,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=HEAVY_EXCLUDES,
     noarchive=False,
     optimize=0,
 )

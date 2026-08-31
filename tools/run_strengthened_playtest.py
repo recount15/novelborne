@@ -2,6 +2,7 @@ import atexit
 import copy
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -57,10 +58,81 @@ class FakeCompletions:
         self.bad_length_once = False
         self.bad_interaction_once = False
         self.raise_once = False
+        self.raise_nonstream_once = False
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
         if not kwargs.get("stream"):
+            prompt = str((kwargs.get("messages") or [{}])[-1].get("content") or "")
+            if self.raise_nonstream_once and ("段卷" in prompt or "导演卷" in prompt):
+                raise RuntimeError("simulated transport failure")
+            if self.raise_once and ("段卷" in prompt or "导演卷" in prompt):
+                self.raise_once = False
+                raise RuntimeError("simulated transport failure")
+            if "选项设计师" in prompt or "选项生成卷" in prompt:
+                # M2 选项结构化填空：返回恰好 6 条（4 金手指向 + 2 性格向）。
+                return Response(json.dumps({"options": [
+                    "用预知推演北墙裂痕的下一步（后果：提前看清暗哨位置）",
+                    "以记忆回溯旧册水渍前的数目（后果：锁定军械批次）",
+                    "借金手指比对铜扣暗记的刻痕（后果：确认经手人身份）",
+                    "透支预知换一夜安全撤离窗口（后果：金手指进入冷却）",
+                    "按苟道原则先撤回茶棚再图后计（后果：暂避锋芒但线索中断）",
+                    "谨慎地只抄录暗记不惊动守军（后果：证据留存但进度放缓）",
+                ]}, ensure_ascii=False))
+            if "开局剧情采样器" in prompt:
+                return Response(json.dumps({
+                    "main_events": ["换岗梆子三响异变", "北墙回声初现", "铜扣暗记现世"],
+                    "characters": ["沈砚", "阿岚", "林秋"],
+                    "tone": "冷峻", "threads": ["军械去向", "旧册水渍"],
+                }, ensure_ascii=False))
+            if "开局剧情合并器" in prompt:
+                return Response(json.dumps({
+                    "genre": "边城悬疑", "premise": "北墙裂痕牵出失踪军械",
+                    "major_threads": ["铜扣", "旧册", "回声"], "tone": "冷峻",
+                }, ensure_ascii=False))
+            if "开局角色抽取器" in prompt:
+                # M1 角色抽取卷：两张可过质量门的结构化卡（含四维白名单）。
+                return Response(json.dumps({"characters": [
+                    {"name": "沈砚", "original_position": "主角", "gender": "male",
+                     "desire": "查清军械去向以自保并立身", "fear": "被当作细作处决",
+                     "voice": "低声而精确，惯于记录", "background": "边城新任记录员，擅长档案比对",
+                     "relationship_vector": {"阿岚": "互相试探的合作", "林秋": "情报交换"},
+                     "slot_keys": {"主角栏": ["天命担当型"], "伴侣栏": ["细水长流型"],
+                                   "伙伴栏": ["军师智囊"], "宿敌栏": ["理念冲突型"]},
+                     "evidence_chapter": 1},
+                    {"name": "阿岚", "original_position": "配角", "gender": "female",
+                     "desire": "守住北门与同伴", "fear": "城破之日无路可退",
+                     "voice": "短句，军旅口吻", "background": "边城守卫，刀法出众",
+                     "relationship_vector": {"沈砚": "并肩作战"},
+                     "slot_keys": {"主角栏": ["逆袭成长型"], "伴侣栏": ["并肩作战型"],
+                                   "伙伴栏": ["守护护卫"], "宿敌栏": ["武力压制型"]},
+                     "evidence_chapter": 1},
+                ]}, ensure_ascii=False))
+            if "开局作品档案蒸馏器" in prompt:
+                return Response(json.dumps({
+                    "genre": "边城悬疑", "tier": "T4", "language_style": "冷峻短句",
+                    "pacing": "慢热渐紧", "anchors": ["北墙裂痕被发现", "旧水道石板开启", "马蹄声之谜"],
+                    "world_will": "真相与秩序的角力", "golden_finger_fit": "预知/记忆类",
+                    "entry_point": "换岗之夜入城", "power_system": "凡人军武",
+                    "factions": "守军/档案房/暗渠势力", "timeline": "入冬三日",
+                    "causal_rules": "线索互证才可推进", "premise": "北墙裂痕牵出失踪军械",
+                }, ensure_ascii=False))
+            if "锚点" in prompt or "九字段" in prompt:
+                # 开局锚点卷/块级卷/核验卷：从提示词内嵌原文取一句逐字引文。
+                source = prompt.split("原文：", 1)[-1] if "原文：" in prompt else prompt
+                found = re.search(r"[^。！？]{8,40}[。！？]", source)
+                quote = found.group(0) if found else source[:20]
+                number = 1
+                found_no = re.search(r"chapter=(\d+)", prompt)
+                if found_no:
+                    number = int(found_no.group(1))
+                return Response(json.dumps({
+                    "chapter": number, "title": "第%d章 档案" % number,
+                    "summary": "守卫与同伴追查军械线索。",
+                    "events": ["换岗", "查证"], "characters": ["沈砚", "阿岚"],
+                    "world": "边城北墙", "foreshadowing": ["远处马蹄"],
+                    "quotes": [quote], "ripple": "线索汇聚到北墙",
+                }, ensure_ascii=False))
             return Response(json.dumps({"genre":"边城悬疑","premise":"北墙裂痕牵出失踪军械","major_threads":["铜扣","旧册","回声"],"tone":"冷峻"}, ensure_ascii=False))
         if self.raise_once:
             self.raise_once = False
@@ -117,6 +189,12 @@ def last_state(gen):
 start_outputs = list(app.on_start(**args))
 print("ON_START_YIELDS", len(start_outputs))
 chat, state = start_outputs[-1][0], start_outputs[-1][1]
+if os.environ.get("FATE_PLAYTEST_LEGACY") == "1":
+    state["compose_mode"] = False
+    (state.get("start_params") or {})["compose_mode"] = False
+    print("PLAYTEST_MODE", "legacy")
+else:
+    print("PLAYTEST_MODE", "assembled")
 print("START_STATE", {k:state.get(k) for k in ("plot_ready","gf_confirmed","opening_confirmed","opening_phase","current_chapter","chapter_round","turn_budget","round","session")})
 print("START_CHAT_LAST", chat[-1]["content"][:180].replace("\n"," / "))
 
@@ -159,7 +237,11 @@ streams_before = fake.chat.completions.stream_count
 pre_fail = snapshot(state)
 (chat, _, state, *_), vals = send("调查北墙裂痕并让阿岚与林秋协作", chat, state)
 assert state.get("scene_gate") is True, state.get("scene_gate_reason")
-assert fake.chat.completions.stream_count >= streams_before + 2  # 初稿 + 定向重写
+if state.get("compose_mode"):
+    # 组装模式：段卷/重填走非流式子调用，旧的「初稿+整篇重写」流式次数不再适用。
+    assert fake.chat.completions.stream_count == streams_before
+else:
+    assert fake.chat.completions.stream_count >= streams_before + 2  # 初稿 + 定向重写
 assert state.get("round", 0) > pre_fail["round"], "重写救回后应正常提交推进"
 print("FAIL_LENGTH_REGEN_OK streams", fake.chat.completions.stream_count - streams_before,
       "round", state.get("round"))
@@ -175,16 +257,24 @@ streams_before = fake.chat.completions.stream_count
 pre_fail = snapshot(state)
 (chat, _, state, *_), vals = send("让阿岚与林秋协作查验北墙", chat, state)
 assert state.get("scene_gate") is True, state.get("scene_gate_reason")
-assert fake.chat.completions.stream_count >= streams_before + 2
+if state.get("compose_mode"):
+    assert fake.chat.completions.stream_count == streams_before
+else:
+    assert fake.chat.completions.stream_count >= streams_before + 2
 print("FAIL_INTERACTION_REGEN_OK streams", fake.chat.completions.stream_count - streams_before,
       "round", state.get("round"))
 
-fake.chat.completions.raise_once = True
+if state.get("compose_mode"):
+    fake.chat.completions.raise_nonstream_once = True
+else:
+    fake.chat.completions.raise_once = True
 pre_fail = snapshot(state)
 (chat, _, state, *_), vals = send("继续追查北墙裂痕", chat, state)
 assert state.get("scene_gate") is False
 assert state.get("scene_gate_reason") == "模型服务调用失败，已回滚本回合运行状态。"
 assert_rolled_back(pre_fail, state, "FAIL_MODEL_ROLLBACK")
+fake.chat.completions.raise_nonstream_once = False
+fake.chat.completions.raise_once = False
 
 # 三个有效回合，验证提交、章节预算和翻章。
 for i, msg in enumerate(["跟随回声查验旧水道", "保护信使并核对旧册", "在北墙下设下暗号"], 1):

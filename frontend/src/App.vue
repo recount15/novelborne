@@ -253,6 +253,7 @@ const form = ref({
   difficulty: 'D4 普通',
   convergence: '较高',
   story_richness: 700,
+  paper_tier: 3,
   story_agent_mode: false,
   golden_finger: '',
   persona_preset: '',
@@ -318,12 +319,45 @@ const richnessTier = computed(() => {
   return richnessTiers.value.find((tier) => value <= tier.upper) ?? richnessTiers.value[richnessTiers.value.length - 1]
 })
 const richnessThinkingHint = computed(() => form.value.story_richness > richnessTiers.value[1].upper)
+// —— 剧情丰度（重构 M4）：双族六档选择器取代旧丰富度滑杆 ——
+const DEFAULT_PAPER_TIERS = [
+  { tier: 1, label: '轻盈', family: 'small', target_chars: 400, segments: 1, basic_ok: true, agent_required: false, agent_recommended: false },
+  { tier: 2, label: '简明', family: 'small', target_chars: 650, segments: 2, basic_ok: true, agent_required: false, agent_recommended: false },
+  { tier: 3, label: '标准', family: 'small', target_chars: 950, segments: 3, basic_ok: false, agent_required: false, agent_recommended: false },
+  { tier: 4, label: '丰厚', family: 'large', target_chars: 1350, segments: 3, basic_ok: false, agent_required: false, agent_recommended: false },
+  { tier: 5, label: '鸿篇', family: 'large', target_chars: 1850, segments: 4, basic_ok: false, agent_required: false, agent_recommended: true },
+  { tier: 6, label: '史诗', family: 'large', target_chars: 2400, segments: 5, basic_ok: false, agent_required: true, agent_recommended: false },
+]
+const paperTiers = computed(() => bootstrap.value?.paper_tiers ?? DEFAULT_PAPER_TIERS)
+// 普通模式只渲染 1–2 档；强化模式全 6 档（agent_required 的档位在模板层联动禁用）。
+const visiblePaperTiers = computed(() =>
+  enhanced.value ? paperTiers.value : paperTiers.value.filter((item) => item.basic_ok),
+)
+const selectedPaperTier = computed(() =>
+  paperTiers.value.find((item) => item.tier === form.value.paper_tier) ?? paperTiers.value[2],
+)
+const paperTierThinkingHint = computed(() => selectedPaperTier.value.tier >= 4)
+// 档位门禁联动（前端第一道，server/app 双侧再拦）：普通模式钳 ≤2；
+// 强化模式关掉类 Agent 时第 6 档自动回落第 5 档。
+watch([enhanced, () => form.value.story_agent_mode], () => {
+  if (!enhanced.value && form.value.paper_tier > 2) form.value.paper_tier = 2
+  if (enhanced.value && !form.value.story_agent_mode && form.value.paper_tier >= 6) {
+    form.value.paper_tier = 5
+  }
+})
+// 对局中的丰度：优先显示剧情丰度档位（新存档）；旧存档回退旧刻度显示。
+const statePaperTier = computed(() => {
+  const tier = Number(state.value.paper_tier)
+  if (!Number.isFinite(tier) || tier < 1) return null
+  return paperTiers.value.find((item) => item.tier === tier) ?? null
+})
 // 对局中的丰富度：后端归一化后的值与档位，回放旧存档时显示为「—」。
 const stateRichnessValue = computed(() => {
   const raw = Number(state.value.story_richness)
   return Number.isFinite(raw) && raw > 0 ? Math.round(raw) : null
 })
 const stateRichnessLabel = computed(() => {
+  if (statePaperTier.value) return `${statePaperTier.value.label} · 约${statePaperTier.value.target_chars}字`
   if (!stateRichnessValue.value) return '—'
   const tier = richnessTiers.value.find((item) => stateRichnessValue.value! <= item.upper)
     ?? richnessTiers.value[richnessTiers.value.length - 1]
@@ -1387,6 +1421,7 @@ async function startGame(): Promise<void> {
     difficulty: form.value.difficulty,
     convergence: form.value.convergence,
     story_richness: form.value.story_richness,
+    paper_tier: form.value.paper_tier,
     story_agent_mode: enhanced.value && form.value.story_agent_mode,
     golden_finger: form.value.golden_finger || null,
     golden_finger_proposal: goldenFingerProposal.value ?? {},
@@ -1724,6 +1759,10 @@ onMounted(async () => {
     form.value.work = bootstrap.value.works[0] ?? ''
     form.value.difficulty = bootstrap.value.difficulties[0] ?? form.value.difficulty
     form.value.story_richness = richnessConfig.value.default
+    // 剧情丰度：强化模式取后端默认档（缺省 3），普通模式固定钳到第 2 档。
+    form.value.paper_tier = form.value.mode.startsWith('强化')
+      ? (bootstrap.value.paper_tier_default ?? 3)
+      : 2
     // 初始化只填兜底金手指列表（供下拉显示）；真正的生成必须等用户
     // 点"确定设定"后手动触发，绝不在选完主角时自动生成。
     goldenFingerChoices.value = [...bootstrap.value.golden_fingers]
@@ -1899,33 +1938,35 @@ watch([compressionRecord, round], () => {
               <p class="mt-1 text-[10px] leading-4 text-(--fe-ink-3)">收束力越高，剧情走向越贴近原著主线锚点。</p>
             </div>
 
-            <div v-if="enhanced" class="mt-3">
+            <div class="mt-3">
               <span class="label flex items-center justify-between">
-                <span>故事丰富度</span>
-                <span class="richness-badge" :data-tier="richnessTier.label">{{ richnessTier.label }}</span>
+                <span>剧情丰度</span>
+                <span class="richness-badge" :data-tier="selectedPaperTier.label">{{ selectedPaperTier.label }} · 约{{ selectedPaperTier.target_chars }}字</span>
               </span>
-              <div class="richness-slider">
-                <span class="seal-mark seal-min" aria-hidden="true">简</span>
-                <input
-                  v-model.number="form.story_richness"
-                  type="range"
-                  class="richness-range"
-                  :min="richnessConfig.min"
-                  :max="richnessConfig.max"
-                  :step="richnessConfig.step"
-                  aria-label="故事丰富度"
-                  :disabled="setupLocked"
-                />
-                <span class="seal-mark seal-max" aria-hidden="true">繁</span>
+              <div class="grid grid-cols-3 gap-1.5">
+                <button
+                  v-for="item in visiblePaperTiers"
+                  :key="item.tier"
+                  type="button"
+                  class="tier-btn"
+                  :class="{ 'tier-btn-active': form.paper_tier === item.tier }"
+                  :disabled="setupLocked || (item.agent_required && !form.story_agent_mode)"
+                  :title="item.agent_required ? '史诗丰度需开启类 Agent 生成' : item.agent_recommended ? '建议开启类 Agent 生成' : `目标约 ${item.target_chars} 字 / ${item.segments} 段`"
+                  @click="form.paper_tier = item.tier"
+                >
+                  <span class="block text-xs font-bold">{{ item.tier }} · {{ item.label }}</span>
+                  <span class="block text-[10px] leading-3 opacity-70">约{{ item.target_chars }}字 · {{ item.segments }}段</span>
+                  <span v-if="item.agent_required" class="block text-[10px] leading-3 text-(--fe-warn)">需类Agent</span>
+                  <span v-else-if="item.agent_recommended" class="block text-[10px] leading-3 opacity-60">建议类Agent</span>
+                </button>
               </div>
-              <p class="mt-1.5 text-[10px] leading-4 text-(--fe-ink-3)">{{ richnessTier.note }}</p>
               <Transition name="pop">
                 <p
-                  v-if="richnessThinkingHint && enhanced"
+                  v-if="paperTierThinkingHint && enhanced"
                   class="mt-1 flex items-start gap-1 rounded-md border border-[color-mix(in_srgb,_var(--fe-warn)_32%,_var(--fe-panel))] bg-[color-mix(in_srgb,_var(--fe-warn)_10%,_var(--fe-panel))] px-2 py-1.5 text-[10px] leading-4 text-[color-mix(in_srgb,_var(--fe-warn)_72%,_var(--fe-ink))]"
                 >
                   <Sparkles :size="11" class="mt-0.5 shrink-0" />
-                  当前丰富度建议搭配带思考模式的模型，或在下方把思考模式设为「开启」。
+                  高剧情丰度建议搭配带思考模式的模型，或在下方把思考模式设为「开启」。
                 </p>
               </Transition>
             </div>
@@ -2857,7 +2898,7 @@ watch([compressionRecord, round], () => {
           <div class="metric border-t"><span>章内进度</span><strong>{{ chapterRound }}/{{ turnBudget || '—' }}</strong></div>
           <div class="metric border-l border-t"><span>相容性 K</span><strong>{{ compatibility }}</strong></div>
           <div class="metric border-t">
-            <span>故事丰富度</span>
+            <span>剧情丰度</span>
             <strong>{{ stateRichnessLabel }}</strong>
           </div>
           <div class="metric col-span-2 border-t" title="最近一次调用：入 {{ tokenUsage.lastIn.toLocaleString() }} · 出 {{ tokenUsage.lastOut.toLocaleString() }}">
@@ -3423,9 +3464,20 @@ watch([compressionRecord, round], () => {
   padding: 0 6px; font-size: 10px; font-weight: 700;
 }
 .richness-badge[data-tier='轻盈'] { color: var(--fe-ok); background: color-mix(in srgb, var(--fe-ok) 8%, var(--fe-panel)); }
-.richness-badge[data-tier='适中'] { color: color-mix(in srgb, var(--fe-warn) 72%, var(--fe-ink)); background: color-mix(in srgb, var(--fe-warn) 10%, var(--fe-panel)); }
-.richness-badge[data-tier='厚重'] { color: var(--fe-warn); background: color-mix(in srgb, var(--fe-warn) 16%, var(--fe-panel)); }
-.richness-badge[data-tier='沉浸'] { color: var(--fe-accent); background: var(--fe-accent-soft); }
+.richness-badge[data-tier='简明'] { color: color-mix(in srgb, var(--fe-ok) 65%, var(--fe-ink)); background: color-mix(in srgb, var(--fe-ok) 7%, var(--fe-panel)); }
+.richness-badge[data-tier='标准'] { color: color-mix(in srgb, var(--fe-warn) 72%, var(--fe-ink)); background: color-mix(in srgb, var(--fe-warn) 10%, var(--fe-panel)); }
+.richness-badge[data-tier='丰厚'] { color: var(--fe-warn); background: color-mix(in srgb, var(--fe-warn) 16%, var(--fe-panel)); }
+.richness-badge[data-tier='鸿篇'] { color: color-mix(in srgb, var(--fe-accent) 74%, var(--fe-ink)); background: color-mix(in srgb, var(--fe-accent) 10%, var(--fe-panel)); }
+.richness-badge[data-tier='史诗'] { color: var(--fe-accent); background: var(--fe-accent-soft); }
+/* 双族六档剧情丰度按钮：窄屏三列仍保持可读，禁用档清楚表达“需类 Agent”。 */
+.tier-btn {
+  min-height: 46px; border: 1px solid var(--fe-border); border-radius: var(--fe-radius);
+  background: var(--fe-panel); padding: 5px 4px; color: var(--fe-ink-2);
+  transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease, transform 120ms ease;
+}
+.tier-btn:hover:not(:disabled) { border-color: var(--fe-accent); color: var(--fe-ink); transform: translateY(-1px); }
+.tier-btn-active { border-color: var(--fe-accent); background: var(--fe-accent-soft); color: var(--fe-accent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fe-accent) 25%, transparent); }
+.tier-btn:disabled { cursor: not-allowed; opacity: .42; }
 .upload-zone { display: flex; min-height: 64px; cursor: pointer; align-items: center; gap: 8px; border: 1px dashed var(--fe-border-strong); border-radius: var(--fe-radius); background: var(--fe-panel); padding: 8px 12px; transition: border-color 140ms ease, background-color 140ms ease; }
 .upload-zone:hover { border-color: var(--fe-accent); }
 .upload-chip { display: flex; min-height: 34px; cursor: pointer; align-items: center; gap: 6px; border: 1px dashed var(--fe-border); border-radius: var(--fe-radius); background: var(--fe-panel); padding: 5px 9px; font-size: 11px; color: var(--fe-ink-2); transition: border-color 140ms ease, background-color 140ms ease; }
