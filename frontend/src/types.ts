@@ -509,6 +509,25 @@ export interface UserBookChapter extends UserBookChapterMeta {
   text: string
 }
 
+export interface UserBookAnchor {
+  chapter: number
+  title: string
+  summary: string
+  events: string[]
+  characters: Array<string | { name?: string; role?: string; summary?: string; [key: string]: unknown }>
+  world: string
+  foreshadowing: string[]
+  quotes: string[]
+  ripple: string
+}
+
+export interface UserBookChapterInsight {
+  book_id: string
+  chapter_index: number
+  anchor: UserBookAnchor | null
+  characters: Array<{ name: string; detail?: string }>
+}
+
 export interface NovelChapter {
   index: number
   title: string
@@ -621,4 +640,11 @@ export interface DistillProgress {
   done?: number
   total?: number
   chapters?: DistillChapterProgress[]
+}
+
+export interface OpeningDistill {
+  status?: string
+  chapters_done?: number
+  chapters_total?: number
+  stage?: string
 }

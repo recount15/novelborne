@@ -167,6 +167,7 @@ run_app.py
 - [接手手册](docs/HANDBOOK.md)
 - [重构计划](docs/REFACTOR_PLAN.md)
 - [项目规范](standards/README.md)
+- [v2.0.2 发布说明](RELEASE_NOTES_v2.0.2.md)
 - [v2.0.1 发布说明](RELEASE_NOTES_v2.0.1.md)
 
 ## 隐私、版权与发布边界

@@ -265,8 +265,9 @@ def _save_distilled_characters(cards: List[Mapping[str, Any]]) -> List[Dict[str,
             result = character_library.save_card(card)
             record = result.get("record") or {}
             saved.append({"id": record.get("id"), "name": record.get("name")})
-        except Exception:  # noqa: BLE001 单卡失败跳过（日志由调用方记）
-            continue
+        except Exception as exc:  # noqa: BLE001 单卡失败跳过并返回诊断
+            saved.append({"name": str(card.get("name") or ""), "saved": False,
+                          "error": str(exc)[:200] or "角色保存失败"})
     return saved
 
 

@@ -25,6 +25,40 @@ import time
 from pathlib import Path
 
 
+# Keep fallback streams alive for the entire process. Windowed PyInstaller
+# builds may start with ``sys.stdout``/``sys.stderr`` set to None.
+_devnull_streams: list[object] = []
+
+
+def _ensure_stdio() -> None:
+    """Install text streams for missing standard handles."""
+    for name in ("stdout", "stderr"):
+        if getattr(sys, name, None) is None:
+            stream = open(os.devnull, "w", encoding="utf-8", errors="ignore")
+            setattr(sys, name, stream)
+            _devnull_streams.append(stream)
+
+
+def _startup_log(message: str) -> None:
+    """Write diagnostics for windowed builds where no console is available."""
+    try:
+        path = _default_var_dir() / "logs" / "windowed-startup.log"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {message}\n")
+    except Exception:
+        pass
+
+
+def _install_startup_exception_hook() -> None:
+    previous = sys.excepthook
+    def hook(exc_type, exc_value, exc_traceback):
+        import traceback
+        _startup_log("UNHANDLED\n" + "".join(traceback.format_exception(exc_type, exc_value, exc_traceback)))
+        previous(exc_type, exc_value, exc_traceback)
+    sys.excepthook = hook
+
+
 def _default_var_dir() -> Path:
     """源码默认项目根 var；PyInstaller 默认 EXE 同级 var。"""
     if getattr(sys, "frozen", False):
@@ -168,6 +202,9 @@ class WindowApi:
 
 
 def main() -> None:
+    _ensure_stdio()
+    _install_startup_exception_hook()
+    _startup_log("启动窗口版")
     parser = argparse.ArgumentParser(description="书中织梦 · 窗口版")
     parser.add_argument("--port", type=int, default=None, help="端口（默认自动挑选空闲口）")
     parser.add_argument("--no-lan", action="store_true", help="仅本机监听（默认 0.0.0.0，手机可扫码）")
@@ -201,6 +238,7 @@ def main() -> None:
 
     port = args.port or _free_port(8300)
     host = "127.0.0.1" if args.no_lan else "0.0.0.0"
+    _startup_log(f"配置 host={host} port={port} var={os.environ.get('FATE_VAR_DIR', '')}")
     # server 模块在 import 时读取 FATE_API_HOST 推断局域网监听状态
     os.environ["FATE_API_HOST"] = host
     os.environ["FATE_API_PORT"] = str(port)
@@ -208,7 +246,8 @@ def main() -> None:
     import uvicorn
     from core.server import app
 
-    server = uvicorn.Server(uvicorn.Config(app, host=host, port=port, log_level="warning"))
+    server = uvicorn.Server(uvicorn.Config(
+        app, host=host, port=port, log_level="warning", use_colors=False))
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
     for _ in range(100):

@@ -30,6 +30,7 @@ import type {
   UserBookMeta,
   UserBookDetail,
   UserBookChapter,
+  UserBookChapterInsight,
 } from './types'
 
 function apiFetch(input: string, init?: RequestInit): Promise<Response> {
@@ -66,6 +67,16 @@ export async function fetchLanInfo(sessionId?: string | null): Promise<LanInfo> 
   const response = await apiFetch(`/api/lan-info${query}`)
   if (!response.ok) throw await responseError(response)
   return response.json() as Promise<LanInfo>
+}
+
+export async function saveUiState(sessionId: string, uiState: Record<string, any>): Promise<{ ok: boolean; session_id: string }> {
+  return postJson('/api/session/ui-state', { session_id: sessionId, ui_state: uiState })
+}
+
+export async function getUiState(sessionId: string): Promise<{ ok: boolean; session_id: string; ui_state: Record<string, any> }> {
+  const response = await apiFetch(`/api/session/ui-state?session_id=${encodeURIComponent(sessionId)}`)
+  if (!response.ok) throw await responseError(response)
+  return response.json() as Promise<{ ok: boolean; session_id: string; ui_state: Record<string, any> }>
 }
 
 async function postJson<T>(url: string, body: unknown, init?: RequestInit): Promise<T> {
@@ -204,6 +215,12 @@ export async function fetchUserBookChapter(bookId: string, chapterIndex: number)
   if (!response.ok) throw await responseError(response)
   const data = await response.json() as { chapter: UserBookChapter }
   return data.chapter
+}
+
+export async function fetchUserBookChapterInsight(bookId: string, chapterIndex: number): Promise<UserBookChapterInsight> {
+  const response = await apiFetch(`/api/books/${encodeURIComponent(bookId)}/chapters/${chapterIndex}/anchors`)
+  if (!response.ok) throw await responseError(response)
+  return await response.json() as UserBookChapterInsight
 }
 
 export function askQuestion(sessionId: string, question: string): Promise<{ answer: string }> {

@@ -21,7 +21,7 @@ datas = [(os.path.join(ROOT, 'assets'), 'assets'),
          (os.path.join(ROOT, 'LICENSE'), 'LICENSE')]
 binaries = []
 hiddenimports = ['core', 'core.server', 'core.app', 'core.fate_engine',
-                 'tools.private_recovery', 'pywebview', 'webview', 'clr_loader', 'pythonnet']
+                 'tools.private_recovery', 'webview', 'clr_loader', 'pythonnet']
 for _pkg in ('core.engine', 'core.api', 'core.ui', 'core.memory', 'core.lore', 'core.prompts'):
     hiddenimports += collect_submodules(_pkg)
 for _pkg in ('openai', 'fastapi', 'uvicorn', 'multipart',

@@ -20,6 +20,7 @@ class ApiSession:
     api_key: str = ""
     uploads: dict[str, Path] = field(default_factory=dict)
     upload_display_names: dict[str, str] = field(default_factory=dict)
+    ui_state: dict[str, Any] = field(default_factory=dict)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     @property
@@ -101,6 +102,16 @@ class SessionManager:
     def clear(self) -> None:
         with self._lock:
             self._sessions.clear()
+
+    def save_ui_state(self, session: ApiSession, ui_state: dict[str, Any]) -> None:
+        """保存前端UI状态到会话内存，刷新/换设备后可恢复。"""
+        with session.lock:
+            session.ui_state = ui_state.copy()
+
+    def get_ui_state(self, session: ApiSession) -> dict[str, Any]:
+        """获取已保存的UI状态。"""
+        with session.lock:
+            return session.ui_state.copy()
 
 
 async def read_upload(upload: Any, *, max_bytes: int = 100 * 1024 * 1024) -> bytes:

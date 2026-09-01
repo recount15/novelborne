@@ -175,6 +175,25 @@ class TestRunParallel(unittest.TestCase):
         self.assertTrue(parallel.is_rate_limit_error(RuntimeError("rate limit exceeded")))
         self.assertFalse(parallel.is_rate_limit_error(ValueError("bad json")))
 
+    def test_overload_classification(self):
+        for message in ("timeout", "connection reset by peer", "502", "503", "504", "provider overloaded"):
+            self.assertTrue(parallel.classify_overload(RuntimeError(message)))
+        for message in ("401 unauthorized", "invalid model", "schema validation failed"):
+            self.assertFalse(parallel.classify_overload(RuntimeError(message)))
+
+    def test_completion_order_iterator(self):
+        def delayed(value, delay):
+            def job():
+                time.sleep(delay)
+                return value
+            return job
+
+        results = list(parallel.iter_parallel_completed([
+            delayed("slow", 0.04), delayed("fast", 0.005), delayed("mid", 0.02)
+        ]))
+        self.assertEqual([index for index, result in results], [1, 2, 0])
+        self.assertEqual([result.value for index, result in results], ["fast", "mid", "slow"])
+
 
 if __name__ == "__main__":
     unittest.main()

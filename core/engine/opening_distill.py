@@ -145,14 +145,14 @@ CHARACTERS_OUTER_SPECS: Tuple[structured.FieldSpec, ...] = (
 #: 单张角色卡的逐卡约束（防编造/枚举/白名单口径，也用于重填错误清单）。
 CHARACTER_CARD_SPECS: Tuple[structured.FieldSpec, ...] = (
     structured.FieldSpec("name", "str", min_len=1, max_len=40),
-    structured.FieldSpec("original_position", "str", enum=("主角", "男主", "女主", "配角", "反派")),
-    structured.FieldSpec("gender", "str", enum=("male", "female", "unknown")),
-    structured.FieldSpec("slot_keys", "dict"),
-    structured.FieldSpec("desire", "str", min_len=2, max_len=120),
-    structured.FieldSpec("fear", "str", min_len=2, max_len=90),
-    structured.FieldSpec("voice", "str", min_len=2, max_len=60),
-    structured.FieldSpec("background", "str", min_len=2, max_len=200),
-    structured.FieldSpec("relationship_vector", "dict"),
+    structured.FieldSpec("original_position", "str", enum=("主角", "男主", "女主", "配角", "反派"), required=False, default="配角"),
+    structured.FieldSpec("gender", "str", enum=("male", "female", "unknown"), required=False, default="unknown"),
+    structured.FieldSpec("slot_keys", "dict", required=False, default={}),
+    structured.FieldSpec("desire", "str", min_len=2, max_len=120, required=False, default=""),
+    structured.FieldSpec("fear", "str", min_len=2, max_len=90, required=False, default=""),
+    structured.FieldSpec("voice", "str", min_len=2, max_len=60, required=False, default=""),
+    structured.FieldSpec("background", "str", min_len=2, max_len=200, required=False, default=""),
+    structured.FieldSpec("relationship_vector", "dict", required=False, default={}),
     structured.FieldSpec("evidence_chapter", "int", required=False, default=1),
 )
 
@@ -624,8 +624,9 @@ def _default_save_characters(cards: List[Mapping[str, Any]]) -> List[Dict[str, A
             result = character_library.save_card(card)
             record = result.get("record") or {}
             saved.append({"id": record.get("id"), "name": record.get("name")})
-        except Exception:  # noqa: BLE001 单卡失败不拖垮整批
-            continue
+        except Exception as exc:  # noqa: BLE001 单卡失败不拖垮整批，但返回失败记录
+            saved.append({"name": str(card.get("name") or ""), "saved": False,
+                          "error": _zh(exc, "角色保存失败")})
     return saved
 
 
@@ -898,24 +899,29 @@ def run_opening_pipeline(book_dir: str | Path,
     first_draft: Dict[int, Dict[str, Any]] = {}
     block_results: Dict[int, List[Dict[str, Any]]] = {}
     if jobs:
+        jobs_done = 0
         for result in parallel.run_parallel(jobs, priority=parallel.PRIORITY_OPENING):
+            jobs_done += 1
             if not result.ok:
                 errors.append(_zh(result.error, "并行作业失败"))
-                continue
-            value = result.value or {}
-            kind = value.get("kind")
-            if kind == "plot_sample":
-                plot_samples.append({"label": value.get("label"), "data": value.get("data")})
-                report["selected_chapters"].append({"idx": value.get("idx")})
-            elif kind == "characters":
-                raw_cards = list(value.get("cards") or [])
-            elif kind == "anchor_pass":
-                first_draft[int(value.get("chapter") or 0)] = dict(value.get("draft") or {})
-            elif kind == "anchor":
-                anchors_field.append({k: v for k, v in value.items() if k != "kind"})
-            elif kind == "block":
-                block_results.setdefault(int(value.get("chapter") or 0), []).append(
-                    dict(value.get("block") or {}))
+            else:
+                value = result.value or {}
+                kind = value.get("kind")
+                if kind == "plot_sample":
+                    plot_samples.append({"label": value.get("label"), "data": value.get("data")})
+                    report["selected_chapters"].append({"idx": value.get("idx")})
+                elif kind == "characters":
+                    raw_cards = list(value.get("cards") or [])
+                elif kind == "anchor_pass":
+                    first_draft[int(value.get("chapter") or 0)] = dict(value.get("draft") or {})
+                elif kind == "anchor":
+                    anchors_field.append({k: v for k, v in value.items() if k != "kind"})
+                elif kind == "block":
+                    block_results.setdefault(int(value.get("chapter") or 0), []).append(
+                        dict(value.get("block") or {}))
+            if jobs_done % 3 == 0 or jobs_done == len(jobs):
+                _emit_progress(progress, "wave1_tick",
+                               done=jobs_done, total=len(jobs))
     timings["wave1"] = round(time.perf_counter() - wave1_started, 3)
     _emit_progress(progress, "wave1_done", plot_samples=len(plot_samples),
                    blocks=sum(len(v) for v in block_results.values()),
@@ -992,13 +998,17 @@ def run_opening_pipeline(book_dir: str | Path,
             saved = list(saver(list(final_cards)) or [])
         except Exception as exc:  # noqa: BLE001 入库通道故障只记录
             errors.append("角色入库失败：%s" % _zh(exc, "入库通道故障"))
+        for item in saved:
+            if isinstance(item, Mapping) and item.get("error"):
+                errors.append("角色保存失败（%s）：%s" % (
+                    item.get("name") or "未命名角色", item.get("error")))
         saved_names = {str(item.get("name") or "").strip()
-                       for item in saved if isinstance(item, Mapping)}
+                       for item in saved if isinstance(item, Mapping) and item.get("saved", True)}
+        saved_by_name = {str(item.get("name") or "").strip(): item for item in saved
+                         if isinstance(item, Mapping) and item.get("saved", True)}
         for index, card in enumerate(final_cards):
             name = str(card.get("name") or "").strip()
-            positional = (index < len(saved) and isinstance(saved[index], Mapping)
-                          and not saved_names)
-            saved_flag = name in saved_names or bool(positional)
+            saved_flag = name in saved_names
             for entry in entries:
                 if entry.get("name") == name and not entry.get("dropped_reason"):
                     entry["saved"] = saved_flag

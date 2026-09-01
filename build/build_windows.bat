@@ -2,7 +2,7 @@
 setlocal
 chcp 65001 >nul
 REM ============================================================
-REM  Novelborne v2.0.1 - Windows Web executable build
+REM  Novelborne v2.0.2 - Windows Web executable build
 REM  Output: dist\FateEngine\FateEngine.exe
 REM ============================================================
 cd /d "%~dp0\.."

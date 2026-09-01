@@ -14,7 +14,7 @@ STATE_VERSION = 1
 # 章节与回合统一由 scene 承载，不再单列 chapter 分类，避免 schema 与默认值不一致。
 CATEGORIES = (
     "world", "time", "location", "body", "assets", "abilities", "relationships",
-    "goals", "knowledge", "scene", "flags",
+    "goals", "knowledge", "scene", "flags", "character_state",
 )
 
 
@@ -31,6 +31,7 @@ def blank_state(mode: str = "", source: str = "") -> dict[str, Any]:
         "assets": {"currency": [], "equipment": [], "items": [], "debts": [], "income": []},
         "abilities": {"skills": [], "cultivation": "", "golden_finger": {"name": "无", "status": "inactive", "cooldown": 0, "costs": []}},
         "relationships": {"characters": [], "factions": []},
+        "character_state": {"core": {}, "assertions": [], "revision": 0},
         "goals": {"current": [], "tasks": [], "foreshadowing": [], "promises": []},
         "knowledge": {"known": [], "unknown": [], "misconceptions": [], "sources": []},
         "scene": {"chapter": 1, "round": 0, "name": "", "anchor_ids": [], "pending": []},

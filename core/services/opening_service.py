@@ -16,6 +16,7 @@ plot_summary 等字段（语义对齐 app._merge_distill_status，本地实现�
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional
 
@@ -99,6 +100,7 @@ def _apply_to_state(state: dict, report: Mapping[str, Any]) -> None:
     state["work_distill"] = _merge_keep(state.get("work_distill"), work_updates)
     state["opening_distill"] = {
         "status": "done",
+        "stage": "开局蒸馏完成",
         "ok": bool(report.get("ok")),
         "plot_ready": bool(plot),
         "plot_degraded": bool(report.get("plot_degraded")),
@@ -152,6 +154,110 @@ def _summary(report: Mapping[str, Any]) -> dict:
     }
 
 
+# 流水线阶段 → 用户可理解的中文文案（前端右下角进度区展示）。
+_STAGE_LABELS = {
+    "start": "正在读取原著章节",
+    "wave1_done": "正在分析剧情与角色",
+    "plot_merged": "正在提炼故事主线",
+    "archive_done": "正在写入作品档案",
+    "characters_done": "正在校验角色卡",
+    "done": "开局蒸馏完成",
+}
+
+# 进程级进度注册表：蒸馏期间 st0 尚未提交为 session.state，/state 轮询
+# 读不到 st0 的回写。以 distill_key（书籍目录）为键暂存最新进度，
+# /api/sessions/{id}/state 返回时合并（见 server.state 端点）。
+# 条目带 "at" 时间戳：蒸馏中断（客户端断开/异常）后的残留 running 条目
+# 超过 _PROGRESS_MAX_AGE 即视为过期，/state 不再合并成"永久蒸馏中"。
+_PROGRESS_REGISTRY: dict[str, dict] = {}
+_PROGRESS_MAX_AGE = 900.0
+
+
+def take_progress(book_dir: str) -> Optional[dict]:
+    """读取并清除指定书籍目录的开局蒸馏进度（一次性消费）。"""
+    if not book_dir:
+        return None
+    return _PROGRESS_REGISTRY.pop(str(book_dir), None)
+
+
+def _progress_fresh(entry: Mapping[str, Any]) -> bool:
+    """running 条目须在保鲜期内；done 条目永久有效。"""
+    if entry.get("status") == "done":
+        return True
+    try:
+        age = time.time() - float(entry.get("at") or 0.0)
+    except (TypeError, ValueError):
+        age = _PROGRESS_MAX_AGE + 1.0
+    return 0.0 <= age <= _PROGRESS_MAX_AGE
+
+
+def peek_progress(book_dir: str, max_age: Optional[float] = None) -> Optional[dict]:
+    """只读查询进度（不消费），供测试与调试。
+
+    ``max_age`` 默认取 _PROGRESS_MAX_AGE：过期的 running 残留（蒸馏早已
+    中断）不返回，且顺手从注册表清除，避免同一书籍的后续读档会话被
+    旧进度污染成"开局蒸馏进行中"。
+    """
+    if not book_dir:
+        return None
+    entry = _PROGRESS_REGISTRY.get(str(book_dir))
+    if not entry:
+        return None
+    limit = _PROGRESS_MAX_AGE if max_age is None else float(max_age)
+    if entry.get("status") != "done":
+        try:
+            age = time.time() - float(entry.get("at") or 0.0)
+        except (TypeError, ValueError):
+            age = limit + 1.0
+        if not (0.0 <= age <= limit):
+            _PROGRESS_REGISTRY.pop(str(book_dir), None)
+            return None
+    return dict(entry)
+
+
+def _write_progress(state: dict, event: Mapping[str, Any],
+                    book_dir: str = "") -> None:
+    """把流水线进度事件实时回写 state.opening_distill。
+
+    双通道：① 写入 st0（开局流结束前 state 尚未提交，配合 app.on_start
+    蒸馏前的首帧 yield 已覆盖起始阶段）；② 写入进程级注册表（以 book_dir
+    为键），供 /api/sessions/{id}/state 轮询期间合并读取。回调自身故障
+    绝不影响流水线。
+    """
+    try:
+        stage = str(event.get("stage") or "")
+        payload: Optional[dict] = None
+        if stage == "wave1_tick":
+            done = int(event.get("done") or 0)
+            total = int(event.get("total") or 0)
+            payload = {
+                "status": "running",
+                "stage": "正在蒸馏开局内容（%d/%d）" % (done, total),
+                "stage_key": stage,
+                "done": done,
+                "total": total,
+                "chapters_done": done,
+                "chapters_total": total,
+                "at": time.time(),
+            }
+        else:
+            label = _STAGE_LABELS.get(stage)
+            if not label:
+                return
+            payload = {
+                "status": "done" if stage == "done" else "running",
+                "stage": label,
+                "stage_key": stage,
+                "ok": bool(event.get("ok")) if stage == "done" else None,
+                "at": time.time(),
+            }
+        state["opening_distill"] = dict(payload)
+        if book_dir:
+            _PROGRESS_REGISTRY[str(book_dir)] = dict(payload)
+    except Exception:  # noqa: BLE001 进度回写失败静默忽略
+        pass
+
+
 def run_for_state(state: dict,
                   client: Any,
                   model: str,
@@ -180,15 +286,24 @@ def run_for_state(state: dict,
     # 开局优先级给满：预算包装幂等（流水线内部再包一次也无副作用）。
     budgeted = engine.parallel.budget_model(
         _call, default_priority=engine.parallel.PRIORITY_OPENING)
+
+    def _progress(event: dict) -> None:
+        _write_progress(state, event, book_dir)
+
     report = engine.opening_distill.run_opening_pipeline(
         book_dir, work_title, budgeted,
         chapters_ahead=chapters_ahead,
+        progress=_progress,
         library_path=library_path,
         save_characters_fn=save_characters_fn)
 
     # 全线失败（无锚点、无剧情、无档案）才上抛 502；兜底锚点在场即放行开局。
     if (not report.get("ok") and not report.get("anchors")
             and not report.get("plot") and not report.get("work_entry")):
+        # 502 路径不回写 state（端点返回错误而非半成品），含进度注册表一并
+        # 清除，避免 /state 轮询合并出"进行中"的残留进度。
+        state.pop("opening_distill", None)
+        _PROGRESS_REGISTRY.pop(str(book_dir), None)
         detail = "；".join(report.get("errors") or []) or "未知错误"
         raise OpeningUpstreamError("开局蒸馏全线失败：%s" % detail[:300])
     _apply_to_state(state, report)

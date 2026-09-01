@@ -1,4 +1,4 @@
-This is a local archival source snapshot prepared for the public v2.0.1 release.
+This is a local archival source snapshot prepared for the public v2.0.2 release.
 
 The source tree contains only the application, public documentation, static rules/data, tests, and build recipes. Runtime data, logs, databases, uploaded documents, private recovery data, build output, local test output, and API credentials are excluded by design.
 

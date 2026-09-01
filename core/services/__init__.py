@@ -1,9 +1,0 @@
-# -*- coding: utf-8 -*-
-"""core.services — 进程级共享服务与注册表的中立层。
-
-app（UI）/ server（API）/ engine（引擎）三层共享的可变全局状态
-（如后台蒸馏线程注册表、角色池缓存）收编到这里，避免任何一层
-直接读写另一层的模块级私有全局，从根源上打断循环依赖。
-registries 等中立层不依赖 core 的其他子包，可被任意层安全 import；
-ask_service 等 API 业务服务模块则允许依赖 engine 层（Phase 3b 起）。
-"""

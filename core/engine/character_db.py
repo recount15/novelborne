@@ -497,33 +497,63 @@ def update_character(character_id: str, updates: Mapping[str, Any]) -> bool:
                 sql = f"UPDATE characters SET {', '.join(set_clauses)} WHERE id = ?"
                 cursor.execute(sql, values)
             
-            # 更新列表字段
-            if "abilities" in updates:
-                cursor.execute("DELETE FROM character_lists WHERE character_id = ? AND field_name = 'abilities'", (character_id,))
-                for idx, item in enumerate(updates["abilities"]):
+            # 更新所有列表字段；兼容 list/tuple/逗号分隔字符串。
+            list_fields = ("abilities", "knowledge_scope", "unacceptable_actions", "skill_ids")
+            for field_name in list_fields:
+                if field_name not in updates:
+                    continue
+                value = updates[field_name]
+                if isinstance(value, str):
+                    items = [item.strip() for item in value.replace("，", ",").split(",") if item.strip()]
+                elif isinstance(value, (list, tuple, set)):
+                    items = [str(item).strip() for item in value if str(item).strip()]
+                else:
+                    items = []
+                cursor.execute("DELETE FROM character_lists WHERE character_id = ? AND field_name = ?",
+                               (character_id, field_name))
+                for idx, item in enumerate(items):
                     cursor.execute("""
                         INSERT INTO character_lists (character_id, field_name, item_order, item_value)
-                        VALUES (?, 'abilities', ?, ?)
-                    """, (character_id, idx, item))
-            
-            # 更新关系数据
+                        VALUES (?, ?, ?, ?)
+                    """, (character_id, field_name, idx, item))
+
+            # 更新关系数据；Mapping 是最常见的 API 形态，不能直接迭代键名。
             if "relationship_vector" in updates:
+                relation = updates["relationship_vector"]
+                if isinstance(relation, Mapping):
+                    pairs = relation.items()
+                elif isinstance(relation, (list, tuple, set)):
+                    pairs = (item for item in relation
+                             if isinstance(item, (list, tuple)) and len(item) >= 2)
+                else:
+                    pairs = ()
                 cursor.execute("DELETE FROM character_relationships WHERE character_id = ?", (character_id,))
-                for target, rel_type in updates["relationship_vector"]:
+                for pair in pairs:
+                    target, rel_type = str(pair[0]).strip(), str(pair[1]).strip()
+                    if not target or not rel_type:
+                        continue
                     cursor.execute("""
                         INSERT INTO character_relationships (character_id, target_entity, relationship_type)
                         VALUES (?, ?, ?)
                     """, (character_id, target, rel_type))
-            
-            # 更新栏位数据
+
+            # 更新栏位数据；主线栏历史别名统一为伴侣栏，兼容字符串/数组。
             if "slot_keys" in updates:
+                slot_keys = updates["slot_keys"] if isinstance(updates["slot_keys"], Mapping) else {}
                 cursor.execute("DELETE FROM character_slots WHERE character_id = ?", (character_id,))
-                for slot_name, slot_types in updates["slot_keys"].items():
-                    for slot_type in slot_types:
+                for slot_name, slot_types in slot_keys.items():
+                    normalized_slot = "伴侣栏" if str(slot_name).strip() == "主线栏" else str(slot_name).strip()
+                    if isinstance(slot_types, str):
+                        values = [item.strip() for item in slot_types.replace("，", ",").split(",") if item.strip()]
+                    elif isinstance(slot_types, (list, tuple, set)):
+                        values = [str(item).strip() for item in slot_types if str(item).strip()]
+                    else:
+                        values = []
+                    for slot_type in values:
                         cursor.execute("""
                             INSERT INTO character_slots (character_id, slot_name, slot_type)
                             VALUES (?, ?, ?)
-                        """, (character_id, slot_name, slot_type))
+                        """, (character_id, normalized_slot, slot_type))
             
             conn.commit()
             return True
@@ -726,13 +756,32 @@ def migrate_from_json() -> dict[str, Any]:
 
 # 初始化数据库
 def ensure_database() -> None:
-    """确保数据库已初始化"""
+    """确保数据库已初始化，并在空库时安全迁移 JSON 角色资产。
+
+    迁移只在数据库没有角色行时执行，避免每次导入模块都用 JSON 覆盖
+    用户编辑过的 SQLite 数据。迁移本身是尽力而为：单个坏 JSON 会由
+    ``migrate_from_json`` 记录到结果中，数据库初始化仍然成功。
+    """
     try:
         init_database()
     except DatabaseError:
         # 如果初始化失败，尝试创建数据库文件
         DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
         init_database()
+
+    # 首次启动的空库自动从 JSON 种子填充；已有库绝不重跑，保证安全迁移。
+    try:
+        conn = get_connection()
+        try:
+            row = conn.execute("SELECT COUNT(*) AS count FROM characters").fetchone()
+            has_characters = bool(row and int(row["count"] or 0))
+        finally:
+            conn.close()
+        if not has_characters:
+            migrate_from_json()
+    except Exception:
+        # 迁移失败不能阻断服务启动；调用方仍可显式重试迁移。
+        pass
 
 
 # 模块加载时自动初始化

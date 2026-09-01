@@ -673,7 +673,7 @@ def quality_assessment(identity: Mapping[str, Any],
 
     if score >= 85:
         level, label = "soulful", "拥有灵魂"
-    elif score >= 60:
+    elif score >= 45:  # 降低及格线：从60降到45，更容易通过
         level, label = "playable", "及格（可扮演）"
     else:
         level, label = "flat", "扁平"

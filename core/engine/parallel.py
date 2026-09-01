@@ -21,7 +21,7 @@ import os
 import threading
 import time
 from collections import deque
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, List, Optional, Sequence
 
 #: 并发硬上限（重构方案规定：任何配置不得突破）。
@@ -41,12 +41,33 @@ _RATE_LIMIT_MARKERS = (
     "429", "rate limit", "ratelimit", "rate_limit", "too many requests",
     "quota", "限流", "频率超",
 )
+_OVERLOAD_MARKERS = (
+    "timeout", "timed out", "time out", "connection reset", " reset", "502", "503", "504", "bad gateway", "service unavailable", "gateway timeout",
+    "overloaded", "overload", "provider busy", "capacity", "temporarily unavailable",
+)
+_EXCLUDED_MARKERS = ("unauthorized", "unauthenticated", "authentication", "api key", "invalid model", "model not found", "model error", "schema", "validation")
+
+
+def classify_overload(exc: BaseException) -> bool:
+    """Return whether a provider/transport failure is retryable overload.
+
+    Authentication, model-selection, and schema/validation failures are explicitly
+    excluded even when their SDK text contains a generic transport word.
+    """
+    text = f"{type(exc).__name__} {exc}".lower()
+    if any(marker in text for marker in _EXCLUDED_MARKERS):
+        return False
+    return any(marker in text for marker in _RATE_LIMIT_MARKERS + _OVERLOAD_MARKERS)
+
+
+def is_overload_error(exc: BaseException) -> bool:
+    """Compatibility alias for :func:`classify_overload`."""
+    return classify_overload(exc)
 
 
 def is_rate_limit_error(exc: BaseException) -> bool:
-    """按异常文本识别限流/配额类错误（跨 SDK、跨供应商的宽容判定）。"""
-    text = f"{type(exc).__name__} {exc}".lower()
-    return any(marker in text for marker in _RATE_LIMIT_MARKERS)
+    """识别限流、过载及可重试传输类错误（跨 SDK、跨供应商）。"""
+    return classify_overload(exc)
 
 
 class _Ticket:
@@ -332,6 +353,29 @@ def run_parallel(jobs: Sequence[Callable[[], Any]],
     return results
 
 
+def iter_parallel_completed(jobs: Sequence[Callable[[], Any]],
+                            priority: Optional[int] = None):
+    """Yield ``(index, JobResult)`` in completion order.
+
+    The shared executor has exactly ``HARD_LIMIT`` workers; callers can submit
+    any number of jobs without ever creating more than ten active workers.
+    ``priority`` is accepted for API symmetry and remains job-controlled.
+    """
+    futures = { _pool().submit(job): index for index, job in enumerate(jobs) }
+    for future in as_completed(futures):
+        index = futures[future]
+        try:
+            yield index, JobResult(value=future.result())
+        except BaseException as exc:  # noqa: BLE001
+            yield index, JobResult(error=exc)
+
+
+def run_parallel_completed(jobs: Sequence[Callable[[], Any]],
+                           priority: Optional[int] = None):
+    """Compatibility alias returning the completion-order iterator."""
+    return iter_parallel_completed(jobs, priority=priority)
+
+
 def shutdown_pool() -> None:
     """进程收尾时关闭共享线程池（测试隔离用）。"""
     global _executor
@@ -344,6 +388,7 @@ def shutdown_pool() -> None:
 __all__ = [
     "HARD_LIMIT", "PRIORITY_OPENING", "PRIORITY_TURN", "PRIORITY_BACKGROUND",
     "ConcurrencyController", "SlotToken", "api_controller",
-    "is_rate_limit_error", "slot", "priority_scope", "current_priority",
-    "budget_model", "JobResult", "run_parallel", "shutdown_pool",
+    "is_rate_limit_error", "is_overload_error", "classify_overload", "slot", "priority_scope", "current_priority",
+    "budget_model", "JobResult", "run_parallel", "iter_parallel_completed",
+    "run_parallel_completed", "shutdown_pool",
 ]

@@ -43,14 +43,24 @@ from core.services import ask_service  # noqa: E402  (ask 端点业务逻辑，P
 from core.engine.distill import distill_model  # noqa: E402  (从老版 app._distill_model 提炼)
 from core.api.contracts import gradio_state_from_output, public_state, stream_event_from_gradio  # noqa: E402
 from core.api.sessions import SessionManager, read_upload  # noqa: E402
+from core.api.operations import OperationJournal  # noqa: E402
 from core.engine import catalog  # noqa: E402
 from core.engine import character_designer  # noqa: E402
 from core.engine import gf_designer  # noqa: E402
+from core.services.book_prepare_service import prepare_book  # noqa: E402
+from core.services.context_retrieval_service import retrieve_context  # noqa: E402
+from core.services import pre_game_service  # noqa: E402
+from core.services import golden_finger_service  # noqa: E402
+from core.services import structured_question_service  # noqa: E402
+from core.services import character_state_service  # noqa: E402
+from core.services import opening_service  # noqa: E402  (开局蒸馏进度注册表)
 
 
 FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
 sessions = SessionManager(PROJECT_ROOT)
-app = FastAPI(title="书中行 API", version="2.0.1")
+operation_journal = OperationJournal(PROJECT_ROOT / "var" / "operations.jsonl")
+question_service = structured_question_service.StructuredQuestionService()
+app = FastAPI(title="书中行 API", version="2.0.2")
 _cors_origins = [item.strip() for item in os.getenv("FATE_CORS_ORIGINS", "").split(",") if item.strip()]
 if _cors_origins:
     app.add_middleware(
@@ -106,6 +116,10 @@ class StartRequest(BaseModel):
     story_agent_mode: bool = False
     # 四栏角色卡选择（规格 §7）：[{"slot": "主角|主线|伙伴|宿敌", "card_id": ...}]，可选。
     roster_card_ids: list[dict[str, Any]] = Field(default_factory=list)
+    # Pre-game state machine fields (optional, backward compatible)
+    use_enhanced_pregame: bool = False
+    pre_game_state: dict[str, Any] = Field(default_factory=dict)
+    client_request_id: str | None = None
 
 
 class MessageRequest(BaseModel):
@@ -116,6 +130,19 @@ class MessageRequest(BaseModel):
     model: str | None = None
     thinking_mode: str | None = None
     thinking_param: str | None = None
+    client_request_id: str | None = None
+
+
+class QuestionBatchRequest(BaseModel):
+    questions: list[dict[str, Any]] = Field(default_factory=list)
+    context: dict[str, Any] = Field(default_factory=dict)
+    max_concurrency: int = Field(default=10, ge=1, le=10)
+
+
+class AnswerQuestionRequest(BaseModel):
+    question: dict[str, Any]
+    answer: Any
+    context: dict[str, Any] = Field(default_factory=dict)
 
 
 class AskRequest(BaseModel):
@@ -614,11 +641,25 @@ def _stream_response(
     *,
     operation: str,
     api_key_on_commit: str | None = None,
+    client_request_id: str | None = None,
 ) -> StreamingResponse:
     def body() -> Iterator[bytes]:
         previous_assistant = ""
         previous_state = dict(session.state)
         start_committed = operation != "start"
+        operation_id = None
+        
+        # Create operation journal entry if client provided request ID
+        if client_request_id:
+            try:
+                op = operation_journal.start(
+                    client_request_id=client_request_id,
+                    data={"operation": operation, "session_id": session.session_id}
+                )
+                operation_id = op.operation_id
+            except Exception:  # noqa: BLE001
+                pass
+        
         try:
             for output in generator:
                 raw_state = gradio_state_from_output(output)
@@ -627,13 +668,23 @@ def _stream_response(
                 chat = data.get("chat") if isinstance(data, dict) else None
 
                 if operation == "start" and raw_state is not None and not raw_state.get("system"):
-                    session.state = previous_state
-                    message = str(data.get("status") or "开局失败，请检查设定后重试")
-                    yield (json.dumps({
-                        "type": "error",
-                        "data": {"operation": operation, "message": message},
-                    }, ensure_ascii=False) + "\n").encode("utf-8")
-                    return
+                    opening = raw_state.get("opening_distill")
+                    if isinstance(opening, dict) and opening.get("status") == "running":
+                        # 强化模式开局蒸馏首帧通知：on_start 故意清空 system 只推进度。
+                        # 提交该帧（携带 distill_key，/state 轮询由此读到进度注册表），
+                        # 透传事件后继续消费生成器直到蒸馏完成——不得当作开局失败终止。
+                        session.state = dict(raw_state)
+                        session.state["session_id"] = session.session_id
+                    else:
+                        session.state = previous_state
+                        message = str(data.get("status") or "开局失败，请检查设定后重试")
+                        if operation_id:
+                            operation_journal.error(operation_id, {"message": message})
+                        yield (json.dumps({
+                            "type": "error",
+                            "data": {"operation": operation, "message": message},
+                        }, ensure_ascii=False) + "\n").encode("utf-8")
+                        return
 
                 if raw_state is not None:
                     ready = _game_ready(raw_state)
@@ -645,11 +696,24 @@ def _stream_response(
                         if operation == "start" and api_key_on_commit is not None:
                             session.api_key = api_key_on_commit
                         start_committed = True
+                        
+                        # Emit operation progress event
+                        if operation_id:
+                            try:
+                                operation_journal.progress(operation_id, {
+                                    "phase": "state_update",
+                                    "round": raw_state.get("round", 0)
+                                })
+                            except Exception:  # noqa: BLE001
+                                pass
+                    
                     if isinstance(data.get("state"), dict):
                         data["state"]["game_ready"] = ready
                 if operation != "start" or start_committed:
                     data["session_id"] = session.session_id
                 data["operation"] = operation
+                if operation_id:
+                    data["operation_id"] = operation_id
                 assistant = ""
                 if isinstance(chat, list) and chat:
                     last = chat[-1]
@@ -661,13 +725,20 @@ def _stream_response(
                     data["delta"] = assistant
                 previous_assistant = assistant
                 yield (json.dumps({"type": event.type, "data": data}, ensure_ascii=False) + "\n").encode("utf-8")
+            
             if operation == "start" and not start_committed:
                 session.state = previous_state
+                if operation_id:
+                    operation_journal.error(operation_id, {"message": "开局未生成有效状态"})
                 yield (json.dumps({
                     "type": "error",
                     "data": {"operation": operation, "message": "开局未生成有效状态，请重试"},
                 }, ensure_ascii=False) + "\n").encode("utf-8")
                 return
+            
+            if operation_id:
+                operation_journal.done(operation_id, {"session_id": session.session_id})
+            
             yield (json.dumps({
                 "type": "done",
                 "data": {"session_id": session.session_id, "operation": operation},
@@ -675,6 +746,8 @@ def _stream_response(
         except Exception as exc:  # noqa: BLE001
             if operation == "start":
                 session.state = previous_state
+            if operation_id:
+                operation_journal.error(operation_id, {"message": str(exc)})
             yield (json.dumps({
                 "type": "error",
                 "data": {"operation": operation, "message": str(exc)},
@@ -858,6 +931,37 @@ def recommend_golden_fingers(request: GoldenFingerContext) -> dict[str, Any]:
 def propose_golden_finger(request: GoldenFingerProposalRequest) -> dict[str, Any]:
     try:
         nemesis_d = request.nemesis_d if request.nemesis_d is not None else 10.0 - _difficulty_int(request.difficulty)
+        
+        # Try new service first for deterministic validation
+        if request.text:
+            try:
+                # Build a minimal pre-game state for validation
+                prepared = {"script": request.text, "title": "Proposal"}
+                difficulty_label = request.difficulty if isinstance(request.difficulty, str) else f"D{_difficulty_int(request.difficulty)}"
+                budget = golden_finger_service.deterministic_budget(prepared, difficulty_label)
+                
+                # Parse as draft spec
+                draft = {"composition": "信息", "difficulty": difficulty_label, 
+                         "name": "自定义", "effect": request.text[:200]}
+                
+                # Validate with new service
+                from core.engine.gf_designer import compose_spec
+                spec = compose_spec(draft)
+                validation = golden_finger_service.validate_spec(
+                    spec.to_dict(), difficulty_label, budget
+                )
+                
+                if validation["ok"]:
+                    return {
+                        "proposal": validation["spec"],
+                        "validated": True,
+                        "budget": budget,
+                        "issues": validation["issues"]
+                    }
+            except Exception:  # noqa: BLE001
+                pass  # Fall back to legacy path
+        
+        # Legacy path
         return engine.propose_custom(
             request.text,
             world=request.world,
@@ -1420,6 +1524,61 @@ def user_book_chapter(book_id: str, chapter_index: int) -> dict[str, Any]:
     return {"book_id": book_dir.name, "chapter": {**entry, "text": text}}
 
 
+@app.get("/api/books/{book_id}/chapters/{chapter_index}/anchors")
+def user_book_chapter_anchors(book_id: str, chapter_index: int) -> dict[str, Any]:
+    """读取指定章节的剧情锚点与活跃人物摘要。"""
+    if chapter_index < 1:
+        raise HTTPException(status_code=400, detail="章节号必须大于 0")
+    book_dir = _resolve_book_dir(book_id)
+    record = _book_record(book_dir, include_chapters=True)
+    entry = next((row for row in record.get("chapters", [])
+                  if int(row.get("index") or 0) == chapter_index), None)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"找不到章节：{chapter_index}")
+    path = book_dir / "anchors" / f"{chapter_index:04d}.json"
+    anchor: dict[str, Any] | None = None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(raw, dict):
+            anchor = raw
+    except (OSError, ValueError, json.JSONDecodeError):
+        anchor = None
+    characters: list[dict[str, str]] = []
+    for item in (anchor or {}).get("characters", []):
+        if isinstance(item, str):
+            name = item.strip()
+            if name:
+                characters.append({"name": name})
+        elif isinstance(item, dict):
+            name = str(item.get("name") or item.get("角色") or "").strip()
+            if name:
+                detail = str(item.get("summary") or item.get("detail") or item.get("role") or "").strip()
+                characters.append({"name": name, **({"detail": detail} if detail else {})})
+    return {"book_id": book_dir.name, "chapter_index": chapter_index, "anchor": anchor, "characters": characters}
+
+
+@app.post("/api/books/{book_id}/prepare")
+def prepare_user_book(book_id: str, opening_chapters: int = 3) -> dict[str, Any]:
+    """构建可恢复的长篇索引与开局就绪包，不把整本正文送入模型。"""
+    book_dir = _resolve_book_dir(book_id)
+    try:
+        return prepare_book(book_dir, opening_chapters=max(1, min(12, opening_chapters)))
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"原著准备失败：{exc}") from exc
+
+
+@app.get("/api/books/{book_id}/search")
+def search_user_book(book_id: str, q: str, limit: int = 20, max_chars: int = 5000) -> dict[str, Any]:
+    """按字面检索全书索引并返回受限原文证据块。"""
+    if not str(q or "").strip():
+        raise HTTPException(status_code=400, detail="搜索词不能为空")
+    book_dir = _resolve_book_dir(book_id)
+    try:
+        return retrieve_context(book_dir, q, limit=max(1, min(50, limit)), max_chars=max(200, min(12000, max_chars)))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=404, detail=f"索引不可用：{exc}") from exc
+
+
 @app.post("/api/books/quick-distill")
 def quick_distill_book(request: QuickDistillRequest) -> dict[str, Any]:
     """对已切章书目执行快速蒸馏（自动路径外的手动/复蒸入口）。
@@ -1558,7 +1717,8 @@ def start(request: StartRequest) -> StreamingResponse:
         sessions.release(session)
         raise HTTPException(status_code=400, detail=f"开局初始化失败：{exc}") from exc
     return _stream_response(
-        session, generator, operation="start", api_key_on_commit=candidate_api_key)
+        session, generator, operation="start", api_key_on_commit=candidate_api_key,
+        client_request_id=request.client_request_id)
 
 
 @app.post("/api/sessions/{session_id}/messages")
@@ -1584,7 +1744,83 @@ def message(session_id: str, request: MessageRequest) -> StreamingResponse:
     except Exception as exc:  # noqa: BLE001
         sessions.release(session)
         raise HTTPException(status_code=400, detail=f"消息初始化失败：{exc}") from exc
-    return _stream_response(session, generator, operation="message")
+    return _stream_response(session, generator, operation="message",
+                           client_request_id=request.client_request_id)
+
+
+@app.post("/api/sessions/{session_id}/questions/batch")
+def question_batch(session_id: str, request: QuestionBatchRequest) -> dict[str, Any]:
+    """Batch structured questions: returns answers with confidence and evidence refs."""
+    session = _session_or_404(session_id)
+    state = session.state or {}
+    
+    def model_fn(question: dict[str, Any]) -> Any:
+        # Simple stub: real implementation would call LLM with question prompt
+        # For now, return first choice or empty string
+        choices = question.get("choices") or []
+        if question.get("answer_type") == "single_choice" and choices:
+            return choices[0].get("id", "")
+        if question.get("answer_type") == "multi_choice":
+            return []
+        return ""
+    
+    try:
+        results = question_service.batch(
+            request.questions,
+            model=model_fn if session.api_key else None,
+            context=request.context,
+            max_concurrency=request.max_concurrency
+        )
+        return {"results": results, "count": len(results)}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"批量问题处理失败：{exc}") from exc
+
+
+@app.post("/api/sessions/{session_id}/questions/answer")
+def answer_question(session_id: str, request: AnswerQuestionRequest) -> dict[str, Any]:
+    """Submit a single structured answer (user or model)."""
+    _session_or_404(session_id)
+    try:
+        result = question_service.answer(
+            request.question,
+            request.answer,
+            context=request.context,
+            source="user"
+        )
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"回答提交失败：{exc}") from exc
+
+
+@app.post("/api/setup/questions")
+def setup_questions(request: dict[str, Any]) -> dict[str, Any]:
+    """Generate setup questions for pre-game (no session required)."""
+    purpose = str(request.get("purpose", "pre_game_setup"))
+    prepared_script = request.get("prepared_script", {})
+    
+    if purpose not in structured_question_service.PURPOSES:
+        raise HTTPException(status_code=400, detail=f"无效的问题用途：{purpose}")
+    
+    # Generate questions based on purpose
+    questions = []
+    if purpose == "pre_game_setup":
+        # Example: world, stage, player difficulty questions
+        questions = [
+            structured_question_service.make_question(
+                "pre_game_setup", "world_difficulty",
+                "根据开局脚本，世界的整体危险程度如何？",
+                answer_type="single_choice",
+                choices=[
+                    {"id": "1", "label": "1 - 安全祥和"},
+                    {"id": "4", "label": "4 - 中等风险"},
+                    {"id": "7", "label": "7 - 高度危险"},
+                    {"id": "9", "label": "9 - 末日级"},
+                ],
+                evidence_refs=[{"kind": "script", "excerpt": str(prepared_script.get("script", ""))[:200]}]
+            )
+        ]
+    
+    return {"questions": questions, "purpose": purpose}
 
 
 @app.post("/api/sessions/{session_id}/ask")
@@ -1966,7 +2202,27 @@ def distill_progress(session_id: str) -> dict[str, Any]:
 @app.get("/api/sessions/{session_id}/state")
 def state(session_id: str) -> dict[str, Any]:
     session = _session_or_404(session_id)
-    return {"session_id": session.session_id, "state": public_state(session.state)}
+    payload = dict(session.state)
+    # 开局蒸馏进行中：session.state 尚未提交 st0，从进程级进度注册表合并
+    # 最新阶段（以 distill_key / chapter_index.book_id 为键），供前端轮询显示。
+    if not payload.get("opening_distill") or (
+            isinstance(payload.get("opening_distill"), dict)
+            and payload["opening_distill"].get("status") != "done"):
+        book_dir = str(payload.get("distill_key") or "").strip()
+        if not book_dir:
+            index = payload.get("chapter_index") if isinstance(payload.get("chapter_index"), dict) else {}
+            book_id = (index or {}).get("book_id")
+            if book_id:
+                book_dir = str(Path(fe.WRITABLE_DIR) / "books" / str(book_id))
+        if book_dir:
+            progress = opening_service.peek_progress(book_dir)
+            if progress:
+                payload["opening_distill"] = progress
+        elif (payload.get("game_ready") is True
+              and str(payload.get("mode") or "").startswith("强化")
+              and payload.get("opening_confirmed") is not True):
+            payload["opening_distill"] = {"status": "running", "stage": "正在准备开局内容", "stage_key": "start"}
+    return {"session_id": session.session_id, "state": public_state(payload)}
 
 
 @app.post("/api/sessions/{session_id}/save")
@@ -2001,6 +2257,53 @@ def list_all_saves() -> dict[str, Any]:
     return {"saves": engine.persistence.list_saves(root=fe.WRITABLE_DIR)}
 
 
+def _normalize_restored_state(restored: dict[str, Any], session_id: str) -> dict[str, Any]:
+    """统一旧/新存档的开局确认态，保证读档后前端仍有交互入口。
+
+    蒸馏产物保真（读档不重蒸）：
+    - distill_key 缺失时按 chapter_index.book_id 回填，锚点蒸馏器/锚点面板
+      在任意进程重启后都命中同一 books/<id>/anchors/ 目录；
+    - opening_distill 缺失或非 done（旧档/中断档）时按档内与磁盘产物落定
+      终态标记，绝不显示"蒸馏中"误导玩家，也绝不触发重蒸馏。
+    """
+    nested = restored.get("opening_state") if isinstance(restored.get("opening_state"), dict) else {}
+    for key in ("gf_confirmed", "opening_confirmed"):
+        if key not in restored and key in nested:
+            restored[key] = bool(nested[key])
+    restored.setdefault("gf_confirmed", False)
+    restored.setdefault("opening_confirmed", False)
+    restored["game_ready"] = True
+    restored["session_id"] = session_id
+    if not isinstance(restored.get("options"), list):
+        restored["options"] = []
+    if not str(restored.get("distill_key") or "").strip():
+        index = restored.get("chapter_index") if isinstance(restored.get("chapter_index"), dict) else {}
+        book_id = (index or {}).get("book_id")
+        if book_id:
+            restored["distill_key"] = str(Path(fe.WRITABLE_DIR) / "books" / str(book_id))
+    od = restored.get("opening_distill")
+    if not isinstance(od, dict) or od.get("status") != "done":
+        distill = restored.get("distill") if isinstance(restored.get("distill"), dict) else {}
+        anchors_dir = Path(str(restored.get("distill_key") or "")) / "anchors"
+        try:
+            anchors_count = (len(list(anchors_dir.glob("[0-9]" * 4 + ".json")))
+                             if anchors_dir.is_dir() else 0)
+        except OSError:
+            anchors_count = 0
+        plot_ready = bool(distill.get("plot_summary"))
+        if plot_ready or anchors_count:
+            restored["opening_distill"] = {
+                "status": "done", "stage": "开局蒸馏完成（读档恢复）", "ok": True,
+                "plot_ready": plot_ready, "restored": True, "anchors_on_disk": anchors_count,
+            }
+        elif str(restored.get("mode") or "").startswith("强化"):
+            restored["opening_distill"] = {
+                "status": "done", "stage": "该存档未含开局蒸馏产物，本局按需自动补锚点",
+                "ok": False, "restored": True,
+            }
+    return restored
+
+
 @app.post("/api/saves/load")
 def load_any_save(request: LoadRequest) -> dict[str, Any]:
     """设定模式自由读档：无需既有对局，可读取任意存档点。"""
@@ -2011,8 +2314,7 @@ def load_any_save(request: LoadRequest) -> dict[str, Any]:
         session = sessions.create(None)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    restored["game_ready"] = True
-    restored["session_id"] = session.session_id
+    restored = _normalize_restored_state(restored, session.session_id)
     session.state = restored
     metadata = engine.persistence.save_metadata(request.save_id, root=fe.WRITABLE_DIR)
     return {
@@ -2033,8 +2335,7 @@ def load(session_id: str, request: LoadRequest) -> dict[str, Any]:
         restored = engine.persistence.load_state_strict(request.save_id, root=fe.WRITABLE_DIR)
         if not restored or not restored.get("system"):
             raise HTTPException(status_code=404, detail="未找到可恢复的存档")
-        restored["game_ready"] = True
-        restored["session_id"] = session.session_id
+        restored = _normalize_restored_state(restored, session.session_id)
         session.state = restored
         metadata = engine.persistence.save_metadata(request.save_id, root=fe.WRITABLE_DIR)
         return {
@@ -2280,6 +2581,31 @@ def playtest_monitor_page() -> FileResponse:
     if not PLAYTEST_MONITOR.is_file():
         raise HTTPException(status_code=404, detail="监控页尚未生成：tools/playtest_kit/monitor.html")
     return FileResponse(PLAYTEST_MONITOR)
+
+
+class UiStateRequest(BaseModel):
+    session_id: str
+    ui_state: dict[str, Any] = Field(default_factory=dict)
+
+
+@app.post("/api/session/ui-state")
+def save_ui_state(request: UiStateRequest) -> dict[str, Any]:
+    """保存前端UI状态到会话内存，刷新/换设备后可恢复。"""
+    session = sessions.get(request.session_id)
+    if session is None:
+        session = sessions.create(request.session_id)
+    sessions.save_ui_state(session, request.ui_state)
+    return {"ok": True, "session_id": request.session_id}
+
+
+@app.get("/api/session/ui-state")
+def get_ui_state(session_id: str) -> dict[str, Any]:
+    """获取已保存的UI状态。"""
+    session = sessions.get(session_id)
+    if session is None:
+        return {"ok": True, "session_id": session_id, "ui_state": {}}
+    ui_state = sessions.get_ui_state(session)
+    return {"ok": True, "session_id": session_id, "ui_state": ui_state}
 
 
 @app.get("/", include_in_schema=False)

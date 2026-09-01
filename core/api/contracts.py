@@ -16,13 +16,39 @@ _FILENAME_RE = re.compile(r"[^A-Za-z0-9._\u3400-\u9fff-]+")
 
 @dataclass(frozen=True)
 class StreamEvent:
-    """Vue 可消费的单条 NDJSON 事件。"""
+    """Vue 可消费的单条 NDJSON 事件。
+
+    ``operation_id``, ``seq`` and ``client_request_id`` are optional so old
+    two-field events remain valid while durable operation streams can carry
+    reconnect and idempotency metadata.
+    """
 
     type: str
     data: dict[str, Any]
+    operation_id: str | None = None
+    seq: int | None = None
+    client_request_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {"type": self.type, "data": self.data}
+        result = {"type": self.type, "data": self.data}
+        if self.operation_id is not None:
+            result["operation_id"] = self.operation_id
+        if self.seq is not None:
+            result["seq"] = self.seq
+        if self.client_request_id is not None:
+            result["client_request_id"] = self.client_request_id
+        return result
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "StreamEvent":
+        """Decode both legacy two-field and journal event dictionaries."""
+        return cls(
+            str(value.get("type", "message")),
+            dict(value.get("data") or {}),
+            value.get("operation_id"),
+            value.get("seq"),
+            value.get("client_request_id"),
+        )
 
 
 def normalize_filename(filename: str, *, extension: str = ".txt") -> str:
@@ -93,6 +119,29 @@ def public_state(state: Mapping[str, Any] | None) -> dict[str, Any]:
             # relay_active=永久通路是否接通；wish_remaining=三愿剩余次数。
             clean["relay_active"] = engine.cheat_code.is_relay_active(source)
             clean["wish_remaining"] = engine.cheat_code.remaining_wishes(source)
+            
+            # Character states: migrate and expose public projections
+            if "character_states" in source:
+                from core.services import character_state_service
+                char_states = source.get("character_states", {})
+                if isinstance(char_states, dict):
+                    clean["character_states"] = {
+                        name: character_state_service.public_projection(state_data)
+                        for name, state_data in char_states.items()
+                    }
+            
+            # Pre-game state: expose stage but not internal details
+            if "pre_game_state" in source:
+                pre_game = source.get("pre_game_state", )
+                if isinstance(pre_game, dict):
+                    clean["pre_game_state"] = {
+                        "stage": pre_game.get("stage", "book_selected"),
+                        "difficulty": pre_game.get("difficulty"),
+                        "prepared_script": {
+                            "title": (pre_game.get("prepared_script") or {}).get("title"),
+                            "evidence": (pre_game.get("prepared_script") or {}).get("evidence"),
+                        } if "prepared_script" in pre_game else None
+                    }
         except Exception:  # noqa: BLE001  快照失败时不得把含 pending 的原始档案暴露给前端
             clean.pop("skill_profiles", None)
     return _strip_private(clean)

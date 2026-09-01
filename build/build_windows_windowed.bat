@@ -2,7 +2,7 @@
 setlocal
 chcp 65001 >nul
 REM ============================================================
-REM  Novelborne v2.0.1 - Windows windowed build (pywebview/WebView2)
+REM  Novelborne v2.0.2 - Windows windowed build (pywebview/WebView2)
 REM  Output: dist\FateEngineWindowed\FateEngineWindowed.exe
 REM ============================================================
 cd /d "%~dp0\.."

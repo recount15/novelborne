@@ -2,6 +2,8 @@
 """启动器运行数据目录回归：打包版不得写入 _internal/var。"""
 from __future__ import annotations
 
+import sys
+import types
 import unittest
 from pathlib import Path
 from unittest import mock

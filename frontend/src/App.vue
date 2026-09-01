@@ -48,6 +48,7 @@ import LanQrModal from './components/LanQrModal.vue'
 import { THEME_META, applyTheme, currentTheme, type ThemeId } from './themeSwitch'
 import { platform } from './kernel/platform'
 import { useNarrativeView } from './kernel/useNarrativeView'
+import { useUiStatePersistence } from './composables/useUiStatePersistence'
 import {
   acceptQuest,
   askQuestion,
@@ -86,6 +87,7 @@ import type {
   DistillProgress,
   GameOption,
   GoldenFingerProposal,
+  OpeningDistill,
   QuestEstimate,
   QuestKind,
   RelayState,
@@ -415,12 +417,15 @@ const openingStep = computed<'gf' | 'opening' | null>(() => {
   if (!enhanced.value) return null
   const s = state.value
   if (s.game_ready !== true) return null
-  if (s.gf_confirmed !== true) return 'gf'
-  if (s.opening_confirmed !== true) return 'opening'
+  const nested = (s.opening_state ?? {}) as Record<string, unknown>
+  const gfConfirmed = s.gf_confirmed === true || nested.gf_confirmed === true
+  const openingConfirmed = s.opening_confirmed === true || nested.opening_confirmed === true
+  if (!gfConfirmed) return 'gf'
+  if (!openingConfirmed) return 'opening'
   return null
 })
-// 开局确认阶段输入栏可用；正式开局后禁用输入栏，改用 A–F 选项按钮。
-const openingInputDisabled = computed(() => busy.value || !openingStep.value)
+// 正式开局若旧存档缺少 options，保留自由输入入口，避免读档后死界面。
+const openingInputDisabled = computed(() => busy.value || (!openingStep.value && Array.isArray(state.value.options) && state.value.options.length > 0))
 const openingInputPlaceholder = computed(() =>
   openingStep.value === 'gf'
     ? '输入「确认金手指」或点上方按钮'
@@ -668,6 +673,18 @@ watch(sessionId, (id) => {
   else window.localStorage.removeItem(SESSION_KEY)
 })
 
+// —— 恢复/读档时的聊天展示清洗：state.history 是模型上下文，user 条目带完整拼装
+//    prompt（动态世界书、系统提示等）。现场直播走干净的 chatbot 流事件，恢复路径
+//    必须同样只展示玩家行动本身——在第一个引擎拼装段标记处截断。 ——
+const PROMPT_ASSEMBLY_MARKER = /【本回合动态世界书】|【运行时因果原则】|【角色交互约束】|【锚点收束约束|【性格倾向】|【选项可用因素】|【强化模式场景预算】|（系统提示[：:]）/
+function displayHistory(entries: ChatMessage[]): ChatMessage[] {
+  return entries.map(entry => {
+    if (entry.role !== 'user' || typeof entry.content !== 'string') return entry
+    const cut = entry.content.split(PROMPT_ASSEMBLY_MARKER)[0].trim()
+    return cut ? { ...entry, content: cut } : entry
+  })
+}
+
 async function restoreSession(id: string, source: 'link' | 'storage' | 'sync' = 'storage'): Promise<boolean> {
   if (!id) return false
   try {
@@ -681,7 +698,7 @@ async function restoreSession(id: string, source: 'link' | 'storage' | 'sync' = 
     }
     sessionId.value = id
     state.value = restored
-    chat.value = history
+    chat.value = displayHistory(history)
     askThread.value = []
     // 连接与开局关键配置恢复，避免玩家重选（凭据不落盘，需在连接区重填）。
     if (typeof restored.provider === 'string' && restored.provider) form.value.provider = restored.provider
@@ -719,10 +736,29 @@ async function syncSessionFromServer(): Promise<void> {
   await restoreSession(sessionId.value, 'sync')
 }
 
+/** 开局蒸馏进行中的轻量进度拉取：只更新 opening_distill 字段，
+ *  不整体替换 state/chat（避免与 /start 流式更新竞态；busy 期间安全）。 */
+async function refreshOpeningProgress(): Promise<void> {
+  if (!sessionId.value) return
+  try {
+    const data = await fetchSessionState(sessionId.value)
+    const restored = (data?.state ?? {}) as Record<string, unknown>
+    if (restored.opening_distill) {
+      state.value = { ...state.value, opening_distill: restored.opening_distill }
+    }
+  } catch {
+    /* 进度拉取失败静默：下一次轮询重试 */
+  }
+}
+
 // —— 锚点蒸馏进度：右侧小窗口数据源（强化模式开局前后持续轮询） ——
 const distillProgress = ref<DistillProgress | null>(null)
 const sessionEnhanced = computed(() =>
   String(state.value.mode ?? '').startsWith('强化') || enhanced.value)
+// —— 开局蒸馏进度（前置声明：轮询逻辑依赖）——
+const openingDistill = computed(() => recordOf(state.value.opening_distill) as OpeningDistill)
+const openingRunning = computed(() =>
+  Boolean(openingDistill.value.status) && openingDistill.value.status !== 'done')
 let distillTimer: ReturnType<typeof setInterval> | null = null
 let distillMisses = 0
 
@@ -757,12 +793,18 @@ async function refreshDistillProgress(): Promise<void> {
         distillMisses = 0
         handleStaleSession()
       }
+      return
     }
+  }
+  // 开局蒸馏进行中：轻量拉取进度阶段（不替换整个 state，busy 期间也安全）
+  if (openingRunning.value) {
+    await refreshOpeningProgress()
   }
 }
 
 function syncDistillPolling(): void {
-  const shouldPoll = Boolean(sessionId.value) && sessionEnhanced.value
+  // 强化模式轮询锚点蒸馏；开局蒸馏进行中（任何模式）也轮询以显示进度
+  const shouldPoll = Boolean(sessionId.value) && (sessionEnhanced.value || openingRunning.value)
   if (shouldPoll && !distillTimer) {
     void refreshDistillProgress()
     distillTimer = setInterval(refreshDistillProgress, 5000)
@@ -773,7 +815,7 @@ function syncDistillPolling(): void {
   }
 }
 
-watch([sessionId, sessionEnhanced], syncDistillPolling, { immediate: true })
+watch([sessionId, sessionEnhanced, openingRunning], syncDistillPolling, { immediate: true })
 onBeforeUnmount(() => {
   window.removeEventListener('focus', syncSessionFromServer)
   document.removeEventListener('visibilitychange', onVisibilityChange)
@@ -810,6 +852,19 @@ const distillRatio = computed(() => {
   return Math.min(1, (p.done ?? 0) / p.total)
 })
 const distillWindowChapters = computed(() => distillProgress.value?.chapters ?? [])
+
+// —— 开局蒸馏进度：优先显示在锚点蒸馏区域（openingDistill 已前置声明） ——
+const showOpeningProgress = computed(() => openingRunning.value)
+const openingProgressText = computed(() => {
+  const od = openingDistill.value
+  if (!showOpeningProgress.value) return ''
+  const stage = od.stage || '正在处理开局内容'
+  const progress = (od.chapters_done != null && od.chapters_total != null)
+    ? `（${od.chapters_done}/${od.chapters_total}）`
+    : ''
+  return `⟳ 开局蒸馏：${stage}${progress}`
+})
+
 const savePointDefault = computed(() => `第${round.value + 1}回合`)
 const modelConnection = computed(() => ({
   provider: form.value.provider,
@@ -1724,7 +1779,7 @@ async function loadSave(meta: SaveMeta): Promise<void> {
       sessionId.value = result.session_id
       state.value = result.state
     }
-    chat.value = Array.isArray(state.value.history) ? state.value.history as ChatMessage[] : []
+    chat.value = displayHistory(Array.isArray(state.value.history) ? state.value.history as ChatMessage[] : [])
     askThread.value = []
     askError.value = ''
     status.value = `已恢复 ${meta.save_id}`
@@ -1779,6 +1834,103 @@ onMounted(async () => {
   void tryRestoreSession()
   window.addEventListener('focus', syncSessionFromServer)
   document.addEventListener('visibilitychange', onVisibilityChange)
+})
+
+// UI 状态持久化：刷新浏览器或换设备扫码后恢复所有操作状态
+const uiPersistence = useUiStatePersistence({
+  sessionId: () => sessionId.value,
+  state: () => ({
+    // 基础配置面板状态
+    form: form.value,
+    novelUpload: novelUpload.value,
+    personaUpload: personaUpload.value,
+    selectedPoolCards: selectedPoolCards.value,
+    companionRoster: companionRoster.value,
+    heroineRoster: heroineRoster.value,
+    setupConfirmed: setupConfirmed.value,
+    gfGenerated: gfGenerated.value,
+    goldenFingerText: goldenFingerText.value,
+    goldenFingerProposal: goldenFingerProposal.value,
+    
+    // 面板折叠状态
+    basicOpen: basicOpen.value,
+    savesOpen: savesOpen.value,
+    protagonistOpen: protagonistOpen.value,
+    rosterOpen: rosterOpen.value,
+    nemesisOpen: nemesisOpen.value,
+    modelOpen: modelOpen.value,
+    uiOpen: uiOpen.value,
+    
+    // UI 设置
+    fontSize: fontSize.value,
+    dropCapEnabled: dropCapEnabled.value,
+    mobilePanel: mobilePanel.value,
+    
+    // 任务系统状态
+    questKind: questKind.value,
+    questDifficulty: questDifficulty.value,
+    questDoneDismissed: questDoneDismissed.value,
+    
+    // Ask 问答历史
+    askThread: askThread.value,
+    
+    // 其他功能状态
+    enableNemesis: enableNemesis.value,
+    workQuery: workQuery.value,
+  }),
+  restoreState: (restored) => {
+    // 基础配置面板状态
+    if (restored.form) Object.assign(form.value, restored.form)
+    if (restored.novelUpload) novelUpload.value = restored.novelUpload
+    if (restored.personaUpload) personaUpload.value = restored.personaUpload
+    if (restored.selectedPoolCards) selectedPoolCards.value = restored.selectedPoolCards
+    if (restored.companionRoster) companionRoster.value = restored.companionRoster
+    if (restored.heroineRoster) heroineRoster.value = restored.heroineRoster
+    if (typeof restored.setupConfirmed === 'boolean') setupConfirmed.value = restored.setupConfirmed
+    if (typeof restored.gfGenerated === 'boolean') gfGenerated.value = restored.gfGenerated
+    if (restored.goldenFingerText) goldenFingerText.value = restored.goldenFingerText
+    if (restored.goldenFingerProposal) goldenFingerProposal.value = restored.goldenFingerProposal
+    
+    // 面板折叠状态
+    if (typeof restored.basicOpen === 'boolean') basicOpen.value = restored.basicOpen
+    if (typeof restored.savesOpen === 'boolean') savesOpen.value = restored.savesOpen
+    if (typeof restored.protagonistOpen === 'boolean') protagonistOpen.value = restored.protagonistOpen
+    if (typeof restored.rosterOpen === 'boolean') rosterOpen.value = restored.rosterOpen
+    if (typeof restored.nemesisOpen === 'boolean') nemesisOpen.value = restored.nemesisOpen
+    if (typeof restored.modelOpen === 'boolean') modelOpen.value = restored.modelOpen
+    if (typeof restored.uiOpen === 'boolean') uiOpen.value = restored.uiOpen
+    
+    // UI 设置
+    if (restored.fontSize) fontSize.value = restored.fontSize
+    if (typeof restored.dropCapEnabled === 'boolean') dropCapEnabled.value = restored.dropCapEnabled
+    if (restored.mobilePanel) mobilePanel.value = restored.mobilePanel
+    
+    // 任务系统状态
+    if (restored.questKind) questKind.value = restored.questKind
+    if (typeof restored.questDifficulty === 'number') questDifficulty.value = restored.questDifficulty
+    if (typeof restored.questDoneDismissed === 'boolean') questDoneDismissed.value = restored.questDoneDismissed
+    
+    // Ask 问答历史
+    if (Array.isArray(restored.askThread)) askThread.value = restored.askThread
+    
+    // 其他功能状态
+    if (typeof restored.enableNemesis === 'boolean') enableNemesis.value = restored.enableNemesis
+    if (restored.workQuery) workQuery.value = restored.workQuery
+  },
+  debounceMs: 1500,
+  enabled: () => Boolean(sessionId.value),
+})
+
+// 监听需要持久化的状态变化
+uiPersistence.setupWatcher({
+  form, novelUpload, personaUpload, selectedPoolCards,
+  companionRoster, heroineRoster, setupConfirmed, gfGenerated,
+  goldenFingerText, goldenFingerProposal,
+  basicOpen, savesOpen, protagonistOpen, rosterOpen,
+  nemesisOpen, modelOpen, uiOpen,
+  fontSize, dropCapEnabled, mobilePanel,
+  questKind, questDifficulty, questDoneDismissed,
+  askThread, enableNemesis, workQuery,
 })
 
 function onVisibilityChange(): void {
@@ -3106,7 +3258,10 @@ watch([compressionRecord, round], () => {
 
         <section class="state-section">
           <h3><FileText :size="14" /> 锚点蒸馏</h3>
-          <template v-if="distillProgress && distillProgress.enabled">
+          <template v-if="showOpeningProgress">
+            <p class="text-[11px] leading-5 text-(--fe-ink-2)">{{ openingProgressText }}</p>
+          </template>
+          <template v-else-if="distillProgress && distillProgress.enabled">
             <p class="text-[11px] leading-5 text-(--fe-ink-2)">{{ distillProgress.summary }}</p>
             <div v-if="distillProgress.total" class="quest-progress-track mt-2" aria-label="蒸馏进度">
               <span class="quest-progress-fill" :style="{ width: `${distillRatio * 100}%` }" />

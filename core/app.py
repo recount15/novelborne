@@ -602,7 +602,10 @@ def _start_background_distillation(state, client, model, sync_first=False):
         state["distill_status"] = "锚点蒸馏已关闭"
         return
     chapter_index = state.get("chapter_index") or {}
-    book_dir = _book_dir(chapter_index)
+    # 读档/重启恢复：state.distill_key 优先（存档带回的产物目录），
+    # 缺失时才按 chapter_index 推导——两条路径必须命中同一 anchors/ 目录，
+    # 否则读档后会误判"锚点全缺"而重新蒸馏已完成章节。
+    book_dir = str(state.get("distill_key") or "").strip() or _book_dir(chapter_index)
     if not book_dir or not os.path.isdir(book_dir):
         return
     if engine.break_anchor.shattered_from(state):
@@ -1395,6 +1398,46 @@ def _commit_reply_memory(state, reply, message, *, round_no, lore_hits=None):
     patch["scene"] = scene
     if lore_hits is not None:
         patch["flags"] = {"last_worldbook": list(lore_hits)[:8]}
+    
+    # Character state updates: extract evidence from reply and update character states
+    try:
+        from core.services import character_state_service
+        char_states = state.setdefault("character_states", {})
+        
+        # Update active character states based on narrative
+        active_members = _runtime_character_constraints(state, message)
+        for member in active_members:
+            name = str(member.get("name") or "").strip()
+            if not name:
+                continue
+            
+            # Initialize character state if not exists
+            if name not in char_states:
+                char_states[name] = character_state_service.blank_character_state(
+                    character_state_service.core_personality_projection(member.get("character_card"))
+                )
+            
+            # Extract simple evidence from reply (basic implementation)
+            reply_text = fe.strip_hidden(reply)
+            if name in reply_text:
+                # Simple evidence: character appeared this round
+                char_states[name] = character_state_service.add_evidence(
+                    char_states[name],
+                    key="recent_activity",
+                    value=f"第{round_no}回合活跃",
+                    confidence=0.7,
+                    provenance={"round": round_no, "action": message[:80]},
+                    round_no=round_no
+                )
+        
+        # Decay all character states slightly each round
+        for name in list(char_states.keys()):
+            char_states[name] = character_state_service.decay_assertions(
+                char_states[name], steps=1
+            )
+    except Exception:  # noqa: BLE001  Character state updates are non-critical
+        pass
+    
     return _commit_memory(state, patch, round_no=round_no, source="engine_reply")
 
 
@@ -1777,6 +1820,16 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
             st0["traverse_receipt"] = engine.gender_guard.format_traverse_receipt(_traverse_map)
             status += f" ｜ 穿越对照:已落定{len(_traverse_map)}人"
         if enhanced:
+            # 蒸馏开始前先推送一次状态：前端立即显示"开局蒸馏进行中"，
+            # 之后 /state 轮询读取 session 进度注册表刷新阶段文案。
+            st0["opening_distill"] = {"status": "running", "stage": "正在读取原著章节",
+                                      "stage_key": "start"}
+            yield _out_start([], dict(st0, system="", history=[]),
+                             "正在提取剧情与角色（开局蒸馏），完成后自动继续…",
+                             progress=_progress_html(st0), token=_token_md(st0),
+                             title=_token_title_md(st0), panel=st0.get("state_panel", ""),
+                             u1=gr.update(visible=True), u2=gr.update(visible=False),
+                             u3=chat_off, u4=gr.update(visible=False))
             try:
                 # —— M1：开局蒸馏+角色入库流水线（opening_service 中台门面）——
                 # plot 多采样并行合并 ∥ 角色抽取（质量门+防编造+入库）∥ 首 3 章
@@ -2514,6 +2567,12 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
         if enhanced:
             state["distill_status"] = "后台锚点蒸馏运行中"
             key = state.get("distill_key")
+            if key and key not in _DISTILLERS and state.get("distill_enabled") is not False:
+                # 读档/进程重启后蒸馏器不在注册表：按存档 distill_key 重建。
+                # AnchorDistiller 磁盘感知（已有 anchors/NNNN.json 直接标记完成），
+                # 只蒸馏缺失章——恢复前瞻蒸馏，绝不重蒸已完成章节。
+                _start_background_distillation(state, client, model, sync_first=False)
+                key = state.get("distill_key")
             if key and key in _DISTILLERS:
                 distiller = _DISTILLERS[key]
                 distiller.enqueue(state.get("current_chapter", 1), lookahead=6, lookback=-1,
@@ -2522,11 +2581,6 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
                 _merge_distill_status(state, distiller.status())
             anchor_status = ((state.get("scene_validation") or {}).get("anchor") or {}).get("status")
             state["anchor_timeline"] = _anchor_timeline(state, anchor_status or "pending")
-        engine.persistence.save_state(state, root=fe.WRITABLE_DIR, start_params=state.get("start_params"),
-                           session_id=str(state.get("session_id") or "") or None)
-        if state.get("session"):
-            engine.persistence.update_session(state["session"], root=fe.WRITABLE_DIR,
-                                       state=state, note=f"第{r}回合已完成")
         log_path = state.get("log", "")
         # —— M2：引擎日志改由代码渲染（模型不再书写 <<<LOG>>>）；
         #     模型若仍按旧契约附带则优先采用（读档/旧会话兼容）。 ——
