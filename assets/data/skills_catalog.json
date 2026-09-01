@@ -1,0 +1,2302 @@
+{
+  "schema_version": "2.0",
+  "asset": "member_skills",
+  "scope": "generated_original_catalog",
+  "fields": [
+    "id",
+    "role",
+    "name",
+    "summary",
+    "capabilities",
+    "limits",
+    "tags",
+    "source"
+  ],
+  "roles": [
+    "伙伴",
+    "single_heroine",
+    "multi_heroine"
+  ],
+  "skills": [
+    {
+      "id": "skill_0001",
+      "role": "single_heroine",
+      "name": "行为技能001",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "海上航路",
+        "误差累积"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0002",
+      "role": "multi_heroine",
+      "name": "行为技能002",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "山地聚落",
+        "期限倒计时"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0003",
+      "role": "伙伴",
+      "name": "行为技能003",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "浮空都市",
+        "资源置换"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0004",
+      "role": "single_heroine",
+      "name": "行为技能004",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "荒原绿洲",
+        "立场对照"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0005",
+      "role": "multi_heroine",
+      "name": "行为技能005",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "河网商埠",
+        "见证转述"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0006",
+      "role": "伙伴",
+      "name": "行为技能006",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "旧城改造",
+        "规则试错"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0007",
+      "role": "single_heroine",
+      "name": "行为技能007",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "极地科考",
+        "秘密分层"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0008",
+      "role": "multi_heroine",
+      "name": "行为技能008",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "深林守望",
+        "承诺兑现"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0009",
+      "role": "伙伴",
+      "name": "行为技能009",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "群岛自治",
+        "关系回声"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0010",
+      "role": "single_heroine",
+      "name": "行为技能010",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "矿区转型",
+        "多线交汇"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0011",
+      "role": "multi_heroine",
+      "name": "行为技能011",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "灾后重建",
+        "局部反转"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0012",
+      "role": "伙伴",
+      "name": "行为技能012",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "学院竞合",
+        "代价显形"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0013",
+      "role": "single_heroine",
+      "name": "行为技能013",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "工坊传承",
+        "风险扩散"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0014",
+      "role": "multi_heroine",
+      "name": "行为技能014",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "档案追索",
+        "选择留痕"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0015",
+      "role": "伙伴",
+      "name": "行为技能015",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "民间医疗",
+        "旧案新证"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0016",
+      "role": "single_heroine",
+      "name": "行为技能016",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "远途邮路",
+        "误会澄清"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0017",
+      "role": "multi_heroine",
+      "name": "行为技能017",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "生态修复",
+        "阶段复盘"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0018",
+      "role": "伙伴",
+      "name": "行为技能018",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "剧团巡演",
+        "线索递进"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0019",
+      "role": "single_heroine",
+      "name": "行为技能019",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "食肆经营",
+        "误差累积"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0020",
+      "role": "multi_heroine",
+      "name": "行为技能020",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "手艺复兴",
+        "期限倒计时"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0021",
+      "role": "伙伴",
+      "name": "行为技能021",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "社区协商",
+        "资源置换"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0022",
+      "role": "single_heroine",
+      "name": "行为技能022",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "农场试验",
+        "立场对照"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0023",
+      "role": "multi_heroine",
+      "name": "行为技能023",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "观测站值守",
+        "见证转述"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0024",
+      "role": "伙伴",
+      "name": "行为技能024",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "边城生计",
+        "规则试错"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0025",
+      "role": "single_heroine",
+      "name": "行为技能025",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "海上航路",
+        "秘密分层"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0026",
+      "role": "multi_heroine",
+      "name": "行为技能026",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "山地聚落",
+        "承诺兑现"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0027",
+      "role": "伙伴",
+      "name": "行为技能027",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "浮空都市",
+        "关系回声"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0028",
+      "role": "single_heroine",
+      "name": "行为技能028",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "荒原绿洲",
+        "多线交汇"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0029",
+      "role": "multi_heroine",
+      "name": "行为技能029",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "河网商埠",
+        "局部反转"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0030",
+      "role": "伙伴",
+      "name": "行为技能030",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "旧城改造",
+        "代价显形"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0031",
+      "role": "single_heroine",
+      "name": "行为技能031",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "极地科考",
+        "风险扩散"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0032",
+      "role": "multi_heroine",
+      "name": "行为技能032",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "深林守望",
+        "选择留痕"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0033",
+      "role": "伙伴",
+      "name": "行为技能033",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "群岛自治",
+        "旧案新证"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0034",
+      "role": "single_heroine",
+      "name": "行为技能034",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "矿区转型",
+        "误会澄清"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0035",
+      "role": "multi_heroine",
+      "name": "行为技能035",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "灾后重建",
+        "阶段复盘"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0036",
+      "role": "伙伴",
+      "name": "行为技能036",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "学院竞合",
+        "线索递进"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0037",
+      "role": "single_heroine",
+      "name": "行为技能037",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "工坊传承",
+        "误差累积"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0038",
+      "role": "multi_heroine",
+      "name": "行为技能038",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "档案追索",
+        "期限倒计时"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0039",
+      "role": "伙伴",
+      "name": "行为技能039",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "民间医疗",
+        "资源置换"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0040",
+      "role": "single_heroine",
+      "name": "行为技能040",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "远途邮路",
+        "立场对照"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0041",
+      "role": "multi_heroine",
+      "name": "行为技能041",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "生态修复",
+        "见证转述"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0042",
+      "role": "伙伴",
+      "name": "行为技能042",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "剧团巡演",
+        "规则试错"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0043",
+      "role": "single_heroine",
+      "name": "行为技能043",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "食肆经营",
+        "秘密分层"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0044",
+      "role": "multi_heroine",
+      "name": "行为技能044",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "手艺复兴",
+        "承诺兑现"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0045",
+      "role": "伙伴",
+      "name": "行为技能045",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "社区协商",
+        "关系回声"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0046",
+      "role": "single_heroine",
+      "name": "行为技能046",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "农场试验",
+        "多线交汇"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0047",
+      "role": "multi_heroine",
+      "name": "行为技能047",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "观测站值守",
+        "局部反转"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0048",
+      "role": "伙伴",
+      "name": "行为技能048",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "边城生计",
+        "代价显形"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0049",
+      "role": "single_heroine",
+      "name": "行为技能049",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "海上航路",
+        "风险扩散"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0050",
+      "role": "multi_heroine",
+      "name": "行为技能050",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "山地聚落",
+        "选择留痕"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0051",
+      "role": "伙伴",
+      "name": "行为技能051",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "浮空都市",
+        "旧案新证"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0052",
+      "role": "single_heroine",
+      "name": "行为技能052",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "荒原绿洲",
+        "误会澄清"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0053",
+      "role": "multi_heroine",
+      "name": "行为技能053",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "河网商埠",
+        "阶段复盘"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0054",
+      "role": "伙伴",
+      "name": "行为技能054",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "旧城改造",
+        "线索递进"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0055",
+      "role": "single_heroine",
+      "name": "行为技能055",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "极地科考",
+        "误差累积"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0056",
+      "role": "multi_heroine",
+      "name": "行为技能056",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "深林守望",
+        "期限倒计时"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0057",
+      "role": "伙伴",
+      "name": "行为技能057",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "群岛自治",
+        "资源置换"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0058",
+      "role": "single_heroine",
+      "name": "行为技能058",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "矿区转型",
+        "立场对照"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0059",
+      "role": "multi_heroine",
+      "name": "行为技能059",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "灾后重建",
+        "见证转述"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0060",
+      "role": "伙伴",
+      "name": "行为技能060",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "学院竞合",
+        "规则试错"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0061",
+      "role": "single_heroine",
+      "name": "行为技能061",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "工坊传承",
+        "秘密分层"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0062",
+      "role": "multi_heroine",
+      "name": "行为技能062",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "档案追索",
+        "承诺兑现"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0063",
+      "role": "伙伴",
+      "name": "行为技能063",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "民间医疗",
+        "关系回声"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0064",
+      "role": "single_heroine",
+      "name": "行为技能064",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "远途邮路",
+        "多线交汇"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0065",
+      "role": "multi_heroine",
+      "name": "行为技能065",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "生态修复",
+        "局部反转"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0066",
+      "role": "伙伴",
+      "name": "行为技能066",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "剧团巡演",
+        "代价显形"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0067",
+      "role": "single_heroine",
+      "name": "行为技能067",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "食肆经营",
+        "风险扩散"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0068",
+      "role": "multi_heroine",
+      "name": "行为技能068",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "手艺复兴",
+        "选择留痕"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0069",
+      "role": "伙伴",
+      "name": "行为技能069",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "社区协商",
+        "旧案新证"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0070",
+      "role": "single_heroine",
+      "name": "行为技能070",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "农场试验",
+        "误会澄清"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0071",
+      "role": "multi_heroine",
+      "name": "行为技能071",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "观测站值守",
+        "阶段复盘"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0072",
+      "role": "伙伴",
+      "name": "行为技能072",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "边城生计",
+        "线索递进"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0073",
+      "role": "single_heroine",
+      "name": "行为技能073",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "海上航路",
+        "误差累积"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0074",
+      "role": "multi_heroine",
+      "name": "行为技能074",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "山地聚落",
+        "期限倒计时"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0075",
+      "role": "伙伴",
+      "name": "行为技能075",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "浮空都市",
+        "资源置换"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0076",
+      "role": "single_heroine",
+      "name": "行为技能076",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "荒原绿洲",
+        "立场对照"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0077",
+      "role": "multi_heroine",
+      "name": "行为技能077",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "河网商埠",
+        "见证转述"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0078",
+      "role": "伙伴",
+      "name": "行为技能078",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "旧城改造",
+        "规则试错"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0079",
+      "role": "single_heroine",
+      "name": "行为技能079",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "极地科考",
+        "秘密分层"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0080",
+      "role": "multi_heroine",
+      "name": "行为技能080",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "深林守望",
+        "承诺兑现"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0081",
+      "role": "伙伴",
+      "name": "行为技能081",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "群岛自治",
+        "关系回声"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0082",
+      "role": "single_heroine",
+      "name": "行为技能082",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "矿区转型",
+        "多线交汇"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0083",
+      "role": "multi_heroine",
+      "name": "行为技能083",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "灾后重建",
+        "局部反转"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0084",
+      "role": "伙伴",
+      "name": "行为技能084",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "学院竞合",
+        "代价显形"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0085",
+      "role": "single_heroine",
+      "name": "行为技能085",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "工坊传承",
+        "风险扩散"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0086",
+      "role": "multi_heroine",
+      "name": "行为技能086",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "档案追索",
+        "选择留痕"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0087",
+      "role": "伙伴",
+      "name": "行为技能087",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "民间医疗",
+        "旧案新证"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0088",
+      "role": "single_heroine",
+      "name": "行为技能088",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "远途邮路",
+        "误会澄清"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0089",
+      "role": "multi_heroine",
+      "name": "行为技能089",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "生态修复",
+        "阶段复盘"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0090",
+      "role": "伙伴",
+      "name": "行为技能090",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "剧团巡演",
+        "线索递进"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0091",
+      "role": "single_heroine",
+      "name": "行为技能091",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "食肆经营",
+        "误差累积"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0092",
+      "role": "multi_heroine",
+      "name": "行为技能092",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "手艺复兴",
+        "期限倒计时"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0093",
+      "role": "伙伴",
+      "name": "行为技能093",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "社区协商",
+        "资源置换"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0094",
+      "role": "single_heroine",
+      "name": "行为技能094",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "农场试验",
+        "立场对照"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0095",
+      "role": "multi_heroine",
+      "name": "行为技能095",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "观测站值守",
+        "见证转述"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0096",
+      "role": "伙伴",
+      "name": "行为技能096",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "边城生计",
+        "规则试错"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0097",
+      "role": "single_heroine",
+      "name": "行为技能097",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "海上航路",
+        "秘密分层"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0098",
+      "role": "multi_heroine",
+      "name": "行为技能098",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "山地聚落",
+        "承诺兑现"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0099",
+      "role": "伙伴",
+      "name": "行为技能099",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "浮空都市",
+        "关系回声"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0100",
+      "role": "single_heroine",
+      "name": "行为技能100",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "荒原绿洲",
+        "多线交汇"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0101",
+      "role": "multi_heroine",
+      "name": "行为技能101",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "河网商埠",
+        "局部反转"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0102",
+      "role": "伙伴",
+      "name": "行为技能102",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "旧城改造",
+        "代价显形"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0103",
+      "role": "single_heroine",
+      "name": "行为技能103",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "极地科考",
+        "风险扩散"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0104",
+      "role": "multi_heroine",
+      "name": "行为技能104",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "深林守望",
+        "选择留痕"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0105",
+      "role": "伙伴",
+      "name": "行为技能105",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "群岛自治",
+        "旧案新证"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0106",
+      "role": "single_heroine",
+      "name": "行为技能106",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "矿区转型",
+        "误会澄清"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0107",
+      "role": "multi_heroine",
+      "name": "行为技能107",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "灾后重建",
+        "阶段复盘"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0108",
+      "role": "伙伴",
+      "name": "行为技能108",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "学院竞合",
+        "线索递进"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0109",
+      "role": "single_heroine",
+      "name": "行为技能109",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "工坊传承",
+        "误差累积"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0110",
+      "role": "multi_heroine",
+      "name": "行为技能110",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "档案追索",
+        "期限倒计时"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0111",
+      "role": "伙伴",
+      "name": "行为技能111",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "民间医疗",
+        "资源置换"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0112",
+      "role": "single_heroine",
+      "name": "行为技能112",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "远途邮路",
+        "立场对照"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0113",
+      "role": "multi_heroine",
+      "name": "行为技能113",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "生态修复",
+        "见证转述"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0114",
+      "role": "伙伴",
+      "name": "行为技能114",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "剧团巡演",
+        "规则试错"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0115",
+      "role": "single_heroine",
+      "name": "行为技能115",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "食肆经营",
+        "秘密分层"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0116",
+      "role": "multi_heroine",
+      "name": "行为技能116",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "手艺复兴",
+        "承诺兑现"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0117",
+      "role": "伙伴",
+      "name": "行为技能117",
+      "summary": "把复杂任务拆成可观察的三个步骤",
+      "capabilities": [
+        "把复杂任务拆成可观察的三个步骤",
+        "记录关键选择留下的影响"
+      ],
+      "limits": [
+        "遇到冲突时先复述对方诉求再回应",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "社区协商",
+        "关系回声"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0118",
+      "role": "single_heroine",
+      "name": "行为技能118",
+      "summary": "优先保护已承诺的人和资源",
+      "capabilities": [
+        "优先保护已承诺的人和资源",
+        "用一次小规模试验确认规则边界"
+      ],
+      "limits": [
+        "在信息不足时保留一个可撤回方案",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "农场试验",
+        "多线交汇"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0119",
+      "role": "multi_heroine",
+      "name": "行为技能119",
+      "summary": "根据关系变化调整措辞而非改写事实",
+      "capabilities": [
+        "根据关系变化调整措辞而非改写事实",
+        "把个人目标和公共目标分别列出"
+      ],
+      "limits": [
+        "接受阶段性失败并保留复盘记录",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "观测站值守",
+        "局部反转"
+      ],
+      "source": "generated_original_template"
+    },
+    {
+      "id": "skill_0120",
+      "role": "伙伴",
+      "name": "行为技能120",
+      "summary": "先核对现场事实，再提出两条可验证路径",
+      "capabilities": [
+        "先核对现场事实，再提出两条可验证路径",
+        "把未经确认的传闻标为待证"
+      ],
+      "limits": [
+        "在承诺前明确代价与退出条件",
+        "不能凭空获得未确认信息"
+      ],
+      "tags": [
+        "边城生计",
+        "代价显形"
+      ],
+      "source": "generated_original_template"
+    }
+  ]
+}

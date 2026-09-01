@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lomsting</title>
+<style>
+  /* 字体本地化：文件随项目分发（public/fonts/），不依赖系统字体，任何机器可迁移 */
+  @font-face {
+    font-family: 'UnifrakturMaguntia';
+    src: url('/fonts/UnifrakturMaguntia.ttf') format('truetype');
+    font-display: swap;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: #241a10 url('/lomsting-scene.jpg') center / cover no-repeat fixed;
+    display: grid;
+    place-items: center;
+    overflow: auto;
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: default;
+  }
+  /* 铭文区：限制在羊皮纸边界内，到边自动换行；整区套轻微磨损滤镜 */
+  .parchment-text {
+    filter: url(#worn);
+    text-align: center;
+    width: min(62vw, 860px);
+    margin: 0 auto;
+    color: #17100a;
+    text-shadow: 0 0 1px rgb(23 16 10 / 35%);
+  }
+  .line {
+    font-family: 'UnifrakturMaguntia', serif;
+    font-size: clamp(24px, 3.6vw, 50px);
+    letter-spacing: 0.12em;
+    line-height: 1.5;
+    white-space: normal;
+    overflow-wrap: break-word;
+    word-break: break-all;
+  }
+  /* 两条之间的手绘风分隔线（轻微波动 + 微倾，模仿笔记里随手一划） */
+  .divider {
+    display: block;
+    width: min(52%, 400px);
+    height: 16px;
+    margin: 2.2vh auto 2vh;
+    transform: rotate(-0.5deg);
+    opacity: 0.8;
+  }
+  .signature {
+    margin-top: 3.6vh;
+    font-family: 'UnifrakturMaguntia', serif;
+    font-size: clamp(18px, 1.9vw, 28px);
+    letter-spacing: 0.2em;
+    color: #241a0c;
+  }
+</style>
+</head>
+<body oncontextmenu="return false" oncopy="return false">
+  <!-- 轻微磨损滤镜：噪声 alpha 阶跃（保留区全不透明、约 12% 像素被完全挖掉），
+       岁月斑驳由"缺墨"承担，不再整体稀释墨色 -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <filter id="worn" x="-5%" y="-5%" width="110%" height="110%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.55" numOctaves="4" seed="7" result="noise"/>
+      <feColorMatrix in="noise" type="matrix"
+        values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  1 0 0 0 0" result="maskSrc"/>
+      <feComponentTransfer in="maskSrc" result="mask">
+        <feFuncA type="linear" slope="25" intercept="-8.5"/>
+      </feComponentTransfer>
+      <feComposite in="SourceGraphic" in2="mask" operator="in"/>
+    </filter>
+  </svg>
+
+  <div class="parchment-text">
+    <div class="line">UUDDLLRRBABAWHOSLOMSTINGNOTALADDIN</div>
+    <svg class="divider" viewBox="0 0 400 16" aria-hidden="true">
+      <path d="M4 8 Q 32 5, 62 8 T 122 8 T 182 8 T 242 8 T 302 8 T 396 8"
+            stroke="#241a0c" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+    </svg>
+    <div class="line">RELINKBACKLOMSTINGSEEYAGOODAFTERNOONGOODEVENINGANDGOODNIGHTBLACKSHEEPWALL</div>
+    <div class="signature">Bestowed by Lomsting</div>
+  </div>
+</body>
+</html>

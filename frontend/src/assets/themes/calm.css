@@ -1,0 +1,82 @@
+/* ============================================================
+ * Theme: calm · 护眼模式（建造者 A）
+ * 浅绿主调 · 放松氛围（叶点/柔光）· 圆角 12px · 动效 160ms
+ * 底色 #e8f2e4（不用纯白）· 面板 #f4f9f1 · 深绿强调 #2f7d4f
+ * 规格来源：docs/spec_ui_themes.md §0/§1/§2
+ * 红线自查：仅 [data-theme="calm"] 前缀 + .theme-decor 钩子，
+ *          无裸元素选择器、不覆盖 App.vue 现有类名；
+ *          纹理全部内联 SVG data-URI / CSS 渐变，无二进制图片；
+ *          color-scheme: light；
+ *          变量键 26 个全（规格 §1 全量）；
+ *          对比度（on --fe-bg #e8f2e4）：--fe-ink #22352a ≈ 11.3:1、
+ *          --fe-ink-2 #45604e ≈ 6.0:1（on 面板/内嵌底亦 ≥4.5），
+ *          语义色 ok ≈ 5.7:1 / warn ≈ 4.7:1 / danger ≈ 5.8:1，
+ *          --fe-accent-ink #ffffff on #2f7d4f ≈ 5.0:1；
+ *          --fe-accent 作文字用时 ≈ 4.4:1（≥3:1 UI 组件线，
+ *          按钮主行动为白字深绿底 5.0:1），均满足可用性红线。
+ * ============================================================ */
+
+[data-theme="calm"] {
+  color-scheme: light;
+
+  /* ---- 表面 ---- */
+  --fe-bg: #e8f2e4;
+  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='44'%3E%3Cellipse cx='11' cy='10' rx='3.2' ry='1.7' transform='rotate(-28 11 10)' fill='%232f7d4f' fill-opacity='0.055'/%3E%3Ccircle cx='33' cy='30' r='1.1' fill='%232f7d4f' fill-opacity='0.05'/%3E%3C/svg%3E");
+  --fe-panel: #f4f9f1;
+  --fe-panel-2: #e7efe2;
+  --fe-panel-3: #dbe7d4;
+
+  /* ---- 描边 ---- */
+  --fe-border: #cddcc5;
+  --fe-border-strong: #94b487;
+
+  /* ---- 文字 ---- */
+  --fe-ink: #22352a;   /* 墨绿主文字，on #e8f2e4 ≈ 11.3:1 */
+  --fe-ink-2: #45604e; /* ≈ 6.0:1 */
+  --fe-ink-3: #5c7260; /* 弱文字/占位 */
+
+  /* ---- 行动色 ---- */
+  --fe-accent: #2f7d4f;
+  --fe-accent-strong: #256b43;
+  --fe-accent-ink: #ffffff; /* on #2f7d4f ≈ 5.0:1 */
+  --fe-accent-soft: #d5e8d0;
+
+  /* ---- 语义色 ---- */
+  --fe-ok: #1a6b40;     /* on #e8f2e4 ≈ 5.7:1 */
+  --fe-warn: #9a5b00;   /* ≈ 4.7:1 */
+  --fe-danger: #a83232; /* ≈ 5.8:1 */
+
+  /* ---- 焦点与阴影 ---- */
+  --fe-focus-ring: #2f7d4f;
+  --fe-shadow-1: 0 1px 2px rgba(44, 84, 54, 0.06), 0 2px 6px rgba(44, 84, 54, 0.05);
+  --fe-shadow-2: 0 14px 36px rgba(44, 84, 54, 0.14), 0 4px 12px rgba(44, 84, 54, 0.08);
+
+  /* ---- 字体 ---- */
+  --fe-font-sans: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --fe-font-serif: "Georgia", "Times New Roman", "Songti SC", "SimSun", serif;
+
+  /* ---- 形状与动效 ---- */
+  --fe-radius: 12px;
+  --fe-motion: 160ms;
+
+  /* ---- 装饰 ----
+   * stage：柔光绿层次 + 右下低透明叶脉枝饰（内联 SVG）；
+   * overlay：两团柔光（左下绿晕 + 右上白光），no-repeat/cover 由钩子控制。 */
+  --fe-decor-stage: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300' viewBox='0 0 300 300'%3E%3Cg fill='none' stroke='%232f7d4f' stroke-opacity='0.12' stroke-width='4' stroke-linecap='round'%3E%3Cpath d='M40 268 C 90 210 150 130 252 44'/%3E%3Cpath d='M84 226 C 96 196 122 174 156 168'/%3E%3Cpath d='M124 180 C 136 152 162 132 194 128'/%3E%3Cpath d='M164 138 C 176 112 200 94 230 92'/%3E%3C/g%3E%3C/svg%3E") no-repeat right 6% bottom 8% / 300px auto, linear-gradient(150deg, #eef6ea 0%, #e3eedf 55%, #dfead9 100%);
+  --fe-decor-overlay: radial-gradient(560px 380px at 84% 12%, rgba(255, 255, 255, 0.40), transparent 70%), radial-gradient(640px 440px at 10% 90%, rgba(47, 125, 79, 0.10), transparent 72%);
+}
+
+/* .theme-decor 钩子：叙事舞台 / 氛围叠加（由集成员放置，无此元素时零副作用） */
+[data-theme="calm"] .theme-decor {
+  background: var(--fe-decor-stage);
+}
+
+[data-theme="calm"] .theme-decor::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: var(--fe-decor-overlay);
+  background-repeat: no-repeat;
+  background-size: cover;
+}

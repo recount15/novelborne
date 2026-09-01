@@ -1,0 +1,49 @@
+{
+  "tier": 1,
+  "family": "small",
+  "stage": "free",
+  "label": "轻盈",
+  "target_chars": 400,
+  "tolerance": 0.2,
+  "basic_mode": true,
+  "agent_required": false,
+  "agent_recommended": false,
+  "slots": [
+    "anchor_free",
+    "character_interaction",
+    "golden_finger",
+    "ripple_cost",
+    "quest_progress",
+    "break_anchor_stage",
+    "directive_landing",
+    "cliffhanger"
+  ],
+  "segments": [
+    {
+      "role": "轻量全景",
+      "window": [
+        330,
+        470
+      ],
+      "slots": [
+        "anchor_free",
+        "character_interaction",
+        "golden_finger",
+        "ripple_cost",
+        "quest_progress",
+        "break_anchor_stage",
+        "directive_landing",
+        "cliffhanger"
+      ],
+      "notes": "单段轻卷一次成文：玩家行动的直接后果、在场角色的一点互动与主线推进同段完成，金手指至多一闪，结尾留一个轻钩子；锚点仅供参考，不强制收束：剧情按过往回合、角色性格与世界观自主推进，机制约束照常；本卷任一机制槽在无对应机制命中时，降为一句自然描写带过，不得硬凑；收束不做强制，按剧情自然收口；必含词密度：低，每槽一句带过即可。"
+    }
+  ],
+  "options": {
+    "count": 6,
+    "factor_split": {
+      "golden_finger": 4,
+      "persona": 2
+    },
+    "preview": true
+  }
+}

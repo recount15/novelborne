@@ -1,0 +1,90 @@
+/* ============================================================
+ * Theme: titanium · 钛合金（亮冷金属）
+ * 拉丝钛银底 · 钛蓝行动色 + 阳极氧化金点缀 · 圆角 4px（机加工感）
+ * 动效 140ms（精密）· color-scheme: light
+ * 红线自查：仅 [data-theme="titanium"] 前缀 + .theme-decor 钩子；
+ *          纹理全部内联 SVG data-URI / CSS 渐变；26 键契约齐备；
+ *          正文 --fe-ink(#2b2f33) on --fe-bg(#dfe3e7) ≈ 11.2:1，
+ *          on --fe-panel(#eaedef) ≈ 12.1:1；--fe-ink-2(#51565c) ≈ 6.8:1；
+ *          --fe-ink-3(--fe #6e747b) ≈ 4.7:1；
+ *          --fe-accent-ink(#ffffff) on --fe-accent(#3d6ea5) ≈ 5.5:1；
+ *          --fe-ok(#2f7a4e) ≈ 5.0:1、--fe-warn(#8f6a08) ≈ 4.6:1、
+ *          --fe-danger(#b33626) ≈ 5.5:1
+ * ============================================================ */
+
+[data-theme="titanium"] {
+  color-scheme: light;
+
+  /* ---- 表面：拉丝钛银（水平细丝） ---- */
+  --fe-bg: #dfe3e7;
+  --fe-bg-image: repeating-linear-gradient(0deg, rgb(255 255 255 / 55%) 0 1px, transparent 1px 3px), repeating-linear-gradient(90deg, rgb(60 70 80 / 3%) 0 1px, transparent 1px 5px);
+  --fe-panel: #eaedef;
+  --fe-panel-2: #e0e5e9;
+  --fe-panel-3: #d5dbdf;
+
+  /* ---- 描边：机加工边 ---- */
+  --fe-border: #c3cad0;
+  --fe-border-strong: #7c868f;
+
+  /* ---- 文字：石墨 ---- */
+  --fe-ink: #2b2f33;
+  --fe-ink-2: #51565c;
+  --fe-ink-3: #6e747b;
+
+  /* ---- 行动色：钛蓝 ---- */
+  --fe-accent: #3d6ea5;
+  --fe-accent-strong: #2f5681;
+  --fe-accent-ink: #ffffff;
+  --fe-accent-soft: #dde8f1;
+
+  /* ---- 语义色 ---- */
+  --fe-ok: #2f7a4e;
+  --fe-warn: #8f6a08;
+  --fe-danger: #b33626;
+
+  /* ---- 焦点与阴影：金属高光投影 ---- */
+  --fe-focus-ring: #3d6ea5;
+  --fe-shadow-1: 0 1px 2px rgb(43 47 51 / 14%), inset 0 1px 0 rgb(255 255 255 / 60%);
+  --fe-shadow-2: 0 10px 26px rgb(43 47 51 / 18%), inset 0 1px 0 rgb(255 255 255 / 55%);
+
+  /* ---- 字体 ---- */
+  --fe-font-sans: "Segoe UI", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --fe-font-serif: "Georgia", "Noto Serif SC", "Songti SC", serif;
+
+  /* ---- 形状与动效 ---- */
+  --fe-radius: 4px;
+  --fe-motion: 140ms;
+
+  /* ---- 装饰：钛板舞台 + 各向异性拉丝 ---- */
+  --fe-decor-stage: linear-gradient(170deg, #e6eaee 0%, #dde2e6 55%, #d6dcE0 100%);
+  --fe-decor-overlay: repeating-linear-gradient(90deg, rgb(255 255 255 / 40%) 0 1px, transparent 1px 4px), repeating-linear-gradient(0deg, rgb(61 110 165 / 4%) 0 1px, transparent 1px 6px), radial-gradient(50% 34% at 78% 6%, rgb(212 175 55 / 10%), transparent 70%);
+}
+
+[data-theme="titanium"] .theme-decor {
+  background: var(--fe-decor-stage);
+}
+
+[data-theme="titanium"] .theme-decor::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: var(--fe-decor-overlay);
+  background-size: auto, auto, 100% 100%;
+  background-repeat: repeat, repeat, no-repeat;
+}
+
+/* 页角图样：左上/右下「六角钛螺栓 + 扳手平面」机加工角件，阳极金描边。 */
+[data-theme="titanium"] .theme-decor::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cg fill='none' stroke='%23d4af37' stroke-opacity='0.16' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M38 30l22-12 22 12v24l-22 12-22-12z'/%3E%3Cpath d='M38 30l22 12 22-12M60 42v24'/%3E%3C/g%3E%3Cg fill='none' stroke='%237c868f' stroke-opacity='0.22'%3E%3Ccircle cx='60' cy='42' r='4'/%3E%3Cpath d='M22 92h72M22 92l8-8M94 92l-8-8'/%3E%3C/g%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cg fill='none' stroke='%23d4af37' stroke-opacity='0.16' stroke-width='1.8' stroke-linejoin='round'%3E%3Cpath d='M122 130l-22 12-22-12v-24l22-12 22 12z'/%3E%3Cpath d='M122 130l-22-12-22 12M100 118v-24'/%3E%3C/g%3E%3Cg fill='none' stroke='%237c868f' stroke-opacity='0.22'%3E%3Ccircle cx='100' cy='118' r='4'/%3E%3Cpath d='M138 68H66M138 68l-8 8M66 68l8 8'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left top, right bottom;
+  background-size: 160px auto, 160px auto;
+}
