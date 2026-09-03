@@ -24,7 +24,8 @@ BACKGROUND_SUBCALL_TIMEOUT = 300.0
 
 def distill_model(client, model: str, prompt: str,
                   extra_kwargs: dict | None = None,
-                  provider: str = "deepseek", timeout: float | None = None) -> str:
+                  provider: str = "deepseek", timeout: float | None = None,
+                  usage_category: str = "other") -> str:
     """兼容性阶梯调用：完整参数 → 剥思考参数 → 剥采样参数 → 流式累积。
 
     别家服务的 OpenAI 兼容层参数支持差异很大，按四级降级重试直到某级成功；
@@ -34,6 +35,8 @@ def distill_model(client, model: str, prompt: str,
     全部失败才向上抛错（调用方自行降级处理）。
 
     每级请求都带 ``DEFAULT_SUBCALL_TIMEOUT`` 读超时（调用方已指定则沿用其值）。
+    
+    v2.0.4: usage_category 用于 Token 计量分类（director/segments/options/等）。
     """
     # 延迟导入：fate_engine 属于老版接入层，仅在源码运行时位于项目根或 legacy/ 下。
     from core import fate_engine as fe
@@ -62,6 +65,8 @@ def distill_model(client, model: str, prompt: str,
         try:
             response = client.chat.completions.create(timeout=timeout, **kwargs)
             content = response.choices[0].message.content if getattr(response, "choices", None) else ""
+            # v2.0.4: Token 计量 choke point（非流式）
+            _record_usage_from_response(response, usage_category)
             if str(content or "").strip():
                 return str(content)
             # 空正文≠成功：思考链可能吃光了 max_tokens 预算，降级重试。
@@ -90,3 +95,18 @@ def distill_model(client, model: str, prompt: str,
     except Exception as exc:  # noqa: BLE001
         last_error = exc
     raise last_error
+
+
+def _record_usage_from_response(response: Any, category: str) -> None:
+    """从 response 提取 usage 并记录（v2.0.4 Token 计量）。"""
+    try:
+        from core.engine import token_accounting
+        usage = token_accounting.extract_usage(response)
+        if usage:
+            token_accounting.record_usage(
+                usage["prompt_tokens"],
+                usage["completion_tokens"],
+                category
+            )
+    except Exception:  # noqa: BLE001
+        pass  # Token 计量失败不影响主流程

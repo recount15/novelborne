@@ -15,12 +15,14 @@ import {
   ListChecks,
   LoaderCircle,
   Menu,
+  MessageCircle,
   MessageSquareText,
   Minus,
   Palette,
   PanelLeft,
   PanelRight,
   Play,
+  Plus,
   PlugZap,
   RotateCcw,
   Save,
@@ -64,6 +66,7 @@ import {
   fetchModels,
   fetchSessionState,
   getBootstrap,
+  getChatRoster,
   listSaves,
   loadAnySave,
   loadSession,
@@ -72,10 +75,13 @@ import {
   readNdjson,
   recommendGoldenFingers,
   saveSession,
+  sendChatMessage,
   testModelConnection,
   uploadNemesis,
   uploadSkill,
   uploadTxt,
+  type ChatReply,
+  type ChatRosterEntry,
   type LanInfo,
   type PoolCardEntry,
 } from './api'
@@ -177,6 +183,14 @@ const workPickerOpen = ref(false)
 const workQuery = ref('')
 const fetchedModels = ref<string[]>([])
 const fetchingModels = ref(false)
+
+// ========== 角色闲聊状态（v2.0.4 Agent_refill 优化） ==========
+const chatRoster = ref<ChatRosterEntry[]>([])
+const selectedCharacter = ref<string>('')
+const chatMessages = ref<Array<{ player: string; reply: string }>>([])
+const chatBusy = ref(false)
+const chatInput = ref('')
+const chatOpen = ref(false)
 const testingConnection = ref(false)
 const connectionResult = ref<{ ok: boolean; message: string } | null>(null)
 const enableNemesis = ref(false)
@@ -277,8 +291,9 @@ const availableModels = computed(() =>
 const enhanced = computed(() => form.value.mode.startsWith('强化'))
 // 设定锁定：金手指生成后 或 设定已确认（进入金手指阶段）均锁人物/难度
 const setupLocked = computed(() => inGame.value || busy.value || gfGenerated.value || setupConfirmed.value)
-// 模型与参数不受金手指锁定影响（与人物/难度设定无关，开局仍可调整）
-const modelLocked = computed(() => inGame.value || busy.value)
+// 模型与参数不受金手指/对局状态锁定：key 只存页面内存且随每条请求重发，
+// 后端逐回合重读请求体，读档/刷新恢复会话后也必须能改（否则无处重填 key）。
+const modelLocked = computed(() => busy.value)
 // 金手指生成前置校验：主角/伴侣/伙伴/宿敌/难度全部确定 + 用户已点"确定设定"。
 // 数量即事实：定了几个伙伴/伴侣，名单就读取几行；每行选了池卡或手填了姓名即视为已配置
 //（与后端一致：后端仅要求 name，空行静默丢弃）。数量选 0 的栏视为已确定。
@@ -1252,11 +1267,31 @@ const duplicateNameWarnings = computed(() => {
 
 // 两级筛选：category = 来源（主角/男主/女主/配角/反派），subtype = 栏位分类。
 // category 为空显示全部来源；subtype 为空显示该来源下全部分类。
+
+// v2.0.3 跨书防线：默认只显示当前作品的角色卡（书名取自作品库上传文件或
+// 基础模式书名输入），避免其他作品的人物/设定乱入。匹配容忍《》与扩展名
+// 差异；无出处卡（原创/通用）不受限。用户可主动关闭过滤做跨书选择。
+const poolWorkFilterEnabled = ref(true)
+const currentWorkTitle = computed(() => {
+  const raw = enhanced.value
+    ? String(novelUpload.value?.filename || '')
+    : String(form.value.work || '')
+  return raw.replace(/\.txt$/i, '').replace(/[《》\s]/g, '').trim()
+})
+function poolWorkMatches(card: PoolCardEntry): boolean {
+  if (!poolWorkFilterEnabled.value || !currentWorkTitle.value) return true
+  const cardWork = String(card.work || '').replace(/[《》\s]/g, '')
+  if (!cardWork) return true
+  return cardWork === currentWorkTitle.value
+    || cardWork.includes(currentWorkTitle.value)
+    || currentWorkTitle.value.includes(cardWork)
+}
+
 function filteredPoolGroups(slot: PoolSlotKey): Array<{ key: string; sub_groups: Array<{ key: string; cards: PoolCardEntry[] }> }> {
   const state = poolSlots.value[slot]
   const query = state.query.trim().toLowerCase()
   const match = (card: PoolCardEntry) =>
-    !query || card.name.toLowerCase().includes(query)
+    (!query || card.name.toLowerCase().includes(query)) && poolWorkMatches(card)
   return state.groups
     .filter((group) => !state.category || group.key === state.category)
     .map((group) => ({
@@ -1503,6 +1538,79 @@ async function startGame(): Promise<void> {
   askInput.value = ''
   status.value = enhanced.value ? '正在校验原著并提取剧情' : '正在生成开场'
   await runStream('/api/sessions/start', payload)
+}
+
+/** 开启新游戏：把界面完整退回"刚打开应用"的状态。
+ *  会话、正文、选项、提问、聊天、金手指与设定确认全部清零；
+ *  停止蒸馏轮询；移动端切回配置面板。存档列表与模型配置保留（用户输入的连接信息不应丢）。 */
+function startNewGame(): void {
+  if (busy.value) return
+
+  // 会话与轮询
+  if (distillTimer) {
+    clearInterval(distillTimer)
+    distillTimer = null
+  }
+  distillMisses = 0
+  distillProgress.value = null
+  sessionId.value = null
+  state.value = {}
+
+  // 正文 / 选项 / 增补通路
+  chat.value = []
+  selectedOption.value = null
+  relaySelectedKeys.value = []
+  relaySupplement.value = ''
+  actionInput.value = ''
+  autoplayBusy.value = false
+
+  // 提问
+  askOpen.value = false
+  askInput.value = ''
+  askBusy.value = false
+  askError.value = ''
+  askThread.value = []
+
+  // 角色闲聊
+  chatRoster.value = []
+  chatMessages.value = []
+  selectedCharacter.value = ''
+  chatInput.value = ''
+  chatBusy.value = false
+  chatOpen.value = false
+
+  // 任务 / 压缩提示
+  questEstimate.value = null
+  questDoneDismissed.value = false
+  questFlash.value = ''
+  compressionToastVisible.value = false
+
+  // 金手指与设定确认：回到"尚未确认设定、尚未选定金手指"的开局前状态
+  goldenFingerChoices.value = []
+  goldenFingerText.value = ''
+  goldenFingerProposal.value = null
+  gfGenerated.value = false
+  gfOpen.value = false
+  setupConfirmed.value = false
+  form.value.golden_finger = ''
+
+  // 上传件（强化模式原著 / 人设）
+  novelUpload.value = null
+  personaUpload.value = null
+
+  // 存档区 UI 瞬态
+  savePointName.value = ''
+  highlightedSaveId.value = null
+  loadingSaveId.value = null
+  exportOpen.value = false
+
+  // 状态消息与面板
+  status.value = '已回到全新开局，请确认设定并选择金手指后开始'
+  error.value = ''
+  mobilePanel.value = 'setup'
+  basicOpen.value = true
+  protagonistOpen.value = true
+  if (storyScroll.value) storyScroll.value.scrollTop = 0
 }
 
 function chooseOption(option: GameOption): void {
@@ -1796,6 +1904,69 @@ async function scrollToBottom(): Promise<void> {
   await nextTick()
   if (storyScroll.value) storyScroll.value.scrollTop = storyScroll.value.scrollHeight
 }
+
+// ========== 角色闲聊功能（v2.0.4 Agent_refill 优化） ==========
+
+/** 根据 active_members 刷新可聊天角色列表 */
+async function refreshChatRoster(): Promise<void> {
+  if (!sessionId.value || !inGame.value) {
+    chatRoster.value = []
+    selectedCharacter.value = ''
+    return
+  }
+  try {
+    const roster = await getChatRoster(sessionId.value)
+    chatRoster.value = roster
+    // 当前选中角色若已离场，清空选择
+    if (selectedCharacter.value && !roster.some(r => r.name === selectedCharacter.value)) {
+      selectedCharacter.value = ''
+      chatMessages.value = []
+    }
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '角色列表加载失败'
+  }
+}
+
+/** 发送聊天消息 */
+async function sendChat(): Promise<void> {
+  const message = chatInput.value.trim()
+  if (!message || !selectedCharacter.value || chatBusy.value || !sessionId.value) return
+  
+  chatBusy.value = true
+  error.value = ''
+  try {
+    const result: ChatReply = await sendChatMessage(sessionId.value, selectedCharacter.value, message)
+    chatMessages.value.push({ player: message, reply: result.reply })
+    chatInput.value = ''
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '角色回复失败'
+  } finally {
+    chatBusy.value = false
+  }
+}
+
+/** 切换角色时重置聊天记录 */
+function onCharacterChange(): void {
+  chatMessages.value = []
+  chatInput.value = ''
+}
+
+// 监听 active_members 变化，刷新聊天角色列表
+watch(() => (state.value as Record<string, unknown>).active_members, () => {
+  void refreshChatRoster()
+}, { deep: true })
+
+// 游戏开始时刷新角色列表
+watch(inGame, (nowInGame) => {
+  if (nowInGame) {
+    void refreshChatRoster()
+  } else {
+    chatRoster.value = []
+    selectedCharacter.value = ''
+    chatMessages.value = []
+    chatOpen.value = false
+  }
+})
 
 onMounted(async () => {
   activeTheme.value = currentTheme()
@@ -2262,15 +2433,26 @@ watch([compressionRecord, round], () => {
               </div>
             </div>
 
-            <button
-              type="button"
-              class="small-action mt-2.5 w-full"
-              :disabled="!inGame && !saveList.length"
-              title="将当前对局或存档导出为小说文稿"
-              @click="exportOpen = true"
-            >
-              <ScrollText :size="12" /> 导出小说
-            </button>
+            <div class="mt-2.5 flex gap-2">
+              <button
+                type="button"
+                class="small-action primary flex-1"
+                :disabled="busy"
+                title="重新开始一个新游戏"
+                @click="startNewGame"
+              >
+                <Plus :size="12" /> 开启新游戏
+              </button>
+              <button
+                type="button"
+                class="small-action flex-1"
+                :disabled="!inGame && !saveList.length"
+                title="将当前对局或存档导出为小说文稿"
+                @click="exportOpen = true"
+              >
+                <ScrollText :size="12" /> 导出小说
+              </button>
+            </div>
           </div>
         </section>
 
@@ -2293,6 +2475,10 @@ watch([compressionRecord, round], () => {
                 <span>主角性格</span>
                 <span class="font-normal text-(--fe-ink-3)">{{ totalPoolCards }} 张卡</span>
               </span>
+              <label class="mt-1 flex items-center gap-1.5 text-[11px] text-(--fe-ink-3)" title="只显示当前作品的角色卡，防止其他作品的人物与设定乱入；取消勾选可从全池选择">
+                <input v-model="poolWorkFilterEnabled" type="checkbox" class="accent-(--fe-accent)" :disabled="setupLocked" />
+                只看本书角色{{ currentWorkTitle ? `（${currentWorkTitle}）` : '' }}
+              </label>
               <div class="mt-1">
                 <select v-model="poolSlots['主角栏'].category" class="field h-8 flex-1 px-2 text-[12px]" :disabled="setupLocked" @change="onPoolCategoryChanged('主角栏')">
                   <option value="">全部来源</option>
@@ -2933,6 +3119,74 @@ watch([compressionRecord, round], () => {
               </div>
             </div>
 
+            <!-- ========== 角色闲聊 UI（v2.0.4 Agent_refill 优化） ========== -->
+            <div v-if="chatRoster.length && inGame" class="mb-3">
+              <div class="chat-header">
+                <MessageCircle :size="13" class="text-(--fe-accent)" />
+                <span class="text-[11px] font-bold text-(--fe-ink-2)">角色闲聊</span>
+                <button
+                  type="button"
+                  class="ml-auto text-[10px] text-(--fe-accent) hover:underline"
+                  @click="chatOpen = !chatOpen"
+                >
+                  {{ chatOpen ? '收起' : '展开' }}
+                </button>
+              </div>
+              
+              <div v-if="chatOpen" class="chat-panel">
+                <select
+                  v-model="selectedCharacter"
+                  class="field h-8 w-full px-2 text-xs"
+                  :disabled="busy || chatBusy"
+                  @change="onCharacterChange"
+                >
+                  <option value="">选择角色开始聊天…</option>
+                  <option v-for="char in chatRoster" :key="char.name" :value="char.name">
+                    {{ char.name }}
+                  </option>
+                </select>
+
+                <div v-if="selectedCharacter" class="mt-2">
+                  <div v-if="chatMessages.length" class="chat-messages scrollbar">
+                    <div v-for="(msg, idx) in chatMessages" :key="idx" class="chat-bubble-group">
+                      <div class="chat-bubble player">
+                        <div class="bubble-label">你</div>
+                        <div class="bubble-text">{{ msg.player }}</div>
+                      </div>
+                      <div class="chat-bubble character">
+                        <div class="bubble-label">{{ selectedCharacter }}</div>
+                        <div class="bubble-text">{{ msg.reply }}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="mt-2 flex gap-1.5">
+                    <input
+                      v-model="chatInput"
+                      class="field h-8 flex-1 px-2 text-xs"
+                      :disabled="busy || chatBusy"
+                      placeholder="与角色闲聊（不影响剧情）…"
+                      maxlength="500"
+                      @keydown.enter.exact.prevent="sendChat"
+                    />
+                    <button
+                      type="button"
+                      class="small-action primary h-8"
+                      :disabled="busy || chatBusy || !chatInput.trim()"
+                      @click="sendChat"
+                    >
+                      <LoaderCircle v-if="chatBusy" class="animate-spin" :size="12" />
+                      <Send v-else :size="12" />
+                    </button>
+                  </div>
+                  
+                  <p class="mt-1 text-[9px] text-(--fe-ink-3)">
+                    闲聊由 Agent_refill 优化生成，不消耗回合，不改变剧情状态
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <div v-if="openingStep" class="mb-3">
               <button
                 type="button"
@@ -2966,6 +3220,82 @@ watch([compressionRecord, round], () => {
                 <LoaderCircle v-if="busy" class="animate-spin" :size="12" />
                 <Send v-else :size="12" /> 发送
               </button>
+            </div>
+
+            <!-- v2.0.4: 角色闲聊 UI（阶段 F）-->
+            <div v-if="inGame && chatRoster.length > 0" class="mb-3">
+              <div class="mb-1.5 flex items-center gap-2">
+                <MessageCircle :size="14" class="text-(--fe-ink-3)" />
+                <select
+                  v-model="selectedCharacter"
+                  class="field h-8 flex-1 px-2 text-xs"
+                  :disabled="busy || chatBusy"
+                  @change="onCharacterChange"
+                >
+                  <option value="">选择角色闲聊…</option>
+                  <option v-for="char in chatRoster" :key="char.name" :value="char.name">
+                    {{ char.name }}
+                  </option>
+                </select>
+                <button
+                  v-if="selectedCharacter && !chatOpen"
+                  type="button"
+                  class="small-action"
+                  :disabled="busy || chatBusy"
+                  @click="chatOpen = true"
+                >
+                  <ChevronDown :size="12" /> 展开
+                </button>
+                <button
+                  v-if="selectedCharacter && chatOpen"
+                  type="button"
+                  class="small-action"
+                  @click="chatOpen = false"
+                >
+                  <Minus :size="12" /> 收起
+                </button>
+              </div>
+              
+              <!-- 聊天抽屉 -->
+              <div v-if="selectedCharacter && chatOpen" class="rounded-md border border-(--fe-border) bg-(--fe-panel-2) p-2">
+                <div class="mb-2 max-h-[200px] space-y-2 overflow-y-auto">
+                  <div v-if="chatMessages.length === 0" class="text-center text-[11px] text-(--fe-ink-3)">
+                    尚无对话记录
+                  </div>
+                  <div v-for="(msg, idx) in chatMessages" :key="idx" class="space-y-1">
+                    <div class="flex justify-end">
+                      <div class="max-w-[80%] rounded-lg bg-(--fe-accent) px-2 py-1 text-[11px] text-(--fe-accent-ink)">
+                        {{ msg.player }}
+                      </div>
+                    </div>
+                    <div class="flex justify-start">
+                      <div class="max-w-[80%] rounded-lg bg-(--fe-panel-3) px-2 py-1 text-[11px] text-(--fe-ink)">
+                        {{ msg.reply }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="flex gap-1.5">
+                  <input
+                    v-model="chatInput"
+                    type="text"
+                    class="field h-8 flex-1 px-2 text-xs"
+                    :disabled="busy || chatBusy"
+                    :placeholder="`与 ${selectedCharacter} 闲聊…`"
+                    @keydown.enter.prevent="sendChat"
+                  />
+                  <button
+                    type="button"
+                    class="small-action primary h-8"
+                    :disabled="busy || chatBusy || !chatInput.trim()"
+                    @click="sendChat"
+                  >
+                    <LoaderCircle v-if="chatBusy" class="animate-spin" :size="11" />
+                    <Send v-else :size="11" />
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div v-if="options.length && inGame" class="mb-1.5 flex items-center justify-end gap-2">
@@ -3679,6 +4009,20 @@ watch([compressionRecord, round], () => {
 .ask-thread { display: flex; max-height: 150px; flex-direction: column; gap: 6px; margin-bottom: 8px; overflow-y: auto; }
 .ask-q { font-size: 11px; font-weight: 700; color: var(--fe-ink); }
 .ask-a { margin-top: 2px; white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid color-mix(in srgb, var(--fe-border) 60%, var(--fe-panel)); border-radius: var(--fe-radius); background: var(--fe-panel); padding: 5px 8px; font-size: 11px; line-height: 1.6; color: var(--fe-ink-2); }
+
+/* ========== 角色闲聊样式（v2.0.4 Agent_refill 优化） ========== */
+.chat-header { display: flex; align-items: center; gap: 6px; border: 1px solid color-mix(in srgb, var(--fe-border) 60%, var(--fe-panel)); border-radius: var(--fe-radius); background: var(--fe-panel); padding: 6px 9px; margin-bottom: 8px; }
+.chat-panel { border: 1px solid color-mix(in srgb, var(--fe-border) 60%, var(--fe-panel)); border-radius: var(--fe-radius); background: var(--fe-panel); padding: 8px 9px; }
+.chat-messages { max-height: 200px; overflow-y: auto; margin-bottom: 8px; }
+.chat-bubble-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.chat-bubble { display: flex; flex-direction: column; gap: 3px; }
+.chat-bubble.player { align-items: flex-end; }
+.chat-bubble.character { align-items: flex-start; }
+.bubble-label { font-size: 9px; font-weight: 700; color: var(--fe-ink-3); padding: 0 6px; }
+.bubble-text { max-width: 85%; white-space: pre-wrap; overflow-wrap: anywhere; border-radius: var(--fe-radius); padding: 6px 9px; font-size: 11px; line-height: 1.5; }
+.chat-bubble.player .bubble-text { background: color-mix(in srgb, var(--fe-accent) 12%, var(--fe-panel)); border: 1px solid color-mix(in srgb, var(--fe-accent) 20%, var(--fe-panel)); color: var(--fe-ink); }
+.chat-bubble.character .bubble-text { background: var(--fe-panel-2); border: 1px solid color-mix(in srgb, var(--fe-border) 60%, var(--fe-panel)); color: var(--fe-ink-2); }
+
 .anchor-timeline { display: flex; align-items: center; overflow-x: auto; border-bottom: 1px solid color-mix(in srgb, var(--fe-border) 60%, var(--fe-panel)); background: var(--fe-bg); padding: 9px 12px 13px; }
 .tl-node { position: relative; display: flex; flex: 0 0 auto; align-items: center; gap: 6px; border: 1px solid var(--fe-border); border-radius: 5px 5px 2px 2px; background: var(--fe-panel); padding: 4px 9px 5px; box-shadow: 0 1px 2px rgb(60 50 32 / 8%); animation: tl-in 320ms ease-out both; }
 .tl-node::after {

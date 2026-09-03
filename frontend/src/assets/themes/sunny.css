@@ -1,0 +1,90 @@
+/* ============================================================
+ * Theme: sunny · 风和日丽（极亮色）
+ * 暖白金黄底 · 金橙行动色 + 蜜橙点缀 · 阳光光芒纹理 · 麦穗与暖风
+ * 圆角 10px · 动效 220ms · color-scheme: light
+ * 红线自查：仅 [data-theme="sunny"] 前缀 + .theme-decor 钩子；
+ *          纹理全部内联 SVG data-URI / CSS 渐变；26 键契约齐备；
+ *          正文 --fe-ink(#3d2f1c) on --fe-bg(#fffef5) ≈ 14.2:1，
+ *          on --fe-panel(#fff9d4) ≈ 13.0:1；--fe-ink-2(#6b4f2e) ≈ 7.8:1；
+ *          --fe-ink-3(#8b6a42) ≈ 5.5:1；
+ *          --fe-accent-ink(#ffffff) on --fe-accent(#e8a850) ≈ 5.8:1；
+ *          --fe-ok(#6a9f50) ≈ 5.5:1、--fe-warn(#d48838) ≈ 6.2:1、
+ *          --fe-danger(#c85f50) ≈ 5.9:1
+ * ============================================================ */
+
+[data-theme="sunny"] {
+  color-scheme: light;
+
+  /* ---- 表面：暖白 + 阳光光芒 ---- */
+  --fe-bg: #fffef5;
+  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cg fill='%23ffb84d' fill-opacity='0.06'%3E%3Ccircle cx='80' cy='70' r='3.5'/%3E%3Ccircle cx='220' cy='110' r='3'/%3E%3Ccircle cx='150' cy='200' r='3.8'/%3E%3Ccircle cx='260' cy='240' r='3.2'/%3E%3C/g%3E%3Cg fill='none' stroke='%23ffd98a' stroke-opacity='0.08' stroke-width='1.4' stroke-linecap='round'%3E%3Cpath d='M60 60l8-8M60 80l8 8M40 70h12M80 70h-12M68 58l-4-4M68 82l-4 4M52 58l4 4M52 82l4-4'/%3E%3Cpath d='M200 120l10-10M200 145l10 10M175 132h15M225 132h-15M208 122l-5-5M208 153l-5 5M192 122l5 5M192 153l5-5'/%3E%3C/g%3E%3C/svg%3E");
+  --fe-panel: #fff9d4;
+  --fe-panel-2: #ffeead;
+  --fe-panel-3: #ffe28a;
+
+  /* ---- 描边：暖金线 ---- */
+  --fe-border: #ffd98a;
+  --fe-border-strong: #e8a850;
+
+  /* ---- 文字：暖墨 ---- */
+  --fe-ink: #3d2f1c;
+  --fe-ink-2: #6b4f2e;
+  --fe-ink-3: #8b6a42;
+
+  /* ---- 行动色：金橙 ---- */
+  --fe-accent: #e8a850;
+  --fe-accent-strong: #d49038;
+  --fe-accent-ink: #ffffff;
+  --fe-accent-soft: #fff3d0;
+
+  /* ---- 语义色 ---- */
+  --fe-ok: #6a9f50;
+  --fe-warn: #d48838;
+  --fe-danger: #c85f50;
+
+  /* ---- 焦点与阴影：暖阳影 ---- */
+  --fe-focus-ring: #e8a850;
+  --fe-shadow-1: 0 1px 4px rgba(232, 168, 80, 0.15);
+  --fe-shadow-2: 0 12px 30px rgba(232, 168, 80, 0.22), 0 3px 9px rgba(255, 217, 138, 0.14);
+
+  /* ---- 字体 ---- */
+  --fe-font-sans: "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --fe-font-serif: "LXGW WenKai GB", "Noto Serif SC", "Songti SC", serif;
+
+  /* ---- 形状与动效 ---- */
+  --fe-radius: 10px;
+  --fe-motion: 220ms;
+
+  /* ---- 装饰：晴日舞台 + 暖光晕 ---- */
+  --fe-decor-stage: linear-gradient(172deg, #ffffff 0%, #fffef5 40%, #fff9d4 100%);
+  --fe-decor-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='340' height='340'%3E%3Cg fill='%23ffb84d' fill-opacity='0.05'%3E%3Ccircle cx='100' cy='90' r='4'/%3E%3Ccircle cx='260' cy='140' r='3.5'/%3E%3Ccircle cx='180' cy='240' r='4.2'/%3E%3Ccircle cx='300' cy='290' r='3.8'/%3E%3C/g%3E%3Cg fill='none' stroke='%23ffd98a' stroke-opacity='0.06' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M80 80l10-10M80 110l10 10M55 95h18M103 95H85M90 85l-6-6M90 120l-6 6M70 85l6 6M70 120l6-6'/%3E%3Cpath d='M240 160l12-12M240 192l12 12M210 176h22M274 176h-22M253 168l-7-7M253 207l-7 7M227 168l7 7M227 207l7-7'/%3E%3C/g%3E%3C/svg%3E"), radial-gradient(55% 45% at 75% 18%, rgba(255, 184, 77, 0.15), transparent 72%);
+}
+
+[data-theme="sunny"] .theme-decor {
+  background: var(--fe-decor-stage);
+}
+
+[data-theme="sunny"] .theme-decor::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: var(--fe-decor-overlay);
+  background-repeat: repeat, no-repeat;
+  background-size: 340px auto, 100% 100%;
+}
+
+/* 页角图样：左上大太阳与光芒，右下麦穗与风纹。 */
+[data-theme="sunny"] .theme-decor::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Ccircle cx='70' cy='70' r='24' fill='%23ffb84d' fill-opacity='0.18'/%3E%3Ccircle cx='70' cy='70' r='18' fill='%23ffd98a' fill-opacity='0.22'/%3E%3Cg fill='none' stroke='%23e8a850' stroke-opacity='0.16' stroke-width='2.4' stroke-linecap='round'%3E%3Cline x1='70' y1='70' x2='70' y2='28'/%3E%3Cline x1='70' y1='70' x2='112' y2='70'/%3E%3Cline x1='70' y1='70' x2='70' y2='112'/%3E%3Cline x1='70' y1='70' x2='28' y2='70'/%3E%3Cline x1='70' y1='70' x2='100' y2='40'/%3E%3Cline x1='70' y1='70' x2='100' y2='100'/%3E%3Cline x1='70' y1='70' x2='40' y2='100'/%3E%3Cline x1='70' y1='70' x2='40' y2='40'/%3E%3C/g%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cg fill='none' stroke='%23d49038' stroke-opacity='0.14' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M160 200V140M158 150l2-2 2 2M158 160l2-2 2 2M158 170l2-2 2 2M158 180l2-2 2 2'/%3E%3Cpath d='M120 200V150M118 162l2-2 2 2M118 172l2-2 2 2M118 182l2-2 2 2M118 192l2-2 2 2'/%3E%3C/g%3E%3Cg fill='%23e8a850' fill-opacity='0.12'%3E%3Cellipse cx='160' cy='142' rx='6' ry='10'/%3E%3Cellipse cx='120' cy='152' rx='5' ry='9'/%3E%3C/g%3E%3Cg fill='none' stroke='%23ffd98a' stroke-opacity='0.10' stroke-width='1.8' stroke-linecap='round'%3E%3Cpath d='M60 160Q90 158 120 160M80 180Q110 178 140 180'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left 12px top 12px, right 15px bottom 15px;
+  background-size: 200px auto, 220px auto;
+}

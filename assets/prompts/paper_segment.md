@@ -13,6 +13,7 @@
 - 锚点要求：@@ANCHOR_REQUIREMENT@@
 
 ## 上下文
+- 作品设定与风格（本段必须在此世界观内书写，不得引入其他作品的设定/术语/人物）：@@WORLD@@
 - 回目蓝图：@@BLUEPRINT_BRIEF@@
 - 前情梗概：@@CONTEXT@@
 - 玩家本回合行动：@@ACTION@@

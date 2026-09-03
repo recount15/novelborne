@@ -4,6 +4,14 @@ Novelborne 是一个由大模型驱动的互动小说世界模拟器。玩家以
 
 > 这不是让模型一次性“写完一回合”的聊天壳，而是“结构化出卷 → 并行填空 → 空级批改 → 错题重填 → 代码组装 → 全局润色 → 机制结算”的叙事运行时。
 
+## 文档导航
+
+- **用户手册**（随 Release 附带）：[docs/USER_MANUAL.md](docs/USER_MANUAL.md)
+- **API 调用文档**（66 个接口 + 可运行示例）：[docs/API.md](docs/API.md)
+- **总入口文档**：[docs/MASTER.md](docs/MASTER.md)
+- 发布说明：[docs/RELEASE_NOTES_v2.1.0.md](docs/RELEASE_NOTES_v2.1.0.md)
+- 架构与开发：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)、[docs/HANDBOOK.md](docs/HANDBOOK.md)
+
 ## 项目定位
 
 Novelborne 的核心目标是把大模型的不确定性限制在小的、可验证的生成任务中：

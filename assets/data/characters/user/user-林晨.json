@@ -1,0 +1,38 @@
+{
+  "id": "user-林晨",
+  "role": "主角",
+  "name": "林晨",
+  "work": "《book》",
+  "archetype": "谨慎规划型学生",
+  "desire": "在开学第一天制定并执行一个周密的计划，以掌控新学期的开端。",
+  "fear": "对未知环境或新学期的不确定性感到焦虑，害怕失控。",
+  "abilities": [],
+  "relationship_vector": {},
+  "knowledge_scope": [],
+  "voice": "内心独白为主，行动前习惯性思考，语气谨慎。",
+  "unacceptable_actions": [
+    "毫无准备地面对新学期",
+    "在重要场合表现得轻率鲁莽"
+  ],
+  "background": "一名普通学生，开学第一天进入教学楼，对新环境抱有规划意识。",
+  "skill_ids": [],
+  "source": "用户上传蒸馏",
+  "gender": "male",
+  "original_position": "主角",
+  "source_medium": "上传作品",
+  "source_region": "",
+  "slot_keys": {
+    "主角栏": [
+      "逆袭成长型"
+    ],
+    "伴侣栏": [
+      "通用"
+    ],
+    "伙伴栏": [
+      "通用"
+    ],
+    "宿敌栏": [
+      "通用"
+    ]
+  }
+}

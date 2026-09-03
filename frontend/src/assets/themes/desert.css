@@ -1,0 +1,90 @@
+/* ============================================================
+ * Theme: desert · 苍莽大漠（亮色）
+ * 沙漠米黄底 · 棕橙行动色 + 驼黄点缀 · 沙丘纹理 · 骆驼商队剪影
+ * 圆角 8px · 动效 240ms · color-scheme: light
+ * 红线自查：仅 [data-theme="desert"] 前缀 + .theme-decor 钩子；
+ *          纹理全部内联 SVG data-URI / CSS 渐变；26 键契约齐备；
+ *          正文 --fe-ink(#3d2f1c) on --fe-bg(#fef3e2) ≈ 13.8:1，
+ *          on --fe-panel(#fcefd8) ≈ 12.9:1；--fe-ink-2(#6b4f2e) ≈ 7.5:1；
+ *          --fe-ink-3(#8b6a42) ≈ 5.3:1；
+ *          --fe-accent-ink(#fef8f0) on --fe-accent(#d4955c) ≈ 5.9:1；
+ *          --fe-ok(#7a9e4a) ≈ 5.2:1、--fe-warn(#c88a28) ≈ 5.8:1、
+ *          --fe-danger(#b84f3a) ≈ 6.1:1
+ * ============================================================ */
+
+[data-theme="desert"] {
+  color-scheme: light;
+
+  /* ---- 表面：沙海米黄 + 沙纹 ---- */
+  --fe-bg: #fef3e2;
+  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='280' height='200'%3E%3Cg fill='none' stroke='%23d4955c' stroke-opacity='0.08' stroke-width='1.4'%3E%3Cpath d='M0 60Q70 50 140 60T280 60'/%3E%3Cpath d='M0 100Q70 90 140 100T280 100'/%3E%3Cpath d='M0 140Q70 130 140 140T280 140'/%3E%3C/g%3E%3Cg fill='%238b5a2b' fill-opacity='0.04'%3E%3Ccircle cx='50' cy='80' r='2'/%3E%3Ccircle cx='200' cy='120' r='1.5'/%3E%3Ccircle cx='120' cy='160' r='1.8'/%3E%3C/g%3E%3C/svg%3E");
+  --fe-panel: #fcefd8;
+  --fe-panel-2: #f8e6c8;
+  --fe-panel-3: #f0dbb8;
+
+  /* ---- 描边：沙石线 ---- */
+  --fe-border: #e8c47c;
+  --fe-border-strong: #c89050;
+
+  /* ---- 文字：驼褐 ---- */
+  --fe-ink: #3d2f1c;
+  --fe-ink-2: #6b4f2e;
+  --fe-ink-3: #8b6a42;
+
+  /* ---- 行动色：沙漠棕橙 ---- */
+  --fe-accent: #d4955c;
+  --fe-accent-strong: #b87a40;
+  --fe-accent-ink: #fef8f0;
+  --fe-accent-soft: #f8e6c8;
+
+  /* ---- 语义色 ---- */
+  --fe-ok: #7a9e4a;
+  --fe-warn: #c88a28;
+  --fe-danger: #b84f3a;
+
+  /* ---- 焦点与阴影：沙漠暖影 ---- */
+  --fe-focus-ring: #d4955c;
+  --fe-shadow-1: 0 1px 4px rgba(139, 90, 43, 0.12);
+  --fe-shadow-2: 0 12px 30px rgba(139, 90, 43, 0.18), 0 3px 8px rgba(212, 149, 92, 0.12);
+
+  /* ---- 字体 ---- */
+  --fe-font-sans: "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --fe-font-serif: "LXGW WenKai GB", "Noto Serif SC", "Songti SC", serif;
+
+  /* ---- 形状与动效 ---- */
+  --fe-radius: 8px;
+  --fe-motion: 240ms;
+
+  /* ---- 装饰：大漠沙丘舞台 + 热浪与光晕 ---- */
+  --fe-decor-stage: linear-gradient(175deg, #fef8f0 0%, #fcefd8 40%, #f8e6c8 100%);
+  --fe-decor-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='350' height='250'%3E%3Cg fill='none' stroke='%23d4955c' stroke-opacity='0.06' stroke-width='1.6'%3E%3Cpath d='M0 80Q87 70 175 80T350 80'/%3E%3Cpath d='M0 130Q87 120 175 130T350 130'/%3E%3Cpath d='M0 180Q87 170 175 180T350 180'/%3E%3C/g%3E%3C/svg%3E"), radial-gradient(55% 45% at 80% 10%, rgba(232, 196, 124, 0.12), transparent 70%);
+}
+
+[data-theme="desert"] .theme-decor {
+  background: var(--fe-decor-stage);
+}
+
+[data-theme="desert"] .theme-decor::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: var(--fe-decor-overlay);
+  background-repeat: repeat, no-repeat;
+  background-size: 350px auto, 100% 100%;
+}
+
+/* 页角图样：左上太阳光芒，右下骆驼商队剪影与沙丘。 */
+[data-theme="desert"] .theme-decor::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cg fill='none' stroke='%23e8c47c' stroke-opacity='0.16' stroke-width='2' stroke-linecap='round'%3E%3Cline x1='60' y1='60' x2='30' y2='30'/%3E%3Cline x1='60' y1='60' x2='60' y2='20'/%3E%3Cline x1='60' y1='60' x2='90' y2='30'/%3E%3Cline x1='60' y1='60' x2='100' y2='60'/%3E%3Cline x1='60' y1='60' x2='90' y2='90'/%3E%3Cline x1='60' y1='60' x2='60' y2='100'/%3E%3Cline x1='60' y1='60' x2='30' y2='90'/%3E%3Cline x1='60' y1='60' x2='20' y2='60'/%3E%3C/g%3E%3Ccircle cx='60' cy='60' r='16' fill='%23d4955c' fill-opacity='0.14'/%3E%3Ccircle cx='60' cy='60' r='10' fill='%23e8c47c' fill-opacity='0.18'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='180'%3E%3Cg fill='%238b5a2b' fill-opacity='0.16'%3E%3Cpath d='M40 120c0-8 4-12 8-12s8 4 8 12v20h-16z'/%3E%3Cellipse cx='48' cy='108' rx='10' ry='14'/%3E%3Cpath d='M90 125c0-6 3-10 6-10s6 4 6 10v15h-12z'/%3E%3Cellipse cx='96' cy='117' rx='8' ry='11'/%3E%3Cpath d='M135 128c0-5 3-8 5-8s5 3 5 8v12h-10z'/%3E%3Cellipse cx='140' cy='122' rx='7' ry='9'/%3E%3C/g%3E%3Cg fill='none' stroke='%23c89050' stroke-opacity='0.12' stroke-width='2.2'%3E%3Cpath d='M0 145Q60 135 120 145T240 145'/%3E%3Cpath d='M0 160Q60 150 120 160T240 160'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left 15px top 15px, right 20px bottom 20px;
+  background-size: 180px auto, 240px auto;
+}

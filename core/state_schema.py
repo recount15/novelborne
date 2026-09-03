@@ -45,6 +45,8 @@ TRANSACTIONAL_KEYS: frozenset[str] = frozenset({
     "elastic_repair", "options", "options_source", "agent_meta",
     "active_summaries", "anchor_timeline", "directive_meta",
     "paper_key", "paper_tier", "paper_family", "compose_mode",
+    # v2.0.4 作弊码增补：relay_activated（永久通路激活标志，回合内可变需回滚）
+    "relay_activated",
 })
 
 

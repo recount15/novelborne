@@ -40,6 +40,7 @@ from core import fate_engine as fe  # noqa: E402  (模型接入层)
 from core import engine  # noqa: E402
 from core.services import registries  # noqa: E402  (跨层共享注册表，中立层)
 from core.services import ask_service  # noqa: E402  (ask 端点业务逻辑，Phase 3b)
+from core.services import chat_service  # noqa: E402  (角色闲聊服务，Phase F)
 from core.engine.distill import distill_model  # noqa: E402  (从老版 app._distill_model 提炼)
 from core.api.contracts import gradio_state_from_output, public_state, stream_event_from_gradio  # noqa: E402
 from core.api.sessions import SessionManager, read_upload  # noqa: E402
@@ -60,7 +61,7 @@ FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
 sessions = SessionManager(PROJECT_ROOT)
 operation_journal = OperationJournal(PROJECT_ROOT / "var" / "operations.jsonl")
 question_service = structured_question_service.StructuredQuestionService()
-app = FastAPI(title="书中行 API", version="2.0.2")
+app = FastAPI(title="书中行 API", version="2.1.0")
 _cors_origins = [item.strip() for item in os.getenv("FATE_CORS_ORIGINS", "").split(",") if item.strip()]
 if _cors_origins:
     app.add_middleware(
@@ -516,7 +517,7 @@ def _group_pool(rows: list[Any], slot: str) -> list[dict[str, Any]]:
 
 @app.get("/api/characters/pool")
 def characters_pool(slot: str = "宿敌栏", gender: str | None = None,
-                    q: str | None = None) -> dict[str, Any]:
+                    q: str | None = None, work: str | None = None) -> dict[str, Any]:
     """四栏角色池候选：两级分组（来源 → 分类）。
 
     四类角色都从整个角色池选取；先按来源（主角/男主/女主/配角/反派）分组，
@@ -525,6 +526,8 @@ def characters_pool(slot: str = "宿敌栏", gender: str | None = None,
     - ``slot``：栏位（主角栏/伴侣栏/伙伴栏/宿敌栏）。
     - ``gender``：历史兼容参数，已不参与过滤（2026-08-30 起四栏均破除性别栏杆）。
     - ``q``：可选搜索词，按名字/出处/原型模糊匹配。
+    - ``work``：可选作品名过滤（v2.0.3 跨书防线）——只保留该书与无出处的卡，
+      宁缺毋滥；不传则不过滤（前端默认在客户端按当前书名过滤）。
     """
     slot_name = _normalize_pool_slot(slot)
     gender_value = (gender or "").strip().lower()
@@ -533,6 +536,10 @@ def characters_pool(slot: str = "宿敌栏", gender: str | None = None,
     pool, _shadowed = engine.character_library.merged_pool_cached()
     cards = list(pool) or list(catalog.load_character_pool())
     rows = _slot_candidates(cards, slot_name, gender_value)
+    work_value = (work or "").strip()
+    if work_value:
+        rows = [card for card in rows
+                if not (card.work or "").strip() or _same_work(card.work, work_value)]
     keyword = (q or "").strip().lower()
     if keyword:
         rows = [card for card in rows if keyword in f"{card.name}{card.work}{card.archetype}".lower()]
@@ -544,6 +551,16 @@ def characters_pool(slot: str = "宿敌栏", gender: str | None = None,
         "keys": groups,
     }
     return payload
+
+
+def _same_work(card_work: Any, wanted: str) -> bool:
+    """书名宽松同源判定：忽略书名号/空白/扩展名后互为包含即视为同书。"""
+    def _norm(text: Any) -> str:
+        return str(text or "").replace(".txt", "", 1).replace("《", "").replace("》", "").strip()
+
+    left = _norm(card_work)
+    right = _norm(wanted)
+    return bool(left and right and (left == right or left in right or right in left))
 
 
 @app.get("/api/characters/pool/{card_id}/detail")
@@ -1892,13 +1909,17 @@ def quest_offer(session_id: str, request: QuestOfferRequest) -> dict[str, Any]:
             engine.quest.build_quest_context(state, kind, level))
         # 任务生成加 120s 读超时并重试一次：长上下文（整书剧情）下
         # 模型偶发慢响应不应挂死会话锁（实测 ReadTimeout 踩过）。
+        # v2.0.4: 初始化独立 usage 累加器（回合外调用，阶段 E）
+        from core.engine import token_accounting
+        token_accounting.init_turn_usage()
+        
         quest_kwargs = dict(state.get("request_kwargs") or {})
         quest_kwargs.setdefault("timeout", 120.0)
         text = None
         last_exc: Exception | None = None
         for _attempt in range(2):
             try:
-                text = distill_model(client, model, prompt, quest_kwargs, provider)
+                text = distill_model(client, model, prompt, quest_kwargs, provider, usage_category="quest")
                 break
             except Exception as exc:  # noqa: BLE001
                 last_exc = exc
@@ -1918,6 +1939,15 @@ def quest_offer(session_id: str, request: QuestOfferRequest) -> dict[str, Any]:
         reward = engine.quest.compute_reward(kind, level, start_params.get("difficulty", 4))
         engine.quest.new_offer(state, offer, kind, level, reward, state.get("round", 0))
         session.state = state
+        
+        # v2.0.4: 收集本次调用的 usage（回合外端点，阶段 E）
+        usage_data = token_accounting.get_turn_usage() or {}
+        usage_response = {
+            "total": usage_data.get("total_tokens", 0),
+            "prompt": usage_data.get("prompt_tokens", 0),
+            "completion": usage_data.get("completion_tokens", 0),
+        }
+        
         # 难度预估进度条：区间受游戏难度制约，系数线性映射档位。
         return {"quest": state["quest"], "reward": reward, "estimated": {
             "coefficient": round(max(0.0, min(1.0, float(request.difficulty))), 2),
@@ -1928,7 +1958,7 @@ def quest_offer(session_id: str, request: QuestOfferRequest) -> dict[str, Any]:
             "kind": kind,
             "deadline_span": engine.quest.compute_deadline_span(
                 kind, level, engine.quest.window_round_budget(state)),
-        }}
+        }, "usage": usage_response}
     finally:
         sessions.release(session)
 
@@ -2607,6 +2637,82 @@ def get_ui_state(session_id: str) -> dict[str, Any]:
     ui_state = sessions.get_ui_state(session)
     return {"ok": True, "session_id": session_id, "ui_state": ui_state}
 
+
+# ========== 角色闲聊 API（v2.0.4 Agent_refill 优化） ==========
+
+@app.get("/api/chat/roster")
+def get_chat_roster(session_id: str) -> dict[str, Any]:
+    """获取当前活跃角色列表供闲聊下拉框。"""
+    session = _session_or_404(session_id)
+    if not sessions.acquire(session):
+        raise HTTPException(status_code=409, detail="该 session 正在处理另一个请求")
+    try:
+        state = _require_game(session)
+        roster = chat_service.get_roster(state)
+        return {"roster": roster}
+    finally:
+        sessions.release(session)
+
+
+class ChatSendRequest(BaseModel):
+    character_name: str = Field(min_length=1, max_length=100)
+    message: str = Field(min_length=1, max_length=500)
+
+
+@app.post("/api/chat/send")
+def send_chat_message(session_id: str, request: ChatSendRequest) -> dict[str, Any]:
+    """与角色闲聊（agent_refill 模式，批改-重填循环提升质量）。
+
+    状态隔离保证：只写 state["side_chats"]，不影响 history/state_memory/quest。
+    """
+    from core.engine import token_accounting
+
+    session = _session_or_404(session_id)
+    if not sessions.acquire(session):
+        raise HTTPException(status_code=409, detail="该 session 正在处理另一个请求")
+    try:
+        state = _require_game(session)
+        provider = state.get("provider") or "deepseek"
+        config = fe.provider_config(provider, state.get("base_url"))
+        try:
+            client = fe.make_client(
+                session.api_key, provider,
+                state.get("base_url") or config["base_url"])
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=400, detail=f"聊天初始化失败：{exc}") from exc
+        try:
+            result = chat_service.generate_reply(
+                request.character_name, request.message, state,
+                client=client,
+                model=state.get("model") or (config.get("models") or [fe.DEFAULT_MODEL])[0],
+                request_kwargs=state.get("request_kwargs"),
+                provider=provider)
+
+            # 保存聊天记录（状态隔离：只写 side_chats）
+            chat_service.save_chat(state, request.character_name, request.message, result["reply"])
+            session.state = state
+
+            # v2.0.4: 回合外独立调用立即上报 usage（阶段 E 实时计量）
+            usage_data = token_accounting.get_turn_usage() or {}
+            return {
+                "reply": result["reply"],
+                "character": result["character"],
+                "meta": result.get("meta", {}),
+                "usage": {
+                    "total": usage_data.get("total_tokens", 0),
+                    "prompt": usage_data.get("prompt_tokens", 0),
+                    "completion": usage_data.get("completion_tokens", 0),
+                },
+            }
+        except chat_service.ChatClientError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except chat_service.ChatUpstreamError as e:
+            raise HTTPException(status_code=502, detail=str(e)) from e
+    finally:
+        sessions.release(session)
+
+
+# ========== 前端路由 ==========
 
 @app.get("/", include_in_schema=False)
 def frontend_index() -> FileResponse:

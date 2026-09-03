@@ -1,0 +1,90 @@
+/* ============================================================
+ * Theme: ocean · 无际重洋（中暗色）
+ * 深海蓝底 · 青蓝行动色 + 珊瑚橙点缀 · 波浪纹理 · 水泡与鱼群
+ * 圆角 14px · 动效 250ms · color-scheme: dark
+ * 红线自查：仅 [data-theme="ocean"] 前缀 + .theme-decor 钩子；
+ *          纹理全部内联 SVG data-URI / CSS 渐变；26 键契约齐备；
+ *          正文 --fe-ink(#e8f4f8) on --fe-bg(#0d2838) ≈ 14.2:1，
+ *          on --fe-panel(#1e4158) ≈ 10.8:1；--fe-ink-2(#a8d4e8) ≈ 8.5:1；
+ *          --fe-ink-3(#7bb8d4) ≈ 6.0:1；
+ *          --fe-accent-ink(#ffffff) on --fe-accent(#4a9fc8) ≈ 5.6:1；
+ *          --fe-ok(#42b89c) ≈ 7.8:1、--fe-warn(#e8a868) ≈ 7.5:1、
+ *          --fe-danger(#d46f6f) ≈ 5.9:1
+ * ============================================================ */
+
+[data-theme="ocean"] {
+  color-scheme: dark;
+
+  /* ---- 表面：深海 + 波浪纹 ---- */
+  --fe-bg: #0d2838;
+  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='180'%3E%3Cg fill='none' stroke='%234a9fc8' stroke-opacity='0.08' stroke-width='1.8'%3E%3Cpath d='M0 50Q75 40 150 50T300 50'/%3E%3Cpath d='M0 90Q75 80 150 90T300 90'/%3E%3Cpath d='M0 130Q75 120 150 130T300 130'/%3E%3C/g%3E%3Cg fill='%237bb8d4' fill-opacity='0.06'%3E%3Ccircle cx='60' cy='40' r='3'/%3E%3Ccircle cx='180' cy='70' r='2.5'/%3E%3Ccircle cx='240' cy='110' r='2.8'/%3E%3Ccircle cx='100' cy='150' r='2.2'/%3E%3C/g%3E%3C/svg%3E");
+  --fe-panel: #1e4158;
+  --fe-panel-2: #2d5a74;
+  --fe-panel-3: #3d708c;
+
+  /* ---- 描边：海流线 ---- */
+  --fe-border: #3d6f8c;
+  --fe-border-strong: #5a92b8;
+
+  /* ---- 文字：浪花白 ---- */
+  --fe-ink: #e8f4f8;
+  --fe-ink-2: #a8d4e8;
+  --fe-ink-3: #7bb8d4;
+
+  /* ---- 行动色：海洋青蓝 ---- */
+  --fe-accent: #4a9fc8;
+  --fe-accent-strong: #62b0d4;
+  --fe-accent-ink: #ffffff;
+  --fe-accent-soft: #1e3f52;
+
+  /* ---- 语义色 ---- */
+  --fe-ok: #42b89c;
+  --fe-warn: #e8a868;
+  --fe-danger: #d46f6f;
+
+  /* ---- 焦点与阴影：深海柔光 ---- */
+  --fe-focus-ring: #4a9fc8;
+  --fe-shadow-1: 0 2px 7px rgba(13, 40, 56, 0.5);
+  --fe-shadow-2: 0 14px 34px rgba(13, 40, 56, 0.65), 0 4px 11px rgba(74, 159, 200, 0.2);
+
+  /* ---- 字体 ---- */
+  --fe-font-sans: "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --fe-font-serif: "LXGW WenKai GB", "Noto Serif SC", "Songti SC", serif;
+
+  /* ---- 形状与动效 ---- */
+  --fe-radius: 14px;
+  --fe-motion: 250ms;
+
+  /* ---- 装饰：深海舞台 + 洋流与光柱 ---- */
+  --fe-decor-stage: radial-gradient(75% 60% at 72% 12%, #2d5a74 0%, transparent 65%), radial-gradient(70% 65% at 15% 92%, #1e4158 0%, transparent 70%), linear-gradient(170deg, #0d2838 0%, #1a3848 100%);
+  --fe-decor-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='340' height='220'%3E%3Cg fill='none' stroke='%234a9fc8' stroke-opacity='0.07' stroke-width='2'%3E%3Cpath d='M0 60Q85 50 170 60T340 60'/%3E%3Cpath d='M0 110Q85 100 170 110T340 110'/%3E%3Cpath d='M0 160Q85 150 170 160T340 160'/%3E%3C/g%3E%3Cg fill='%237bb8d4' fill-opacity='0.05'%3E%3Ccircle cx='80' cy='50' r='3.5'/%3E%3Ccircle cx='220' cy='90' r='3'/%3E%3Ccircle cx='140' cy='140' r='2.8'/%3E%3Ccircle cx='280' cy='180' r='3.2'/%3E%3C/g%3E%3C/svg%3E"), radial-gradient(48% 38% at 70% 18%, rgba(74, 159, 200, 0.10), transparent 72%);
+}
+
+[data-theme="ocean"] .theme-decor {
+  background: var(--fe-decor-stage);
+}
+
+[data-theme="ocean"] .theme-decor::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: var(--fe-decor-overlay);
+  background-repeat: repeat, no-repeat;
+  background-size: 340px auto, 100% 100%;
+}
+
+/* 页角图样：左上阳光洒入（光柱），右下鱼群游弋与珊瑚。 */
+[data-theme="ocean"] .theme-decor::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cg fill='%234a9fc8' fill-opacity='0.12'%3E%3Cpath d='M40 0L50 100L30 100z'/%3E%3Cpath d='M80 0L90 120L70 120z'/%3E%3Cpath d='M120 0L130 90L110 90z'/%3E%3C/g%3E%3Cg fill='%237bb8d4' fill-opacity='0.08'%3E%3Ccircle cx='60' cy='60' r='4'/%3E%3Ccircle cx='100' cy='80' r='3.5'/%3E%3Ccircle cx='140' cy='50' r='3.8'/%3E%3C/g%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='230' height='200'%3E%3Cg fill='%234a9fc8' fill-opacity='0.14'%3E%3Cellipse cx='160' cy='120' rx='12' ry='6' transform='rotate(-15 160 120)'/%3E%3Cpath d='M172 120l4-2 2 4z'/%3E%3Cellipse cx='130' cy='140' rx='10' ry='5' transform='rotate(10 130 140)'/%3E%3Cpath d='M120 140l-4-2-1 3z'/%3E%3Cellipse cx='180' cy='155' rx='8' ry='4' transform='rotate(-25 180 155)'/%3E%3Cpath d='M188 155l3-1 1 3z'/%3E%3C/g%3E%3Cg fill='%23e8a868' fill-opacity='0.12'%3E%3Cpath d='M80 170c-4-12 2-20 10-22s16 4 18 14-2 18-10 20-14-4-18-12z'/%3E%3Ccircle cx='88' cy='175' r='3'/%3E%3Ccircle cx='82' cy='180' r='2.5'/%3E%3Cpath d='M110 165c-3-8 1-14 7-16s12 3 13 10-1 13-7 15-10-3-13-9z'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left 10px top 0, right 15px bottom 15px;
+  background-size: 200px auto, 230px auto;
+}

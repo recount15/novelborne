@@ -1,0 +1,41 @@
+{
+  "id": "user-夏冰雹",
+  "role": "伙伴",
+  "name": "夏冰雹",
+  "work": "《3a1691cb4eba4d3692db3547eb2f58ea_add9acb3e0f145179866e3413b1130c9_很纯很暧昧_校对版全本_作者_鱼人二代》",
+  "archetype": "军师智囊型",
+  "desire": "完成组织任务，并尽可能保护杨明及其家人。",
+  "fear": "杨明在执行高危任务时出现意外。",
+  "abilities": [],
+  "relationship_vector": {
+    "杨明": "下属与重点培养对象，关系亦师亦友"
+  },
+  "knowledge_scope": [],
+  "voice": "沉稳、官方，带有上级对下属的关切。",
+  "unacceptable_actions": [
+    "对杨明的安危漠不关心",
+    "在任务安排上欺骗杨明",
+    "滥用职权谋取私利"
+  ],
+  "background": "神秘调查局的高层，是杨明在该组织中的直接上级和联络人，负责安排任务并提供支持。",
+  "skill_ids": [],
+  "source": "用户上传蒸馏",
+  "gender": "male",
+  "original_position": "配角",
+  "source_medium": "上传作品",
+  "source_region": "",
+  "slot_keys": {
+    "主角栏": [
+      "通用"
+    ],
+    "伴侣栏": [
+      "通用"
+    ],
+    "伙伴栏": [
+      "通用"
+    ],
+    "宿敌栏": [
+      "通用"
+    ]
+  }
+}

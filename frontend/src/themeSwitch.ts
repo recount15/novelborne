@@ -22,6 +22,14 @@ export const THEME_IDS = [
   "grove",
   "magic",
   "haunt",
+  "rainforest",
+  "desert",
+  "ocean",
+  "mountain",
+  "snowpeak",
+  "swamp",
+  "skyward",
+  "sunny",
 ] as const;
 
 export type ThemeId = (typeof THEME_IDS)[number] | "classic";
@@ -102,6 +110,38 @@ export const THEME_META: Record<ThemeId, { label: string; swatch: string }> = {
   haunt: {
     label: "鬼怪惊魂",
     swatch: "linear-gradient(135deg, #141a19 0%, #5b6b67 50%, #7fd8b0 100%)",
+  },
+  rainforest: {
+    label: "热带雨林",
+    swatch: "linear-gradient(135deg, #1a3a2e 0%, #2d5a4a 35%, #6ec88f 70%, #b8e6a0 100%)",
+  },
+  desert: {
+    label: "苍莽大漠",
+    swatch: "linear-gradient(135deg, #fef3e2 0%, #e8c47c 40%, #d4955c 70%, #8b5a2b 100%)",
+  },
+  ocean: {
+    label: "无际重洋",
+    swatch: "linear-gradient(135deg, #e8f4f8 0%, #4a9fc8 45%, #1e5f8c 80%, #0d2838 100%)",
+  },
+  mountain: {
+    label: "青翠群山",
+    swatch: "linear-gradient(135deg, #e6f0e3 0%, #7ca877 40%, #4a7c59 70%, #2d5a3f 100%)",
+  },
+  snowpeak: {
+    label: "入云雪峰",
+    swatch: "linear-gradient(135deg, #ffffff 0%, #d4e8f0 35%, #8fb8d4 70%, #5a7a92 100%)",
+  },
+  swamp: {
+    label: "原始沼泽",
+    swatch: "linear-gradient(135deg, #2a3a2e 0%, #4a5c48 35%, #6b7a5e 65%, #8c9d7a 100%)",
+  },
+  skyward: {
+    label: "九霄之上",
+    swatch: "linear-gradient(135deg, #e8f2fa 0%, #a8c8e8 35%, #6b9fd4 65%, #3d7ab8 100%)",
+  },
+  sunny: {
+    label: "风和日丽",
+    swatch: "linear-gradient(135deg, #fffef5 0%, #fff9d4 30%, #ffd98a 60%, #ffb84d 100%)",
   },
   classic: {
     label: "经典牛皮纸",

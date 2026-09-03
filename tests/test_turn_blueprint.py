@@ -62,6 +62,17 @@ class TestParseBlueprint(unittest.TestCase):
             good_blueprint(self.terms, self.names), segment_count=2,
             active_names=self.names, anchor_terms=self.terms)
         self.assertEqual(errors, [])
+
+    def test_single_char_ripple_and_cliffhanger_accepted(self):
+        # v2.0.3：min_len 2→1——「无」是提示词钦定的合法涟漪收束写法。
+        data = good_blueprint(self.terms, self.names)
+        data["ripple_resolution"] = "无"
+        data["cliffhanger"] = "风"
+        plan, errors = tb.parse_blueprint(
+            data, segment_count=2, active_names=self.names,
+            anchor_terms=self.terms)
+        self.assertEqual(errors, [])
+        self.assertEqual(plan.ripple_resolution, "无")
         self.assertIsNotNone(plan)
         self.assertEqual(plan.origin, "model")
         self.assertEqual(len(plan.segments), 2)

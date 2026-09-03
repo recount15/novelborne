@@ -425,3 +425,46 @@ export async function fetchSessionState(sessionId: string): Promise<{ session_id
   if (!response.ok) throw await responseError(response)
   return response.json() as Promise<{ session_id: string; state: Record<string, unknown> }>
 }
+
+// ========== 角色闲聊 API（v2.0.4 Agent_refill 优化） ==========
+
+export interface ChatRosterEntry {
+  name: string
+  voice: string
+  desire: string
+  fear: string
+}
+
+export interface ChatReply {
+  reply: string
+  character: string
+  meta: {
+    input_length: number
+    reply_length: number
+    quality_issues: string[]
+    refills: number
+    mode: string
+  }
+}
+
+export async function getChatRoster(sessionId: string): Promise<ChatRosterEntry[]> {
+  const response = await apiFetch(`/api/chat/roster?session_id=${sessionId}`)
+  if (!response.ok) throw await responseError(response)
+  const data = (await response.json()) as { roster: ChatRosterEntry[] }
+  return data.roster
+}
+
+export async function sendChatMessage(
+  sessionId: string,
+  characterName: string,
+  message: string
+): Promise<ChatReply> {
+  const response = await apiFetch(`/api/chat/send?session_id=${sessionId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ character_name: characterName, message }),
+  })
+  if (!response.ok) throw await responseError(response)
+  return (await response.json()) as ChatReply
+}
+

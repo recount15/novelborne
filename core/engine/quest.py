@@ -122,6 +122,80 @@ _KIND_WINDOW_SHARE: dict[str, float] = {
 
 _FENCE_PATTERN = re.compile(r"```(?:json|JSON)?\s*(.*?)```", re.DOTALL)
 
+# 完成条件/正文重合度检验用的标点与空白清洗（4 字滑窗精确匹配前先归一）。
+_STRIP_RE = re.compile(
+    r"[\s，。；：、！？…\-—·（）()\"'「」『』【】<>《》/\\,.\[\]{}:;!?~\*#@%^&+=|]+")
+
+
+def quest_context_block(state: Mapping[str, Any] | None,
+                        current_round: int | None = None) -> str:
+    """进行中任务的紧凑上下文块（段卷/导演卷/选项因素共用的单源）。
+
+    只读不写；无 active 任务返回空串。奖励只给类型×数量预览并注明由系统
+    发放——正文模型不得替系统「发放奖励」，防重复入账。
+    """
+    state = state if isinstance(state, Mapping) else {}
+    box = state.get("quest") if isinstance(state.get("quest"), Mapping) else {}
+    if box.get("status") != "active":
+        return ""
+    try:
+        round_now = int(current_round if current_round is not None
+                        else (state.get("round") or 0))
+    except (TypeError, ValueError):
+        round_now = 0
+    remaining = None
+    deadline = box.get("deadline_round")
+    if deadline is not None:
+        try:
+            remaining = max(0, int(deadline) - round_now)
+        except (TypeError, ValueError):
+            remaining = None
+    reqs = "；".join(str(r or "").strip() for r in (box.get("requirements") or [])
+                     if str(r or "").strip())
+    items = [it for it in ((box.get("reward") or {}).get("items") or [])
+             if isinstance(it, Mapping)]
+    preview = "、".join(f"{it.get('type')}×{it.get('amount')}{it.get('unit')}" for it in items) or "（无）"
+    if remaining is None:
+        timing = "不限时"
+    elif remaining <= 0:
+        timing = "已到或越过期限，本回合应给出任务的最终结果"
+    else:
+        timing = f"剩余 {remaining} 回合"
+    return (f"【进行中任务】{str(box.get('title') or '').strip()}："
+            f"{str(box.get('goal') or '').strip()}｜{timing}\n"
+            f"完成条件：{reqs or '（见任务目标）'}｜"
+            f"完成奖励（由系统在任务判定完成后发放，正文不得代替发放）：{preview}")
+
+
+def requirement_hits(box: Mapping[str, Any] | None, text: str) -> int:
+    """本地规则：完成条件/goal 与正文的重合条数（4 字滑窗精确匹配）。
+
+    每条条件清洗标点后取全部 4 字连续窗口，任一窗口出现在正文（同样清洗
+    标点空白）即记 1 命中；短于 4 字的条件整体作为匹配串。不做分词，避免
+    引入分词器依赖与误切；用于「模型判定 completed 但证据非逐字引文」时的
+    佐证核验（≥2 条命中才采信），宁缺毋滥。
+    """
+    box = box if isinstance(box, Mapping) else {}
+    blob = _STRIP_RE.sub("", str(text or ""))
+    if not blob:
+        return 0
+    hits = 0
+    conditions = [str(r or "") for r in (box.get("requirements") or [])]
+    goal = str(box.get("goal") or "")
+    if goal:
+        conditions.append(goal)
+    for cond in conditions:
+        phrase = _STRIP_RE.sub("", cond)
+        if not phrase:
+            continue
+        if len(phrase) >= 4:
+            windows = [phrase[i:i + 4] for i in range(len(phrase) - 3)]
+        else:
+            windows = [phrase]
+        if any(w in blob for w in windows):
+            hits += 1
+    return hits
+
 
 def _normalize_kind(kind: Any) -> str:
     text = str(kind or "").strip().lower()
@@ -565,4 +639,5 @@ __all__ = [
     "window_round_budget", "compute_deadline_span", "build_quest_context", "quest_offer_prompt",
     "parse_quest_offer", "compute_reward", "can_request_offer",
     "new_offer", "accept", "settle_round",
+    "quest_context_block", "requirement_hits",
 ]

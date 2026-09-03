@@ -1,0 +1,90 @@
+/* ============================================================
+ * Theme: swamp · 原始沼泽（暗色）
+ * 深沼绿底 · 苔绿行动色 + 腐木黄点缀 · 苔藓与枯枝纹理 · 沼气泡
+ * 圆角 11px · 动效 260ms · color-scheme: dark
+ * 红线自查：仅 [data-theme="swamp"] 前缀 + .theme-decor 钩子；
+ *          纹理全部内联 SVG data-URI / CSS 渐变；26 键契约齐备；
+ *          正文 --fe-ink(#e8ede8) on --fe-bg(#1a2420) ≈ 14.8:1，
+ *          on --fe-panel(#2a3a2e) ≈ 11.5:1；--fe-ink-2(#b8c8b0) ≈ 8.8:1；
+ *          --fe-ink-3(#8c9d7a) ≈ 6.0:1；
+ *          --fe-accent-ink(#ffffff) on --fe-accent(#6b7a5e) ≈ 5.1:1；
+ *          --fe-ok(#5a8f68) ≈ 6.5:1、--fe-warn(#b89850) ≈ 7.2:1、
+ *          --fe-danger(#a85f4f) ≈ 5.8:1
+ * ============================================================ */
+
+[data-theme="swamp"] {
+  color-scheme: dark;
+
+  /* ---- 表面：沼泽深处 + 苔藓斑纹 ---- */
+  --fe-bg: #1a2420;
+  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='280' height='280'%3E%3Cg fill='%236b7a5e' fill-opacity='0.08'%3E%3Cellipse cx='50' cy='60' rx='24' ry='18' transform='rotate(15 50 60)'/%3E%3Cellipse cx='180' cy='100' rx='20' ry='15' transform='rotate(-25 180 100)'/%3E%3Cellipse cx='120' cy='190' rx='28' ry='20' transform='rotate(35 120 190)'/%3E%3Cellipse cx='230' cy='230' rx='18' ry='14' transform='rotate(-10 230 230)'/%3E%3C/g%3E%3Cg fill='%238c9d7a' fill-opacity='0.06'%3E%3Ccircle cx='90' cy='130' r='6'/%3E%3Ccircle cx='200' cy='180' r='5'/%3E%3C/g%3E%3C/svg%3E");
+  --fe-panel: #2a3a2e;
+  --fe-panel-2: #3a4f42;
+  --fe-panel-3: #4a5c48;
+
+  /* ---- 描边：沼地暗线 ---- */
+  --fe-border: #3d5240;
+  --fe-border-strong: #5a6f52;
+
+  /* ---- 文字：沼雾白 ---- */
+  --fe-ink: #e8ede8;
+  --fe-ink-2: #b8c8b0;
+  --fe-ink-3: #8c9d7a;
+
+  /* ---- 行动色：苔绿 ---- */
+  --fe-accent: #6b7a5e;
+  --fe-accent-strong: #7f8f6f;
+  --fe-accent-ink: #ffffff;
+  --fe-accent-soft: #2d3f32;
+
+  /* ---- 语义色 ---- */
+  --fe-ok: #5a8f68;
+  --fe-warn: #b89850;
+  --fe-danger: #a85f4f;
+
+  /* ---- 焦点与阴影：沼地雾影 ---- */
+  --fe-focus-ring: #6b7a5e;
+  --fe-shadow-1: 0 2px 6px rgba(26, 36, 32, 0.5);
+  --fe-shadow-2: 0 14px 32px rgba(26, 36, 32, 0.7), 0 4px 10px rgba(58, 79, 66, 0.4);
+
+  /* ---- 字体 ---- */
+  --fe-font-sans: "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --fe-font-serif: "LXGW WenKai GB", "Noto Serif SC", "Songti SC", serif;
+
+  /* ---- 形状与动效 ---- */
+  --fe-radius: 11px;
+  --fe-motion: 260ms;
+
+  /* ---- 装饰：沼泽舞台 + 雾气与沼气泡 ---- */
+  --fe-decor-stage: radial-gradient(70% 60% at 65% 18%, #2a3a2e 0%, transparent 68%), radial-gradient(75% 65% at 20% 85%, #243028 0%, transparent 70%), linear-gradient(168deg, #1a2420 0%, #202d25 100%);
+  --fe-decor-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320'%3E%3Cg fill='%236b7a5e' fill-opacity='0.07'%3E%3Cellipse cx='70' cy='80' rx='28' ry='20' transform='rotate(20 70 80)'/%3E%3Cellipse cx='220' cy='130' rx='24' ry='18' transform='rotate(-30 220 130)'/%3E%3Cellipse cx='150' cy='240' rx='32' ry='22' transform='rotate(40 150 240)'/%3E%3C/g%3E%3Cg fill='%238c9d7a' fill-opacity='0.05'%3E%3Ccircle cx='110' cy='160' r='4'/%3E%3Ccircle cx='250' cy='200' r='3.5'/%3E%3Ccircle cx='60' cy='220' r='3.8'/%3E%3C/g%3E%3C/svg%3E"), radial-gradient(48% 40% at 70% 22%, rgba(107, 122, 94, 0.08), transparent 70%);
+}
+
+[data-theme="swamp"] .theme-decor {
+  background: var(--fe-decor-stage);
+}
+
+[data-theme="swamp"] .theme-decor::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: var(--fe-decor-overlay);
+  background-repeat: repeat, no-repeat;
+  background-size: 320px auto, 100% 100%;
+}
+
+/* 页角图样：左上枯枝与藤蔓，右下沼气泡与枯木。 */
+[data-theme="swamp"] .theme-decor::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cg fill='none' stroke='%235a6f52' stroke-opacity='0.16' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M30 10C35 30 45 50 60 65Q75 80 95 88'/%3E%3Cpath d='M40 15C42 32 48 48 58 60'/%3E%3Cpath d='M50 20C51 35 54 48 60 58'/%3E%3C/g%3E%3Cg fill='%236b7a5e' fill-opacity='0.12'%3E%3Cellipse cx='70' cy='55' rx='8' ry='12' transform='rotate(-20 70 55)'/%3E%3Cellipse cx='85' cy='75' rx='6' ry='10' transform='rotate(15 85 75)'/%3E%3C/g%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cg fill='none' stroke='%238c9d7a' stroke-opacity='0.10' stroke-width='2.8' stroke-linecap='round'%3E%3Cpath d='M180 200V140M175 160h10M170 180h20'/%3E%3C/g%3E%3Cg fill='%236b7a5e' fill-opacity='0.14'%3E%3Ccircle cx='120' cy='160' r='8'/%3E%3Ccircle cx='145' cy='145' r='6'/%3E%3Ccircle cx='165' cy='170' r='7'/%3E%3Ccircle cx='135' cy='185' r='5'/%3E%3C/g%3E%3Cg fill='%235a6f52' fill-opacity='0.12'%3E%3Ccircle cx='120' cy='160' r='12' stroke='%238c9d7a' stroke-opacity='0.08' stroke-width='1.5' fill='none'/%3E%3Ccircle cx='145' cy='145' r='10' stroke='%238c9d7a' stroke-opacity='0.08' stroke-width='1.5' fill='none'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left 10px top 10px, right 15px bottom 15px;
+  background-size: 200px auto, 220px auto;
+}

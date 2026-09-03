@@ -15,8 +15,10 @@ docs/REFACTOR_PLAN.md §3「重填预算」与 §0 原则 4（类 agent 批改-�
 """
 from __future__ import annotations
 
+import contextvars
 from typing import Any, Callable, Mapping, Optional, Sequence
 
+from core.engine import parallel
 from core.engine.turn_grader import (
     GradeResult,
     SegmentContract,
@@ -142,21 +144,61 @@ def run_refill_loop(contracts: Sequence[Any], answers: Sequence[Any], *,
     - 返回 ``{"answers": [...], "per_slot": [...], "stats": {...}}``：
     每空独立循环——任何一空的重填/失败/兜底绝不影响其他空；模型抛错按
     该空本轮失败处理，不中断整批。
+
+    v2.0.5：槽位级并行（S4/Q1）——每个空的批改-重填循环互相独立，改为
+    一波并发（``parallel.run_parallel``），耗时 ≈ max(单空) 而非 sum(各空)。
+    contextvars（含回合级 Token 累加器）经 ``copy_context`` 快照带入工作
+    线程，usage 计量不丢不重；无模型的纯规则批改路径保持串行语义不变。
     """
     contract_list = list(contracts or ())
-    answer_list = list(answers or ())
+    answer_list = list(answers or [])
     if len(answer_list) < len(contract_list):
         answer_list = answer_list + [""] * (len(contract_list) - len(answer_list))
 
+    if model is None or len(contract_list) <= 1:
+        # 无模型（纯规则/测试）或单空：保持串行，行为与旧版逐字节一致。
+        records = [
+            _refill_slot(
+                contract, answer_list[position],
+                grade=grade, refill_prompt=refill_prompt,
+                model=model if model is not None else _no_model,
+                attempts=attempts, fallback_factory=fallback_factory,
+            )
+            for position, contract in enumerate(contract_list)
+        ]
+    else:
+        parent_context = contextvars.copy_context()
+
+        def _slot_job(position: int, contract: Any):
+            def _run():
+                return _refill_slot(
+                    contract, answer_list[position],
+                    grade=grade, refill_prompt=refill_prompt,
+                    model=model, attempts=attempts,
+                    fallback_factory=fallback_factory,
+                )
+            # 在调用方 context 快照里执行：Token 累加器等 contextvar 可见。
+            return parent_context.run(_run)
+
+        jobs = [
+            (lambda position=position, contract=contract:
+             _slot_job(position, contract))
+            for position, contract in enumerate(contract_list)
+        ]
+        results = parallel.run_parallel(jobs, parallel.PRIORITY_TURN)
+        records = [
+            (item.value if getattr(item, "ok", False) else _refill_slot(
+                contract, answer_list[position],
+                grade=grade, refill_prompt=refill_prompt,
+                model=_no_model, attempts=0,
+                fallback_factory=fallback_factory))
+            for position, (item, contract) in enumerate(zip(results, contract_list))
+        ]
+
     final_answers: list[Any] = []
     per_slot: list[dict[str, Any]] = []
-    for position, contract in enumerate(contract_list):
-        record = _refill_slot(
-            contract, answer_list[position],
-            grade=grade, refill_prompt=refill_prompt,
-            model=model if model is not None else _no_model,
-            attempts=attempts, fallback_factory=fallback_factory,
-        )
+    for position, record in enumerate(records):
+        record = dict(record or {})
         record["index"] = position if record.get("index", -1) < 0 else record["index"]
         final_answers.append(_final_answer(record, answer_list[position]))
         per_slot.append(record)

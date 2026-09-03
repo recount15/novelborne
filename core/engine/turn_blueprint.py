@@ -56,11 +56,11 @@ DIRECTOR_SPECS: tuple[FieldSpec, ...] = (
                    "id/role/window/events/must_include/must_mention"),
     FieldSpec("anchor_plan", "dict", required=True,
               hint="锚点计划：stage/action_terms/result_terms/causal_phrase"),
-    FieldSpec("ripple_resolution", "str", required=True, min_len=2, max_len=80,
+    FieldSpec("ripple_resolution", "str", required=True, min_len=1, max_len=80,
               hint="涟漪与代价的收束方式（无涟漪时写「无」）"),
     FieldSpec("world_beats", "list", required=False, default=[],
               hint="世界节拍：世界书/传闻/势力动向（每项一句）"),
-    FieldSpec("cliffhanger", "str", required=True, min_len=2, max_len=60,
+    FieldSpec("cliffhanger", "str", required=True, min_len=1, max_len=60,
               hint="悬念钩子：指向下回合可承接事件"),
     FieldSpec("log_draft", "dict", required=True,
               hint="日志草稿：player/golden_finger/world/beat 各一句"),
@@ -321,18 +321,22 @@ def build_director_prompt(*, paper_label: str, stage: str, segment_count: int,
                           target_chars: int, action: str, context_tail: str,
                           active_names: Sequence[str] = (),
                           anchor_text: str = "",
+                          system_brief: str = "",
                           world_beats_hint: str = "",
                           ripple_hint: str = "", gf_hint: str = "",
-                          persona_hint: str = "") -> str:
+                          persona_hint: str = "",
+                          quest_hint: str = "") -> str:
     """装配导演卷提示词（@@KEY@@ 占位符由 core.prompts.render 渲染）。
 
     机制层只做参数拼装；文案本体在 ``assets/prompts/paper_director.md``。
+    ``system_brief`` 为作品设定与系统规则摘要（v2.0.3 注入，防跨书乱入）。
+    ``quest_hint`` 为进行中任务块（v2.0.4 注入，蓝图节拍须考虑任务时限）。
     """
     from core.prompts import render  # 局部导入：assets 数据加载层，机制层允许
 
     names = "、".join(str(name or "").strip() for name in (active_names or ())
                       if str(name or "").strip()) or "（本回合无在场角色）"
-    anchor_block = str(anchor_text or "").strip()[:200] or "（本回合无锚点）"
+    anchor_block = str(anchor_text or "").strip()[:600] or "（本回合无锚点）"
     stage_labels = {"setup": "铺垫（锚点允许 pending/mentioned/partial）",
                     "climax": "收束（锚点必须 fulfilled 落地）",
                     "free": "自由（锚点仅供参考，不强制收束）"}
@@ -343,12 +347,14 @@ def build_director_prompt(*, paper_label: str, stage: str, segment_count: int,
         SEGMENT_COUNT=int(segment_count),
         TARGET_CHARS=int(target_chars),
         ACTION=str(action or "（玩家自由行动）").strip()[:300],
-        CONTEXT=str(context_tail or "").strip()[-600:] or "（开局首轮，无前文）",
+        CONTEXT=str(context_tail or "").strip()[-2400:] or "（开局首轮，无前文）",
         ACTIVE_NAMES=names,
+        SYSTEM=str(system_brief or "").strip()[:3000] or "（未提供作品设定摘要）",
         ANCHOR_TEXT=anchor_block,
         ANCHOR_TERMS="、".join(extract_anchor_terms(anchor_text)) or "（无锚点词）",
         WORLD_BEATS=str(world_beats_hint or "").strip()[:200] or "（无世界书/传闻命中）",
-        RIPPLE=str(ripple_hint or "").strip()[:120] or "（无涟漪压力）",
+        RIPPLE=str(ripple_hint or "").strip()[:300] or "（无涟漪压力）",
+        QUEST=str(quest_hint or "").strip()[:400] or "（无进行中任务：不要虚构任务推进）",
         GF=str(gf_hint or "").strip()[:120] or "（金手指未激活或未设定）",
         PERSONA=str(persona_hint or "").strip()[:120] or "（未设定性格）",
         FORMAT_BLOCK=spec_prompt(DIRECTOR_SPECS),

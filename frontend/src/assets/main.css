@@ -18,6 +18,14 @@
 @import "./themes/grove.css";
 @import "./themes/magic.css";
 @import "./themes/haunt.css";
+@import "./themes/rainforest.css";
+@import "./themes/desert.css";
+@import "./themes/ocean.css";
+@import "./themes/mountain.css";
+@import "./themes/snowpeak.css";
+@import "./themes/swamp.css";
+@import "./themes/skyward.css";
+@import "./themes/sunny.css";
 
 @theme {
   --color-paper: #f3edde;

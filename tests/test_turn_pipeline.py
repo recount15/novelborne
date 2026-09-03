@@ -49,7 +49,15 @@ def director_json(paper, terms, names):
 
 
 def options_json():
-    items = [f"行动方案{i}（后果：出现可观测后果{i}）" for i in range(6)]
+    # 六条必须互不相同（difflib ≥0.8 判重）且 ≥8 字：这是选项空的批改契约。
+    items = [
+        "推演北墙裂痕下一步走势（后果：提前看清暗哨位置）",
+        "回溯旧册水渍前的数目（后果：锁定军械批次）",
+        "比对铜扣暗记的刻痕（后果：确认经手人身份）",
+        "透支预知换撤离窗口（后果：金手指进入冷却）",
+        "先撤回茶棚再图后计（后果：暂避锋芒）",
+        "只抄录暗记不惊动守军（后果：证据留存）",
+    ]
     return json.dumps({"options": items}, ensure_ascii=False)
 
 
@@ -112,12 +120,14 @@ class ScriptedModel:
 
 
 class TestLegacySignal(unittest.TestCase):
-    def test_free_stage_returns_legacy(self):
-        # 全局碎锚（anchors_shattered_from > 0）→ stage=free → MVP 不接管。
+    def test_free_stage_paper_exists(self):
+        # v2.0.4: free 阶段现在放行，tier 3 有 free 试卷
+        # 但由于模型返回空字符串，会触发段卷失败
         state = dict(STATE, anchors_shattered_from=1)
-        result = tp.run_turn(state, None, "m", model_fn=lambda p: "",
-                             message="行动", anchor_text=ANCHOR)
-        self.assertEqual(result, tp.LEGACY)
+        # 模型返回空字符串会导致段卷全线失败，抛出 TurnUpstreamError
+        with self.assertRaises(tp.TurnUpstreamError):
+            tp.run_turn(state, None, "m", model_fn=lambda p: "",
+                       message="行动", anchor_text=ANCHOR)
 
     def test_missing_paper_returns_legacy(self):
         state = dict(STATE, paper_tier=99)
@@ -167,26 +177,76 @@ class TestRunTurn(unittest.TestCase):
         self.assertEqual(result.blueprint.origin, "synthesized")
         self.assertTrue(result.narrative)
 
-    def test_bad_segments_trigger_refill_then_fallback(self):
+    def test_bad_segments_degrade_to_legacy_never_ship_scaffold(self):
+        # v2.0.3（kimi-k3 实测）：段卷批改重填耗尽落兜底段后正文是蓝图
+        # 脚手架（“X就地应对/Y随之显形”）；润色与质量门都没能重写成自然
+        # 正文时，整回合必须降级 LEGACY 单卷路径——脚手架绝不出厂。
         model = ScriptedModel(self.paper, self.terms, self.names, segment="太短")
         result = self._run(model)
-        self.assertIsInstance(result, tp.TurnResult)
-        meta = result.agent_meta.get("segments") or {}
-        self.assertGreaterEqual(meta.get("fell_back", 0), 1,
-                                "重填耗尽后必须落确定性兜底段")
-        self.assertTrue(result.narrative, "兜底后仍须有正文")
+        self.assertEqual(result, tp.LEGACY)
+
+    def test_scaffold_narrative_never_ships_even_after_postprocess(self):
+        # 终检防线：组装正文混入脚手架短语时，即便后处理未救回也不得
+        # 以 TurnResult 出厂（返回 LEGACY 交由单卷路径重写）。
+        model = ScriptedModel(self.paper, self.terms, self.names,
+                              segment="（推进与转折）阿岚就地应对。北墙随之显形。")
+        result = self._run(model)
+        self.assertEqual(result, tp.LEGACY)
 
     def test_segment_transport_failure_raises(self):
         model = ScriptedModel(self.paper, self.terms, self.names, fail_segments=True)
         with self.assertRaises(tp.TurnUpstreamError):
             self._run(model)
 
-    def test_options_failure_falls_back_to_seeds(self):
+    def test_options_failure_yields_no_template_options(self):
+        # v2.0.3 AI-only 硬性原则：选项卷全线失败时不出模板/种子选项，
+        # options 为空保留自由输入，绝不展示「变体 N」类机械文案。
         model = ScriptedModel(self.paper, self.terms, self.names, options="坏答卷")
         result = self._run(model)
-        self.assertEqual(len(result.options), 6)
-        self.assertEqual(result.options_source, "blueprint_seeds")
-        self.assertEqual([o["key"] for o in result.options], list("ABCDEF"))
+        self.assertEqual(len(result.options), 0)
+        self.assertEqual(result.options_source, "none")
+        joined = "\n".join(str(o.get("text") or "") for o in [])
+        self.assertEqual(joined, "")
+        self.assertIn("postprocess", result.agent_meta)
+
+    def test_context_injection_reaches_director_and_segments(self):
+        model = ScriptedModel(self.paper, self.terms, self.names)
+        history = [{"role": "user", "content": "上一回合玩家行动"},
+                   {"role": "assistant", "content": "上一回合叙事结果。"}]
+        result = self._run(model, system_prompt="本书世界观：北境戍城，无任何科幻元素")
+        # 直接驱动一次带历史的运行以验证近期摘要注入。
+        model2 = ScriptedModel(self.paper, self.terms, self.names)
+        tp.run_turn(dict(STATE, history=history), None, "m", model_fn=model2,
+                    message="查验北墙裂痕", system_prompt="本书世界观：北境戍城",
+                    context_blocks="前文略",
+                    active_members=[{"name": n} for n in self.names],
+                    anchor_text=ANCHOR)
+        director_calls = [p for p in model2.calls if "option_seeds" in p]
+        segment_calls = [p for p in model2.calls if "段卷" in p]
+        self.assertTrue(director_calls)
+        self.assertTrue(any("北境戍城" in p for p in director_calls),
+                        "导演卷必须携带作品设定摘要")
+        self.assertTrue(any("上一回合叙事结果" in p for p in segment_calls),
+                        "段卷必须携带近期回合摘要")
+        self.assertIsInstance(result, tp.TurnResult)
+
+    def test_scene_excerpt_reaches_options_prompt(self):
+        model = ScriptedModel(self.paper, self.terms, self.names)
+        self._run(model, scene_excerpt="城门下的守军换岗与铜扣暗记的原文节选")
+        option_calls = [p for p in model.calls if "选项生成卷" in p]
+        self.assertTrue(option_calls)
+        self.assertTrue(any("铜扣暗记" in p for p in option_calls),
+                        "选项卷必须携带原文情景节选")
+
+    def test_quality_gate_audit_recorded(self):
+        model = ScriptedModel(self.paper, self.terms, self.names)
+        result = self._run(model)
+        post = result.agent_meta.get("postprocess") or {}
+        self.assertEqual(post.get("version"), tp.QUALITY_GATE_VERSION)
+        self.assertTrue(post.get("enabled"))
+        self.assertIn("initial", post)
+        self.assertIn("final", post)
+        self.assertIn("stop_reason", post)
 
     def test_wave_b_is_flat_and_within_hard_limit(self):
         model = ScriptedModel(self.paper, self.terms, self.names)

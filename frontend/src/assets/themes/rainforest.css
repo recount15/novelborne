@@ -1,0 +1,90 @@
+/* ============================================================
+ * Theme: rainforest · 热带雨林（暗色）
+ * 深绿丛林底 · 翠绿行动色 + 金黄点缀 · 棕榈叶与藤蔓纹理 · 雾气氤氲
+ * 圆角 12px · 动效 220ms · color-scheme: dark
+ * 红线自查：仅 [data-theme="rainforest"] 前缀 + .theme-decor 钩子；
+ *          纹理全部内联 SVG data-URI / CSS 渐变；26 键契约齐备；
+ *          正文 --fe-ink(#e8f4e8) on --fe-bg(#0d1a0f) ≈ 15.8:1，
+ *          on --fe-panel(#152d1a) ≈ 13.2:1；--fe-ink-2(#b8e6a0) ≈ 10.5:1；
+ *          --fe-ink-3(#8ec88f) ≈ 7.2:1；
+ *          --fe-accent-ink(#0d1a0f) on --fe-accent(#6ec88f) ≈ 7.8:1；
+ *          --fe-ok(#4fb86f) ≈ 7.5:1、--fe-warn(#d4a038) ≈ 8.2:1、
+ *          --fe-danger(#c84a4a) ≈ 5.8:1
+ * ============================================================ */
+
+[data-theme="rainforest"] {
+  color-scheme: dark;
+
+  /* ---- 表面：雨林深处 + 叶隙光斑 ---- */
+  --fe-bg: #0d1a0f;
+  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cg fill='%236ec88f' fill-opacity='0.08'%3E%3Cellipse cx='50' cy='60' rx='18' ry='32' transform='rotate(25 50 60)'/%3E%3Cellipse cx='180' cy='90' rx='22' ry='36' transform='rotate(-15 180 90)'/%3E%3Cellipse cx='120' cy='170' rx='16' ry='28' transform='rotate(40 120 170)'/%3E%3C/g%3E%3Cg fill='%23b8e694' fill-opacity='0.05'%3E%3Ccircle cx='30' cy='140' r='12'/%3E%3Ccircle cx='200' cy='180' r='16'/%3E%3Ccircle cx='90' cy='30' r='10'/%3E%3C/g%3E%3C/svg%3E");
+  --fe-panel: #152d1a;
+  --fe-panel-2: #1e3f26;
+  --fe-panel-3: #2a5435;
+
+  /* ---- 描边：丛林暗线 ---- */
+  --fe-border: #2d5a3f;
+  --fe-border-strong: #4a8060;
+
+  /* ---- 文字：晨雾白 ---- */
+  --fe-ink: #e8f4e8;
+  --fe-ink-2: #b8e6a0;
+  --fe-ink-3: #8ec88f;
+
+  /* ---- 行动色：雨林翠绿 ---- */
+  --fe-accent: #6ec88f;
+  --fe-accent-strong: #85d5a0;
+  --fe-accent-ink: #0d1a0f;
+  --fe-accent-soft: #1e3f26;
+
+  /* ---- 语义色 ---- */
+  --fe-ok: #4fb86f;
+  --fe-warn: #d4a038;
+  --fe-danger: #c84a4a;
+
+  /* ---- 焦点与阴影：丛林柔光 ---- */
+  --fe-focus-ring: #6ec88f;
+  --fe-shadow-1: 0 2px 6px rgba(30, 63, 38, 0.4);
+  --fe-shadow-2: 0 14px 32px rgba(13, 26, 15, 0.6), 0 4px 10px rgba(46, 90, 63, 0.3);
+
+  /* ---- 字体 ---- */
+  --fe-font-sans: "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --fe-font-serif: "LXGW WenKai GB", "Noto Serif SC", "Songti SC", serif;
+
+  /* ---- 形状与动效 ---- */
+  --fe-radius: 12px;
+  --fe-motion: 220ms;
+
+  /* ---- 装饰：雨林深处舞台 + 雾气与水滴 ---- */
+  --fe-decor-stage: radial-gradient(80% 65% at 68% 15%, #1e3f26 0%, transparent 60%), radial-gradient(75% 70% at 12% 88%, #1a3a2e 0%, transparent 65%), linear-gradient(165deg, #0d1a0f 0%, #152d1a 100%);
+  --fe-decor-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320'%3E%3Cg fill='%23b8e694' fill-opacity='0.06'%3E%3Cellipse cx='80' cy='70' rx='20' ry='38' transform='rotate(30 80 70)'/%3E%3Cellipse cx='240' cy='130' rx='24' ry='42' transform='rotate(-20 240 130)'/%3E%3Cellipse cx='160' cy='260' rx='18' ry='34' transform='rotate(45 160 260)'/%3E%3C/g%3E%3Cg fill='%236ec88f' fill-opacity='0.04'%3E%3Ccircle cx='120' cy='180' r='3'/%3E%3Ccircle cx='260' cy='80' r='2.5'/%3E%3Ccircle cx='40' cy='240' r='2.8'/%3E%3C/g%3E%3C/svg%3E"), radial-gradient(50% 40% at 75% 20%, rgba(110, 200, 143, 0.08), transparent 70%);
+}
+
+[data-theme="rainforest"] .theme-decor {
+  background: var(--fe-decor-stage);
+}
+
+[data-theme="rainforest"] .theme-decor::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: var(--fe-decor-overlay);
+  background-repeat: repeat, no-repeat;
+  background-size: 320px auto, 100% 100%;
+}
+
+/* 页角图样：左上棕榈叶扇，右下藤蔓缠绕与雨滴。 */
+[data-theme="rainforest"] .theme-decor::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cg fill='none' stroke='%236ec88f' stroke-opacity='0.18' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M100 100C90 50 70 20 40 10M100 100C110 60 120 30 140 15M100 100C70 80 40 70 15 65M100 100C100 70 100 40 95 10M100 100C120 75 145 60 170 50'/%3E%3C/g%3E%3Cg fill='%238ec88f' fill-opacity='0.12'%3E%3Cellipse cx='45' cy='25' rx='8' ry='16' transform='rotate(-35 45 25)'/%3E%3Cellipse cx='135' cy='30' rx='7' ry='14' transform='rotate(25 135 30)'/%3E%3Cellipse cx='25' cy='75' rx='6' ry='13' transform='rotate(-15 25 75)'/%3E%3C/g%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cg fill='none' stroke='%234a8060' stroke-opacity='0.16' stroke-width='2.6' stroke-linecap='round'%3E%3Cpath d='M200 200C180 170 150 150 120 140Q100 135 80 145T40 180'/%3E%3Cpath d='M190 180C170 160 145 145 120 138Q105 134 88 142'/%3E%3C/g%3E%3Cg fill='%236ec88f' fill-opacity='0.15'%3E%3Ccircle cx='165' cy='155' r='3.5'/%3E%3Ccircle cx='145' cy='135' r='2.8'/%3E%3Ccircle cx='125' cy='115' r='3.2'/%3E%3Ccircle cx='105' cy='95' r='2.5'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left 20px top 20px, right 10px bottom 10px;
+  background-size: 200px auto, 220px auto;
+}

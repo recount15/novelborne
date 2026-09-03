@@ -181,6 +181,27 @@ def collect_option_factors(state: Mapping[str, Any] | None) -> list[dict[str, st
     if anchor_title:
         factors.append(_factor("anchor", anchor_title, "当前锚点，选项应推动收束"))
 
+    # v2.0.4 任务注入：active 任务进入因素池，选项卷据此可给任务向行动。
+    quest_box = state.get("quest") if isinstance(state.get("quest"), Mapping) else {}
+    if quest_box.get("status") == "active":
+        quest_title = _text(quest_box.get("title"), 40)
+        if quest_title:
+            remaining = None
+            deadline = quest_box.get("deadline_round")
+            if deadline is not None:
+                try:
+                    remaining = max(0, int(deadline) - int(state.get("round") or 0))
+                except (TypeError, ValueError):
+                    remaining = None
+            detail = "进行中任务，可设计推动其目标的行动"
+            if remaining is None:
+                detail += "，不限时"
+            elif remaining <= 0:
+                detail += "，已到期限，应给最终结果"
+            else:
+                detail += f"，剩 {remaining} 回合"
+            factors.append(_factor("quest", quest_title, detail))
+
     difficulty = _text(start_params.get("difficulty"), 20)
     if difficulty:
         factors.append(_factor("difficulty", difficulty, "当前难度，决定代价量级"))

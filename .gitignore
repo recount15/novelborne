@@ -52,3 +52,17 @@ config.json
 .DS_Store
 Thumbs.db
 .workbuddy/
+
+# ---- 本地测试脚本与临时输出（不入库）----
+server.log
+gui-test-screenshots/
+WORKLOG_*.md
+m3_*.py
+verify_*.py
+M3_TEST_CHECKLIST.md
+
+# ---- PyInstaller 中间产物（含本机绝对路径，绝不入库；仅保留 spec/bat/ico 配方）----
+build/FateEngine/
+build/FateEngineWindowed/
+build/pkg/
+build/pkg_win/

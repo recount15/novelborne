@@ -152,7 +152,7 @@ _SUBMODULES = (
     # —— 重构新增（docs/REFACTOR_PLAN.md §10）：机制层模块，编排门面统一在 core/services ——
     "parallel", "structured", "anchor_distiller", "opening_distill",
     "papers", "turn_grader", "turn_composer", "turn_blueprint", "agent_refill",
-    "character_state_patch", "directives",
+    "character_state_patch", "directives", "quality_gate",
 )
 
 

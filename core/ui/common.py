@@ -47,9 +47,26 @@ def _append_log(path, text):
 
 
 def _accum_tokens(state, usage_box, est_in=0, est_out=0):
-    """累计 token，并保留实测与估算来源，避免最后一次调用篡改整局口径。"""
-    measured_in = int(usage_box.get("prompt") or 0)
-    measured_out = int(usage_box.get("completion") or 0)
+    """累计 token，并保留实测与估算来源，避免最后一次调用篡改整局口径。
+    
+    v2.0.4: 优先从 token_accounting 回合累加器读取实测值（阶段 E）。
+    """
+    # v2.0.4: 尝试从回合累加器获取实时 usage（非流式调用已在 distill choke point 累加）
+    measured_in, measured_out = 0, 0
+    try:
+        from core.engine import token_accounting
+        turn_usage = token_accounting.get_turn_usage()
+        if turn_usage:
+            measured_in = turn_usage.get("prompt_tokens", 0)
+            measured_out = turn_usage.get("completion_tokens", 0)
+    except Exception:  # noqa: BLE001
+        pass  # 回合累加器不可用时退回原逻辑
+    
+    # 流式调用的 usage_box 兼容路径（stream_reply 传递的 usage_box）
+    if not measured_in and not measured_out:
+        measured_in = int(usage_box.get("prompt") or 0)
+        measured_out = int(usage_box.get("completion") or 0)
+    
     if measured_in or measured_out:
         state["tok_in"] = state.get("tok_in", 0) + measured_in
         state["tok_out"] = state.get("tok_out", 0) + measured_out

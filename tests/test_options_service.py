@@ -152,5 +152,114 @@ class TestRenderDisplayBlock(unittest.TestCase):
         self.assertEqual(block.splitlines()[1], "B. 撤回茶棚")
 
 
+# —— v2.0.3：情景扎根 + 空级批改接线 + AI-only 清洗 ——
+DUP_JSON = ('{"options": ['
+            '"推演北墙裂痕的下一步（后果：提前看清暗哨位置）",'
+            '"推演北墙裂痕的下一步（后果：看清暗哨位置）",'
+            '"比对铜扣暗记的刻痕（后果：确认经手人身份）",'
+            '"透支预知换撤离窗口（后果：金手指进入冷却）",'
+            '"先撤回茶棚再图后计（后果：暂避锋芒）",'
+            '"只抄录暗记不惊动守军（后果：证据留存）"]}')
+
+
+class TestSceneGroundedPrompt(unittest.TestCase):
+    def test_prompt_contains_scene_block(self):
+        prompt = options_service.build_options_prompt(
+            "调查北墙", "因素", "近期剧情", scene="城门下铜扣暗记与守军换防的原文节选")
+        for marker in ("原文情景", "铜扣暗记", "守军换防", "至多 1 条"):
+            self.assertIn(marker, prompt)
+
+    def test_prompt_without_scene_degrades_gracefully(self):
+        prompt = options_service.build_options_prompt("a", "b", "c")
+        self.assertIn("无原文情景节选", prompt)
+
+
+class TestGradeWiring(unittest.TestCase):
+    def test_grade_failure_triggers_targeted_retry(self):
+        calls = []
+
+        def model(prompt):
+            calls.append(prompt)
+            if len(calls) == 1:
+                return DUP_JSON
+            self.assertIn("不合格", prompt)
+            self.assertIn("相似度", prompt)
+            return GOOD_JSON
+
+        result = options_service.generate_options(
+            None, "fake-model", model_fn=model, action="a", attempts=1)
+        self.assertEqual(result["source"], "model")
+        self.assertEqual(len(result["options"]), 6)
+        self.assertEqual(len(calls), 2)
+
+    def test_sanitize_drops_duplicates_labels_and_ai_origin(self):
+        items = options_service.parse_option_items([
+            "推演北墙裂痕的下一步（后果：a）",
+            "推演北墙裂痕的下一步（金手指）（后果：a）",   # 相似度判重 + 来源标注
+            "作为AI我建议先撤离现场",                        # AI 来源措辞
+            "比对铜扣暗记的刻痕（后果：b）",
+            "透支预知换撤离窗口（后果：c）",
+            "先撤回茶棚再图后计（后果：d）",
+        ])
+        sanitized = options_service._sanitize_option_items(items)
+        self.assertGreaterEqual(len(sanitized), options_service.MIN_AI_OPTIONS)
+        keys = [item["key"] for item in sanitized]
+        self.assertEqual(keys, list("ABCD")[: len(keys)])
+        self.assertTrue(all("金手指）" not in item["text"] for item in sanitized))
+        self.assertTrue(all("AI" not in item["text"] for item in sanitized))
+
+    def test_too_few_valid_items_falls_to_none_not_template(self):
+        # 6 条里 4 条两两判重 → 清洗后仅 3 条 < MIN_AI_OPTIONS：AI-only 兜底为空。
+        dup_heavy = ('{"options": ['
+                     '"推演北墙裂痕的下一步甲（后果：a）",'
+                     '"推演北墙裂痕的下一步乙（后果：a）",'
+                     '"推演北墙裂痕的下一步丙（后果：a）",'
+                     '"推演北墙裂痕的下一步丁（后果：a）",'
+                     '"比对铜扣暗记的刻痕（后果：b）",'
+                     '"透支预知换撤离窗口（后果：c）"]}')
+
+        def model(prompt):
+            if "不合格" in prompt:
+                return dup_heavy  # 重试依旧同质化
+            return dup_heavy
+
+        result = options_service.generate_options(
+            None, "fake-model", model_fn=model, action="a", narrative="正文无选项",
+            attempts=1)
+        self.assertEqual(result["source"], "none")
+        self.assertEqual(result["options"], [])
+        self.assertIn("AI-only", result["error"])
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestElasticRepairTupleContract(unittest.TestCase):
+    """v2.0.3 回归：repair_options 返回 (列表, 是否合成) 元组。
+
+    app.on_send 旧调用把元组整体传给 render_options_block，在元组第一项
+    （选项列表）上调用 .get 抛 'list' object has no attribute 'get'，
+    整回合被回滚（kimi-k3 实测）。此测试锁定元组契约防再次误用。
+    """
+
+    def test_repair_options_returns_tuple_with_list(self):
+        from core.engine import elastic_gate
+        result = elastic_gate.repair_options(
+            "正文一句。A. 先查看现场" + chr(10) + "B. 再询问证人",
+            [{"key": "A", "text": "先查看现场"}, {"key": "B", "text": "再询问证人"}],
+        )
+        self.assertIsInstance(result, tuple)
+        self.assertEqual(len(result), 2)
+        options, synthesized = result
+        self.assertIsInstance(options, list)
+        self.assertIsInstance(synthesized, bool)
+        self.assertEqual([o["key"] for o in options][:2], ["A", "B"])
+
+    def test_render_options_block_accepts_repair_list(self):
+        from core.engine import elastic_gate, options
+        options_list, _ = elastic_gate.repair_options("正文。", [])
+        block = options.render_options_block(options_list)
+        self.assertIsInstance(block, str)
+        for line in block.splitlines():
+            self.assertRegex(line, r"^[A-F]\. \S")

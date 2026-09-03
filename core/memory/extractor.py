@@ -22,6 +22,9 @@ _DAY_AFTER = ("第三天", "两天后", "后天")
 _LOCATION_RE = re.compile(r"(?:抵达|到达|来到|返回|回到|进入|走进|踏入|前往)了?([\u4e00-\u9fa5A-Za-z0-9·]{2,12})")
 _INJURY_WORDS = ("重伤", "骨折", "中毒", "内伤", "失血", "撕裂", "灼伤", "冻伤", "断骨", "受伤", "擦伤", "淤青")
 _HEAL_WORDS = ("伤势痊愈", "伤口愈合", "康复", "痊愈", "伤势尽复")
+# v2.0.4 扩展死亡与离场关键词（质量门 state 维度配套）
+_DEATH_WORDS = ("死亡", "身亡", "殒命", "毙命", "丧生", "咽气", "断气", "停止呼吸", "心跳停止", "失去生命")
+_DEPARTURE_WORDS = ("离开", "离去", "离别", "远去", "告别", "分别", "出走", "出发", "启程", "起程", "动身")
 _GAIN_RE = re.compile(r"(?:获得|得到|拿到|取得|捡到|收下)了?([\u4e00-\u9fa5A-Za-z0-9·]{2,12})")
 _LOSE_RE = re.compile(r"(?:失去|丢失|被夺走|遗失|用掉|耗尽)了?([\u4e00-\u9fa5A-Za-z0-9·]{2,12})")
 _SKILL_RE = re.compile(r"(?:学会|掌握|习得|领悟)了?([\u4e00-\u9fa5A-Za-z0-9·]{2,12})")
@@ -133,6 +136,10 @@ def extract_patch(reply: str, *, action: str = "", current: Mapping[str, Any] | 
         name = _trim_noun(place.group(1))
         if len(name) >= 2 and name != (state.get("location") or {}).get("name"):
             patch["location"] = {"name": name}
+    # v2.0.4 离场检测（记录离开事件，用于后续 AI 软校验）
+    departure_hits = [word for word in _DEPARTURE_WORDS if word in text]
+    if departure_hits:
+        patch.setdefault("scene", {})["departure"] = departure_hits[:3]
 
     body_now = dict(state.get("body") or {})
     injuries = [word for word in _INJURY_WORDS if word in text]
@@ -142,6 +149,10 @@ def extract_patch(reply: str, *, action: str = "", current: Mapping[str, Any] | 
     elif any(word in text for word in _HEAL_WORDS):
         patch.setdefault("body", {})["injuries"] = []
         patch["body"]["condition"] = "正常"
+    # v2.0.4 死亡检测（保守：只标记，不自动进入死亡流程）
+    if any(word in text for word in _DEATH_WORDS):
+        patch.setdefault("body", {})["condition"] = "死亡"
+        patch["body"]["death_evidence"] = [word for word in _DEATH_WORDS if word in text][:3]
 
     assets_now = dict(state.get("assets") or {})
     gains = [n for n in (_trim_noun(_clean_noun(m.group(1))) for m in _GAIN_RE.finditer(text)) if len(n) >= 2]

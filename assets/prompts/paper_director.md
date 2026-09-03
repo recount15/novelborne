@@ -16,6 +16,7 @@
 - `option_seeds`：恰 6 颗选项种子——**@@GF_SEEDS@@ 颗 `factor` 为「金手指」+ @@PERSONA_SEEDS@@ 颗 `factor` 为「性格」**；每项含 `direction`（行动方向，10–40 字）与 `preview`（一句可观测后果预告）。
 
 ## 局面素材
+- 作品设定与系统规则（蓝图必须在此世界观内构建，不得引入其他作品的设定/术语/人物）：@@SYSTEM@@
 - 试卷：@@PAPER_LABEL@@（目标正文约 @@TARGET_CHARS@@ 字，卷面阶段：@@STAGE@@）
 - 玩家本回合行动：@@ACTION@@
 - 近期剧情梗概：@@CONTEXT@@
@@ -24,6 +25,7 @@
 - 锚点证据词（anchor_plan 词表只能从中取）：@@ANCHOR_TERMS@@
 - 世界书/传闻：@@WORLD_BEATS@@
 - 涟漪压力：@@RIPPLE@@
+- 任务：@@QUEST@@（active 时：蓝图 beat/goal 与各段事件应让任务可观察推进或明确受阻，并把任务关键词纳入对应段的 must_include；期限临近时优先安排收尾节拍）
 - 金手指：@@GF@@
 - 性格：@@PERSONA@@
 

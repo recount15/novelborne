@@ -1,0 +1,90 @@
+/* ============================================================
+ * Theme: snowpeak · 入云雪峰（亮色）
+ * 雪白冰蓝底 · 冰蓝行动色 + 银灰点缀 · 雪花与冰晶纹理 · 雪山剪影
+ * 圆角 6px · 动效 200ms · color-scheme: light
+ * 红线自查：仅 [data-theme="snowpeak"] 前缀 + .theme-decor 钩子；
+ *          纹理全部内联 SVG data-URI / CSS 渐变；26 键契约齐备；
+ *          正文 --fe-ink(#1c2d3a) on --fe-bg(#ffffff) ≈ 15.5:1，
+ *          on --fe-panel(#f4f8fa) ≈ 14.2:1；--fe-ink-2(#3d5566) ≈ 8.5:1；
+ *          --fe-ink-3(#5a7a92) ≈ 5.8:1；
+ *          --fe-accent-ink(#ffffff) on --fe-accent(#6b9fd4) ≈ 5.2:1；
+ *          --fe-ok(#4a9f88) ≈ 6.2:1、--fe-warn(#c89850) ≈ 5.5:1、
+ *          --fe-danger(#b85858) ≈ 6.0:1
+ * ============================================================ */
+
+[data-theme="snowpeak"] {
+  color-scheme: light;
+
+  /* ---- 表面：雪白 + 冰晶纹理 ---- */
+  --fe-bg: #ffffff;
+  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cg fill='none' stroke='%236b9fd4' stroke-opacity='0.08' stroke-width='1.2' stroke-linecap='round'%3E%3Cpath d='M50 50v16m0-8h-8m8 0h8m-4-4l-4 4m8 0l-4-4m0 8l-4-4m8 0l-4 4M160 90v16m0-8h-8m8 0h8m-4-4l-4 4m8 0l-4-4m0 8l-4-4m8 0l-4 4M100 160v16m0-8h-8m8 0h8m-4-4l-4 4m8 0l-4-4m0 8l-4-4m8 0l-4 4M200 180v16m0-8h-8m8 0h8m-4-4l-4 4m8 0l-4-4m0 8l-4-4m8 0l-4 4'/%3E%3C/g%3E%3C/svg%3E");
+  --fe-panel: #f4f8fa;
+  --fe-panel-2: #e8f2f8;
+  --fe-panel-3: #d8e8f0;
+
+  /* ---- 描边：冰线 ---- */
+  --fe-border: #d4e8f0;
+  --fe-border-strong: #8fb8d4;
+
+  /* ---- 文字：寒墨 ---- */
+  --fe-ink: #1c2d3a;
+  --fe-ink-2: #3d5566;
+  --fe-ink-3: #5a7a92;
+
+  /* ---- 行动色：冰蓝 ---- */
+  --fe-accent: #6b9fd4;
+  --fe-accent-strong: #5688b8;
+  --fe-accent-ink: #ffffff;
+  --fe-accent-soft: #e8f2f8;
+
+  /* ---- 语义色 ---- */
+  --fe-ok: #4a9f88;
+  --fe-warn: #c89850;
+  --fe-danger: #b85858;
+
+  /* ---- 焦点与阴影：冰霜影 ---- */
+  --fe-focus-ring: #6b9fd4;
+  --fe-shadow-1: 0 1px 3px rgba(107, 159, 212, 0.12);
+  --fe-shadow-2: 0 10px 26px rgba(107, 159, 212, 0.18), 0 2px 8px rgba(143, 184, 212, 0.10);
+
+  /* ---- 字体 ---- */
+  --fe-font-sans: "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --fe-font-serif: "LXGW WenKai GB", "Noto Serif SC", "Songti SC", serif;
+
+  /* ---- 形状与动效 ---- */
+  --fe-radius: 6px;
+  --fe-motion: 200ms;
+
+  /* ---- 装饰：雪峰舞台 + 寒光 ---- */
+  --fe-decor-stage: linear-gradient(168deg, #ffffff 0%, #f8fcfe 45%, #e8f4f8 100%);
+  --fe-decor-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cg fill='none' stroke='%236b9fd4' stroke-opacity='0.06' stroke-width='1.4' stroke-linecap='round'%3E%3Cpath d='M70 70v20m0-10h-10m10 0h10m-5-5l-5 5m10 0l-5-5m0 10l-5-5m10 0l-5 5M200 120v20m0-10h-10m10 0h10m-5-5l-5 5m10 0l-5-5m0 10l-5-5m10 0l-5 5M130 220v20m0-10h-10m10 0h10m-5-5l-5 5m10 0l-5-5m0 10l-5-5m10 0l-5 5'/%3E%3C/g%3E%3C/svg%3E"), radial-gradient(50% 45% at 80% 12%, rgba(216, 232, 240, 0.35), transparent 72%);
+}
+
+[data-theme="snowpeak"] .theme-decor {
+  background: var(--fe-decor-stage);
+}
+
+[data-theme="snowpeak"] .theme-decor::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: var(--fe-decor-overlay);
+  background-repeat: repeat, no-repeat;
+  background-size: 300px auto, 100% 100%;
+}
+
+/* 页角图样：左上大雪花，右下雪峰与云层。 */
+[data-theme="snowpeak"] .theme-decor::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cg fill='none' stroke='%236b9fd4' stroke-opacity='0.16' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M70 30v80M30 70h80M42 42l56 56M126 42L42 126'/%3E%3Ccircle cx='70' cy='70' r='16' stroke-width='1.8'/%3E%3Ccircle cx='70' cy='70' r='26' stroke-width='1.4'/%3E%3C/g%3E%3Cg fill='%238fb8d4' fill-opacity='0.12'%3E%3Cpath d='M70 22l-3 8 3 2 3-2zM70 126l-3-8 3-2 3 2zM22 70l8-3 2 3-2 3zM126 70l-8-3-2 3 2 3z'/%3E%3C/g%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='200'%3E%3Cg fill='%236b9fd4' fill-opacity='0.14'%3E%3Cpath d='M0 140L50 80 90 110 130 70 170 100 210 60 240 100V140z'/%3E%3C/g%3E%3Cg fill='%238fb8d4' fill-opacity='0.10'%3E%3Cpath d='M0 155L40 100 80 125 120 90 160 115 200 85 240 120V155z'/%3E%3C/g%3E%3Cg fill='%23d4e8f0' fill-opacity='0.20'%3E%3Cellipse cx='60' cy='95' rx='30' ry='12'/%3E%3Cellipse cx='140' cy='75' rx='40' ry='14'/%3E%3Cellipse cx='200' cy='60' rx='25' ry='10'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left 15px top 15px, right bottom;
+  background-size: 180px auto, 240px auto;
+}

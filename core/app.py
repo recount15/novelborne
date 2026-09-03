@@ -8,7 +8,9 @@ import os
 import json
 import copy
 import re
+import queue
 import threading
+import contextvars
 from core.ui import gradio_compat as gr
 
 from core import fate_engine as fe
@@ -28,6 +30,7 @@ import core.engine.nemesis_agent
 import core.engine.skill_drift
 import core.engine.break_anchor
 import core.engine.context_compressor
+import core.engine.protagonist_state
 from core.memory import blank_state, StateStore, render_panel
 from core.memory import action_patch, apply_turn, extract_patch
 from core.lore import LoreInjector
@@ -782,7 +785,10 @@ def _quest_verdict_prompt(quest_box, message, reply_text):
         f"完成条件：{json.dumps(quest_box.get('requirements') or [], ensure_ascii=False)}\n"
         f"本回合玩家行动：{message}\n"
         f"本回合叙事摘要：{str(reply_text or '')[:1200]}\n"
-        '输出 JSON 形状：{"completed": true 或 false, "evidence": "判定依据（不超过80字）"}'
+        "判定铁律：只有当叙事正文已实际写到完成条件达成（而非仅有意图或计划）才判 true；"
+        "evidence 必须是从上述叙事正文中逐字摘录的原句片段（10–30 字，不得转述、不得改写、"
+        "不得编造正文里没有的话）。\n"
+        '输出 JSON 形状：{"completed": true 或 false, "evidence": "判定依据（正文原句摘录）"}'
     )
 
 
@@ -938,7 +944,7 @@ def _relax_convergence(state, relief, round_no):
 
 
 def _grant_quest_reward(state, reward):
-    """把任务奖励确定性写入账本/状态记忆，返回发放明细字符串列表。
+    """把任务奖励事务性写入状态记忆与账本，返回发放明细字符串列表。
 
     类型映射（代码固定，不让模型自由裁量）：
     - 积势     -> 抬高最近一条涟漪的有效积势（state.ripples / ledger.ripples）
@@ -946,19 +952,18 @@ def _grant_quest_reward(state, reward):
     - 技能碎片 -> state_memory.abilities.skills
     - 关系进展 -> state_memory.relationships.characters
     - 关键情报 -> state_memory.knowledge.known
-    全部奖励同时记入 ledger.cheat.quest_rewards 作为审计轨迹。
+
+    v2.0.4 事务化（先生效后审计，失败可补发）：
+    - state_memory 写入统一走 apply_turn 校验（source="quest_reward"），
+      补丁携带既有全部行（apply_turn 是分类级替换，见 character_state_patch）；
+    - 先写 state 成功后才动涟漪/审计/收束——审计与生效严格一致，未知类型
+      不入账不入审计；
+    - 校验抛错上抛给调用方，由 _settle_quest 挂 reward_pending 下回合补发。
     """
-    granted = []
-    items = (reward or {}).get("items") or []
-    ledger_data = state.get("ledger") or ledger_module.new_ledger()
-    # new_ledger 是浅拷贝（cheat 默认字典跨实例共享）；写入前先换一份副本，
-    # 避免奖励审计轨迹污染同进程其他对局的账本。
-    cheat = dict(ledger_data.get("cheat") or {})
-    ledger_data["cheat"] = cheat
-    audit = cheat.setdefault("quest_rewards", [])
-    memory = state.get("state_memory") or blank_state(state.get("mode", ""), "")
     round_no = int(state.get("round", 0) or 0)
-    for item in items:
+    memory = state.get("state_memory") or blank_state(state.get("mode", ""), "")
+    entries = []
+    for item in (reward or {}).get("items") or []:
         if not isinstance(item, dict):
             continue
         rtype = str(item.get("type") or "")
@@ -966,11 +971,47 @@ def _grant_quest_reward(state, reward):
             amount = int(item.get("amount") or 0)
         except (TypeError, ValueError):
             continue
-        unit = str(item.get("unit") or "")
         if amount <= 0:
             continue
-        audit.append({"type": rtype, "amount": amount, "unit": unit, "round": round_no})
-        granted.append(f"{rtype}×{amount}{unit}")
+        entries.append((rtype, amount, str(item.get("unit") or "")))
+    if not entries:
+        return []
+
+    # —— 第一阶段：state_memory 补丁（校验失败整体不入账，异常上抛）——
+    patch: dict = {}
+
+    def _append_row(category, key, row):
+        rows = list(((memory.get(category) or {}).get(key)) or [])
+        rows.append(row)
+        patch.setdefault(category, {})[key] = rows
+
+    for rtype, amount, unit in entries:
+        if rtype == "物资":
+            _append_row("assets", "items",
+                        {"name": f"任务奖励物资×{amount}", "source": "quest", "round": round_no})
+        elif rtype == "技能碎片":
+            _append_row("abilities", "skills",
+                        {"name": f"技能碎片×{amount}", "status": "fragment", "source": "quest", "round": round_no})
+        elif rtype == "关系进展":
+            _append_row("relationships", "characters",
+                        {"name": "任务关系进展", "delta": amount, "source": "quest", "round": round_no})
+        elif rtype == "关键情报":
+            _append_row("knowledge", "known",
+                        {"content": f"任务关键情报×{amount}", "source": "quest", "round": round_no})
+    if patch:
+        updated, _changes = apply_turn(memory, patch, round_no=round_no, source="quest_reward")
+        state["state_memory"] = updated
+        state["state_panel"] = render_panel(updated)
+
+    # —— 第二阶段：涟漪积势 / 审计 / 收束松弛（此时 state 部分已落地）——
+    ledger_data = state.get("ledger") or ledger_module.new_ledger()
+    # new_ledger 是浅拷贝（cheat 默认字典跨实例共享）；写入前先换一份副本，
+    # 避免奖励审计轨迹污染同进程其他对局的账本。
+    cheat = dict(ledger_data.get("cheat") or {})
+    ledger_data["cheat"] = cheat
+    audit = cheat.setdefault("quest_rewards", [])
+    granted = []
+    for rtype, amount, unit in entries:
         if rtype == "积势":
             # 抬高最近涟漪的有效积势；_ripple_block 以 max 聚合历史，奖励自然继承。
             for pool in (state.get("ripples"), ledger_data.get("ripples")):
@@ -979,21 +1020,12 @@ def _grant_quest_reward(state, reward):
             last = state.get("last_ripple")
             if isinstance(last, dict) and last:
                 last["effective_total"] = int(last.get("effective_total") or 0) + amount
-        elif rtype == "物资":
-            memory.setdefault("assets", {}).setdefault("items", []).append(
-                {"name": f"任务奖励物资×{amount}", "source": "quest", "round": round_no})
-        elif rtype == "技能碎片":
-            memory.setdefault("abilities", {}).setdefault("skills", []).append(
-                {"name": f"技能碎片×{amount}", "status": "fragment", "source": "quest", "round": round_no})
-        elif rtype == "关系进展":
-            memory.setdefault("relationships", {}).setdefault("characters", []).append(
-                {"name": "任务关系进展", "delta": amount, "source": "quest", "round": round_no})
-        elif rtype == "关键情报":
-            memory.setdefault("knowledge", {}).setdefault("known", []).append(
-                {"content": f"任务关键情报×{amount}", "source": "quest", "round": round_no})
+        elif rtype not in ("物资", "技能碎片", "关系进展", "关键情报"):
+            _wiring_log(state, f"任务奖励类型 {rtype!r} 未注册，未入账未审计")
+            continue
+        granted.append(f"{rtype}×{amount}{unit}")
+        audit.append({"type": rtype, "amount": amount, "unit": unit, "round": round_no})
     state["ledger"] = ledger_data
-    state["state_memory"] = memory
-    state["state_panel"] = render_panel(memory)
     # 收束松弛：任务完成轻微减弱动态收束系数，让主角更自由（偏离原著）。
     relief = (reward or {}).get("convergence_relief")
     if relief:
@@ -1006,30 +1038,145 @@ def _grant_quest_reward(state, reward):
     return granted
 
 
-def _settle_quest(state, client, model, request_kwargs, provider, message, reply_text, round_no):
-    """任务回合结算：仅 active 任务触发判定模型；模型/解析失败按未完成处理。"""
+def _quest_verdict_check(box, verdict, reply_text):
+    """证据制核验：completed 判定须有正文逐字引文或完成条件关键词佐证。
+
+    返回 (verdict, check)：check 为 None 表示通过/不适用；
+    "evidence_rejected" 表示判定被降级为未完成（证据与正文不符）；
+    "keyword_corroborated" 表示证据非逐字但完成条件关键词 ≥2 条命中，采信。
+    防裁判幻觉翻案：模型不能凭空宣布任务完成。
+    """
+    if not verdict.get("completed"):
+        return verdict, None
+    blob = re.sub(r"\s+", "", str(reply_text or ""))
+    evidence = re.sub(r"\s+", "", str(verdict.get("evidence") or ""))
+    if evidence and len(evidence) >= 6 and evidence in blob:
+        return verdict, None
+    hits = engine.quest.requirement_hits(box, str(reply_text or ""))
+    if hits >= 2:
+        note = "（证据非逐字引文，但完成条件关键词多条命中，采信完成判定）"
+        return dict(verdict, evidence=str(verdict.get("evidence") or "") + note), "keyword_corroborated"
+    return {"completed": False,
+            "evidence": "判定证据与正文不符（无逐字引文、完成条件关键词命中不足），按未完成处理"}, "evidence_rejected"
+
+
+def _retry_pending_quest_reward(state):
+    """补发上回合发放失败的任务奖励（reward_pending）；成功才清除挂起。"""
     box = state.get("quest")
+    if not isinstance(box, dict) or not box.get("reward_pending"):
+        return
+    pending = box["reward_pending"]
+    try:
+        granted = _grant_quest_reward(state, pending)
+        box.pop("reward_pending", None)
+        try:
+            settled = box.get("last_settlement") if isinstance(box.get("last_settlement"), dict) else {}
+            settled["granted"] = granted
+            settled["reward_retry_round"] = int(state.get("round", 0) or 0)
+            box["last_settlement"] = settled
+        except Exception:  # noqa: BLE001 审计失败不影响补发本身
+            pass
+        _wiring_log(state, f"任务奖励补发成功：{'、'.join(granted) or '（无条目）'}")
+    except Exception as exc:  # noqa: BLE001 补发仍失败：保留挂起，下回合再试
+        _wiring_log(state, f"任务奖励补发仍失败，下回合再试：{exc}")
+
+
+def _settle_quest(state, client, model, request_kwargs, provider, message, reply_text, round_no):
+    """任务回合结算：仅 active 任务触发判定模型；模型/解析失败按未完成处理。
+
+    v2.0.4：判定经证据制核验（防裁判幻觉完成）；奖励发放失败挂
+    reward_pending 由后续回合补发，任务完结与奖励到位不再解耦丢失。
+    """
+    box = state.get("quest")
+    _retry_pending_quest_reward(state)
     if not isinstance(box, dict) or box.get("status") != "active":
         return
+    
+    # Agent_refill 模式：批改-重填循环提升判定准确性
+    from core.services import quest_grader
+    
+    def model_call(p):
+        return _distill_model(client, model, p, request_kwargs, provider)
+
     try:
+        # v2.0.5 Q3：初稿双卷并发（self-consistency）——两份独立判定一致时
+        # 直接采信（消单次幻觉）；不一致时进入批改-重填择优。
         prompt = _quest_verdict_prompt(box, message, reply_text)
-        raw = _distill_model(client, model, prompt, request_kwargs, provider)
-        verdict = _parse_quest_verdict(raw)
+        from core.engine import parallel as _parallel
+        _verdict_ctx = contextvars.copy_context()
+        _verdict_jobs = [
+            (lambda: _verdict_ctx.run(lambda: _parse_quest_verdict(model_call(prompt))))
+            for _ in range(2)
+        ]
+        _verdict_results = _parallel.run_parallel(_verdict_jobs, _parallel.PRIORITY_TURN)
+        _verdicts = [item.value for item in _verdict_results
+                     if getattr(item, "ok", False) and isinstance(item.value, dict)]
+        if len(_verdicts) >= 2 and _verdicts[0].get("completed") == _verdicts[1].get("completed"):
+            verdict = _verdicts[0]  # 双卷一致：采信，跳过重填
+            consistent = True
+        else:
+            verdict = (_verdicts or [{"completed": False, "evidence": "判定模型未返回有效结果"}])[0]
+            consistent = False
+
+        # 批改-重填循环（≤2 次；双卷一致且通过证据核验时零重填）
+        current_verdict = verdict
+        best_verdict = verdict
+        best_errors = quest_grader.grade_quest_verdict(box, reply_text, verdict)
+        refills = 0
+
+        for _ in range(0 if (consistent and not best_errors) else 2):
+            current_errors = quest_grader.grade_quest_verdict(box, reply_text, current_verdict)
+            if not current_errors:
+                best_verdict = current_verdict
+                best_errors = []
+                break  # 通过批改
+            
+            # 重填
+            try:
+                recent_progress = box.get("progress", [])
+                refill_prompt = quest_grader.build_refill_prompt(
+                    box, reply_text, recent_progress, current_errors
+                )
+                raw_refill = model_call(refill_prompt)
+                candidate = _parse_quest_verdict(raw_refill)
+                candidate_errors = quest_grader.grade_quest_verdict(box, reply_text, candidate)
+                
+                # Keep-best
+                if len(candidate_errors) < len(best_errors):
+                    best_verdict = candidate
+                    best_errors = candidate_errors
+                
+                current_verdict = candidate
+                refills += 1
+            except Exception:  # noqa: BLE001
+                break  # 重填失败，使用当前最佳
+        
+        verdict = best_verdict
+        if refills > 0:
+            _wiring_log(state, f"任务判定经 {refills} 次重填，剩余问题 {len(best_errors)} 个")
+    
     except Exception as exc:  # noqa: BLE001
         _wiring_log(state, f"任务判定模型调用失败，按未完成处理：{exc}")
         verdict = {"completed": False, "evidence": "判定模型调用失败，按未完成处理"}
+    
+    verdict, evidence_check = _quest_verdict_check(box, verdict, reply_text)
     try:
         result = engine.quest.settle_round(state, round_no, verdict)
     except Exception as exc:  # noqa: BLE001
         _wiring_log(state, f"任务结算失败已跳过：{exc}")
         return
     settlement = {"round": round_no, "verdict": verdict, "result": result.get("status"),
-                  "changed": bool(result.get("changed")), "granted": []}
+                  "changed": bool(result.get("changed")), "granted": [],
+                  "evidence_check": evidence_check}
     if result.get("status") == "completed" and result.get("reward"):
         try:
             settlement["granted"] = _grant_quest_reward(state, result["reward"])
-        except Exception as exc:  # noqa: BLE001
-            _wiring_log(state, f"任务奖励发放失败：{exc}")
+        except Exception as exc:  # noqa: BLE001 发放失败挂起补发，任务不再完结即丢奖
+            quest_box = state.get("quest")
+            if isinstance(quest_box, dict):
+                quest_box["reward_pending"] = result["reward"]
+                settlement["reward_pending"] = True
+            _wiring_log(state, f"任务奖励发放失败，已挂起待下回合补发：{exc}")
     quest_box = state.get("quest")
     if isinstance(quest_box, dict):
         quest_box["last_settlement"] = settlement
@@ -2159,6 +2306,15 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
     }
     state["round"] = state.get("round", 0) + 1
     r = state["round"]
+    # v2.0.5 S3：上回合登记的压缩在此执行（用户此刻在等待新回合生成，压缩
+    # 不再额外延长上一回合的推送延迟）；结果回写 state["history"]，本回合
+    # 的本地 history 随之接续，压缩失败语义不变（保留原 history）。
+    if state.get("compression_due_round"):
+        _due = state.pop("compression_due_round")
+        _hist = state.get("history") or []
+        _hist = _compress_context(state, client, model, request_kwargs, provider,
+                                   _hist, int(_due))
+        state["history"] = _hist
     if enhanced:
         state.update(target_chapter_state)
 
@@ -2185,6 +2341,11 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
         state["last_style"] = style
         state["last_trope"] = trope_hint
         chapter_text = _chapter_text(state.get("chapter_index"), state.get("current_chapter", 1))
+        # v2.0.4 LEGACY 路径注入主角状态硬事实（与 turn_pipeline 一致）
+        from core.engine import protagonist_state
+        state_facts = protagonist_state.hard_facts_text(state)
+        if state_facts:
+            llm_msg += "\n\n" + state_facts
         llm_msg += "\n\n" + fe.pacing_hint(
             r, state.get("current_chapter", 1), state.get("chapter_round", 1),
             state.get("turn_budget", 0), chapter_text,
@@ -2262,14 +2423,61 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
         option_factors = engine.collect_option_factors(state)
         factors_block = engine.build_option_factors_block(option_factors)
         context_tail = str(((state.get("history") or [{}])[-1] or {}).get("content") or "")[-600:]
+        # v2.0.3 原文情景节选：围绕本章进度的 ~1800 字窗口，供选项卷 AI 情景模拟。
+        scene_excerpt = ""
+        try:
+            _chapter_src = (chapter_text if enhanced else
+                            _chapter_text(state.get("chapter_index"),
+                                          state.get("current_chapter", 1))) or ""
+            if _chapter_src:
+                _pct = max(0, min(95, int(state.get("progress") or 0))) / 100.0
+                _cut = int(len(_chapter_src) * _pct)
+                if _cut <= 0:
+                    scene_excerpt = _chapter_src[:1800]
+                else:
+                    scene_excerpt = _chapter_src[max(0, _cut - 1200):_cut + 600]
+        except Exception:  # noqa: BLE001 情景节选缺失不阻断回合
+            scene_excerpt = ""
         if compose_mode:
-            _pipeline_result = turn_pipeline.run_turn(
-                state, client, model, request_kwargs, provider,
-                message=message, system_prompt=turn_system, context_blocks=llm_msg,
-                active_members=state.get("active_members") or [],
-                anchor_text=current_anchor, factors=option_factors,
-                tier=int(state.get("paper_tier") or 0) or None,
-            )
+            # v2.0.5 S1：管线改在后台线程跑，草稿经队列即时推给前端——
+            # 用户不再等全管线（导演卷→段卷→批改→润色→质量门）结束才见字；
+            # 终稿完成后由下方既有路径整体替换（keep-best 保证终稿≥草稿）。
+            # LEGACY 信号同样经队列回传，走旧单卷路径。
+            _draft_queue: "queue.Queue" = queue.Queue()
+            _pipeline_box: dict = {}
+
+            def _pipeline_worker():
+                try:
+                    _pipeline_box["result"] = turn_pipeline.run_turn(
+                        state, client, model, request_kwargs, provider,
+                        message=message, system_prompt=turn_system, context_blocks=llm_msg,
+                        active_members=state.get("active_members") or [],
+                        anchor_text=current_anchor, factors=option_factors,
+                        scene_excerpt=scene_excerpt,
+                        tier=int(state.get("paper_tier") or 0) or None,
+                        on_draft=lambda text: _draft_queue.put(str(text)),
+                    )
+                except Exception as exc:  # noqa: BLE001 管线异常如实回传
+                    _pipeline_box["error"] = exc
+                finally:
+                    _draft_queue.put(None)  # 哨兵：草稿流结束
+
+            _pipeline_thread = threading.Thread(target=_pipeline_worker,
+                                                name="turn-pipeline", daemon=True)
+            _pipeline_thread.start()
+            chatbot[-1] = {"role": "assistant", "content": "…"}
+            yield _out_send(chatbot, dict(state, history=history))
+            while True:
+                _chunk = _draft_queue.get()
+                if _chunk is None:
+                    break
+                if str(_chunk).strip():
+                    chatbot[-1] = {"role": "assistant", "content": str(_chunk)}
+                    yield _out_send(chatbot, dict(state, history=history))
+            _pipeline_thread.join()
+            if "error" in _pipeline_box:
+                raise _pipeline_box["error"]
+            _pipeline_result = _pipeline_box.get("result")
             if _pipeline_result != turn_pipeline.LEGACY:
                 assembled_result = _pipeline_result
                 state["scene_validation"] = dict(assembled_result.scene_validation or {})
@@ -2294,7 +2502,8 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
                     options_box.update(options_service.generate_options(
                         client, model, request_kwargs, provider,
                         action=message, factors_block=factors_block,
-                        context_tail=context_tail, factors=option_factors))
+                        context_tail=context_tail, scene=scene_excerpt,
+                        factors=option_factors))
                 except Exception as exc:  # noqa: BLE001 选项失败回退正文解析/代码合成
                     options_box["error"] = str(exc)
 
@@ -2514,13 +2723,55 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
             elif "放行" not in str(state.get("scene_gate_reason")):
                 state["scene_gate_reason"] = None
         _commit_reply_memory(state, acc, message, round_no=r, lore_hits=state.get("lore_hits") or [])
-        # —— M4：组装模式角色状态 patch（中台门面）。evidence 必须是最终正文
-        #     精确子串，校验通过才写 state_memory.relationships；失败只记日志。
-        if assembled_result is not None:
-            _character_meta = character_service.generate_patch(
+        # —— v2.0.5 S2：结算波次并发化。原顺序串行链（收束→任务→碎锚→宿敌→
+        #     角色patch→压缩）中含模型调用的四项（任务判定/碎锚判定/宿敌回合/
+        #     角色patch）互不读写同一 state 键：任务只写 state["quest"] 与奖励
+        #     落地，碎锚只写 state["break_anchor"]，宿敌只写 nemesis_private/
+        #     nemesis_rumor，角色 patch 只写 agent_meta 与 state_memory。
+        #     并发跑一波（copy_context 快照带入 Token 累加器，计量不丢不重），
+        #     耗时 ≈ max(单步)；收束力结算是纯本地计算，仍在主线先行。
+        #     压缩（S3）不再阻塞回合：延后到下一回合开头执行（见 on_send 前段）。
+        _settle_convergence(state, r)
+        _settlement_context = contextvars.copy_context()
+        _settlement_jobs = []
+        if isinstance(state.get("quest"), dict) and (state.get("quest") or {}).get("status") == "active":
+            _settlement_jobs.append(
+                lambda: _settle_quest(state, client, model, request_kwargs, provider,
+                                      message, clean_acc, r))
+        _retry_pending_quest_reward(state)  # 奖励补发是本地记账，主线同步做
+        if isinstance(state.get("break_anchor"), dict) and (state.get("break_anchor") or {}).get("status") == "active":
+            _settlement_jobs.append(
+                lambda: _settle_break_anchor(state, client, model, request_kwargs, provider,
+                                             message, clean_acc, r))
+        if str(state.get("mode") or "").startswith("强化") and state.get("nemesis"):
+            _settlement_jobs.append(
+                lambda: _run_nemesis_turn(state, client, model, request_kwargs, provider, r))
+        # —— M4：角色状态 patch（中台门面）。evidence 必须是最终正文精确子串，
+        #     校验通过才写 state_memory.relationships；失败只记日志。
+        #     v2.0.4：组装路径与 LEGACY 路径统一走 patch 机制。
+        _patch_enabled = (assembled_result is not None
+                          or (enhanced and state.get("active_members")))
+        _character_meta_box: dict = {}
+
+        def _character_patch_job():
+            meta = character_service.generate_patch(
                 state, client, model, request_kwargs, provider,
                 narrative=clean_acc, active_members=state.get("active_members") or [],
                 round_no=r)
+            _character_meta_box["meta"] = meta
+
+        if _patch_enabled:
+            _settlement_jobs.append(_character_patch_job)
+        if _settlement_jobs:
+            from core.engine import parallel as _parallel
+            _results = _parallel.run_parallel(
+                [(lambda job=job: _settlement_context.run(job))
+                 for job in _settlement_jobs], _parallel.PRIORITY_TURN)
+            for _res in _results:
+                if not getattr(_res, "ok", False) and getattr(_res, "error", None):
+                    _wiring_log(state, f"结算波次单步失败已跳过：{_res.error}")
+        if _patch_enabled and _character_meta_box.get("meta") is not None:
+            _character_meta = _character_meta_box["meta"]
             state.setdefault("agent_meta", {})["character_patch"] = _character_meta
             if not _character_meta.get("ok"):
                 _wiring_log(state, f"角色状态 patch 失败已跳过：{_character_meta.get('error') or '未通过校验'}")
@@ -2543,14 +2794,13 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
         except Exception as exc:  # noqa: BLE001
             _wiring_log(state, f"性格累计失败已跳过：{exc}")
         history = history + [{"role": "assistant", "content": acc}]
-        # —— 回合管线：收束力结算 → 任务结算 → 碎锚结算 → 宿敌回合 → 上下文压缩 ——
-        # 记忆已提交、存档未发生；各子环节独立防御，单个失败不拖垮主回合，
-        # 模型调用只在对应功能激活时发生（active 任务 / 碎锚 active / 宿敌启用 / 每 10 回合）。
-        _settle_convergence(state, r)
-        _settle_quest(state, client, model, request_kwargs, provider, message, clean_acc, r)
-        _settle_break_anchor(state, client, model, request_kwargs, provider, message, clean_acc, r)
-        _run_nemesis_turn(state, client, model, request_kwargs, provider, r)
-        history = _compress_context(state, client, model, request_kwargs, provider, history, r)
+        # —— 回合管线：收束力/任务/碎锚/宿敌已在上方结算波次并发完成 ——
+        # v2.0.5 S3：上下文压缩移出回合关键路径——不再阻塞本回合最终推送，
+        # 改为登记待压缩回合号，在下一回合 on_send 开头（用户已在读上一回合
+        # 正文时）执行；压缩失败/降级语义与原版一致（保留原 history）。
+        history = history + [{"role": "assistant", "content": acc}]
+        if engine.context_compressor.should_compress(r):
+            state["compression_due_round"] = r
         if enhanced and not state.get("opening_started"):
             started = opening_flow.start_game(state.get("opening_state"))
             if started.get("ok"):
@@ -2630,21 +2880,31 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
         # —— M2：选项由结构化填空生成（与正文并行的线程），join 后注入组装。
         #     门面内已有回退链（正文残存解析→弹性合成）；此处仅在门面彻底
         #     失败且模型仍按旧契约输出选项块时走旧的纯代码修复保险丝。 ——
+        #     v2.0.3 修正（kimi-k3 实测）：①repair_options 返回 (列表, 布尔)
+        #     元组，旧调用把元组当列表渲染导致 'list' object has no
+        #     attribute 'get' 整回合回滚；②compose 管线一律 AI-only——选项
+        #     失败即空（自由输入），绝不以中性模板句充数（硬性原则 1），
+        #     保险丝（含 _FILLER_ACTIONS 模板补齐）仅保留给旧单卷路径；
+        #     ③保险丝自身故障只降级不炸回合。
         options_thread.join(timeout=90)
         structured_options = (options_box.get("options") or []) if isinstance(options_box, dict) else []
         if structured_options:
             state["options_source"] = options_box.get("source", "model")
         final_display = fe.strip_hidden(acc)
-        if not structured_options and not engine.options_ok(final_display):
-            base = engine.truncate_partial_options(final_display)
-            parsed_now = engine.parse_options(base)
-            _rep = engine.repair_options(base, parsed_now)
-            final_display = (base + "\n\n"
-                             + engine.render_options_block(_rep)).strip() if _rep else base
-            state["elastic_repair"] = {
-                **(state.get("elastic_repair") or {}),
-                "repaired_options": True,
-            }
+        if (assembled_result is None and not structured_options
+                and not engine.options_ok(final_display)):
+            try:
+                base = engine.truncate_partial_options(final_display)
+                parsed_now = engine.parse_options(base)
+                repaired_list, _synthesized = engine.repair_options(base, parsed_now)
+                final_display = (base + "\n\n"
+                                 + engine.render_options_block(repaired_list)).strip() if repaired_list else base
+                state["elastic_repair"] = {
+                    **(state.get("elastic_repair") or {}),
+                    "repaired_options": True,
+                }
+            except Exception:  # noqa: BLE001 保险丝故障：保留正文与自由输入
+                pass
         # —— 选项结构化：选项块从叙事正文剥离写入 state["options"]，由前端按钮渲染；
         #    旧界面在正文末尾重挂规范化文本选项，保持可读。——
         narrative, options_block = _finalize_options(state, final_display, structured_options or None)

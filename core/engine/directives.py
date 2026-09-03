@@ -57,6 +57,9 @@ REGISTER_SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("conflicts", "strlist", required=False, default=[],
               max_items=CONFLICT_MAX_ITEMS, item_max_len=AFFECTED_ITEM_MAX,
               hint="与既有设定的冲突点（无冲突给空数组）"),
+    FieldSpec("affected_anchors", "strlist", required=False, default=[],
+              max_items=AFFECTED_MAX_ITEMS, item_max_len=AFFECTED_ITEM_MAX,
+              hint="受影响的锚点标题（质量门对这些锚点降级不扣分）"),
 )
 
 _WS_RE = re.compile(r"\s+")
@@ -163,6 +166,7 @@ def parse_registration(data: Any, *, allowed: Sequence[str] = (),
         "scope": _flat(payload.get("scope"), 20),
         "affected": affected,
         "conflicts": _terms(payload.get("conflicts") or ()),
+        "affected_anchors": _terms(payload.get("affected_anchors") or ()),
         "origin": "model",
         "removed_affected": removed,
     }
@@ -202,10 +206,14 @@ def register(state: dict, entry: Mapping[str, Any], *, kind: str = KIND_WISH,
         "scope": _flat(entry.get("scope"), 20) or "world",
         "affected": _terms(entry.get("affected") or ()) or [WILDCARD],
         "conflicts": _terms(entry.get("conflicts") or ()),
+        "affected_anchors": _terms(entry.get("affected_anchors") or ()),
         "origin": _flat(entry.get("origin"), 20) or "model",
         "round": int(round_no or 0),
         "raw": _flat(raw or entry.get("raw"), FACT_MAX),
         "superseded_by": 0,
+        "activated_round": 0,  # v2.0.4: 兑现检查用
+        "keywords": [],  # v2.0.4: 兑现检查关键词
+        "payload": None,  # v2.0.4: 类型化 payload
     }
     rows.append(row)
     cheat[LEDGER_KEY] = rows
@@ -341,6 +349,223 @@ def migrate_legacy(state: dict) -> dict[str, Any]:
     return {"migrated": migrated, "already": False}
 
 
+# ---------------------------------------------------------------- 类型化 payload（v2.0.4）
+
+PAYLOAD_TYPES = ("item", "ability", "relationship", "fact")
+
+def parse_typed_payload(data: Any) -> tuple[dict[str, Any] | None, list[str]]:
+    """解析类型化 payload（v2.0.4 强化：作弊码兑现进 state_memory）。
+    
+    输出形状：
+    {
+        "payload_type": "item" | "ability" | "relationship" | "fact",
+        "content": {...},  # 按类型结构化
+        "keywords": [str],  # 用于 compliance 检查
+    }
+    """
+    try:
+        payload = extract_json(data)
+    except ValueError as exc:
+        return None, [str(exc)]
+    
+    if not isinstance(payload, dict):
+        return None, ["payload 必须是 JSON 对象"]
+    
+    payload_type = str(payload.get("payload_type") or "").strip()
+    if payload_type not in PAYLOAD_TYPES:
+        return None, [f"payload_type 必须是 {'/'.join(PAYLOAD_TYPES)} 之一"]
+    
+    content = payload.get("content")
+    if not content:
+        return None, ["content 不能为空"]
+    
+    keywords = [str(k).strip() for k in (payload.get("keywords") or []) if str(k).strip()]
+    if not keywords:
+        return None, ["keywords 不能为空（用于兑现检查）"]
+    
+    result = {
+        "payload_type": payload_type,
+        "content": content,
+        "keywords": keywords[:8],  # 最多8个关键词
+    }
+    return result, []
+
+
+def grant_typed_payload(state: dict, directive_id: int, payload: Mapping[str, Any],
+                       round_no: int) -> tuple[bool, str]:
+    """将类型化 payload 落地到 state_memory（通过 apply_turn）。
+    
+    返回 (是否成功, 说明文本)
+    """
+    from core.memory import apply_turn, blank_state
+    
+    payload_type = payload.get("payload_type")
+    content = payload.get("content")
+    
+    if not payload_type or not content:
+        return False, "payload 缺少 payload_type 或 content"
+    
+    memory = state.get("state_memory")
+    if not isinstance(memory, dict):
+        memory = blank_state(state.get("mode", ""), "")
+    
+    patch: dict = {}
+    
+    try:
+        if payload_type == "item":
+            # content: {"name": str, "quantity": int}
+            item_name = str(content.get("name") or "").strip()
+            if not item_name:
+                return False, "item payload 缺少 name"
+            items = list(memory.get("assets", {}).get("items") or [])
+            items.append({
+                "name": item_name,
+                "quantity": int(content.get("quantity", 1)),
+                "source": "directive",
+                "directive_id": directive_id,
+                "round": round_no,
+            })
+            patch.setdefault("assets", {})["items"] = items
+        
+        elif payload_type == "ability":
+            # content: {"name": str, "level": int}
+            ability_name = str(content.get("name") or "").strip()
+            if not ability_name:
+                return False, "ability payload 缺少 name"
+            skills = list(memory.get("abilities", {}).get("skills") or [])
+            skills.append({
+                "name": ability_name,
+                "level": int(content.get("level", 1)),
+                "source": "directive",
+                "directive_id": directive_id,
+                "round": round_no,
+            })
+            patch.setdefault("abilities", {})["skills"] = skills
+        
+        elif payload_type == "relationship":
+            # content: {"name": str, "delta": str, "summary": str}
+            rel_name = str(content.get("name") or "").strip()
+            if not rel_name:
+                return False, "relationship payload 缺少 name"
+            rels = list(memory.get("relationships", {}).get("characters") or [])
+            rels.append({
+                "name": rel_name,
+                "relationship_delta": str(content.get("delta") or ""),
+                "summary": str(content.get("summary") or ""),
+                "source": "directive",
+                "directive_id": directive_id,
+                "round": round_no,
+            })
+            patch.setdefault("relationships", {})["characters"] = rels
+        
+        elif payload_type == "fact":
+            # content: {"statement": str}
+            statement = str(content.get("statement") or "").strip()
+            if not statement:
+                return False, "fact payload 缺少 statement"
+            assertions = list(memory.get("assertions") or [])
+            assertions.append({
+                "key": f"directive_{directive_id}",
+                "value": statement,
+                "source": "directive",
+                "round": round_no,
+            })
+            patch["assertions"] = assertions
+        
+        else:
+            return False, f"未知 payload_type: {payload_type}"
+        
+        # 通过 apply_turn 校验并落地
+        updated, _changes = apply_turn(memory, patch, round_no=round_no, source="directive")
+        state["state_memory"] = updated
+        
+        # 构建更详细的返回消息
+        if payload_type == "item":
+            return True, f"物品「{item_name}」已落地到 state_memory"
+        elif payload_type == "ability":
+            return True, f"能力「{ability_name}」已落地到 state_memory"
+        elif payload_type == "relationship":
+            return True, f"关系「{rel_name}」已落地到 state_memory"
+        elif payload_type == "fact":
+            return True, f"断言已落地到 state_memory"
+        return True, f"{payload_type} payload 已落地到 state_memory"
+    
+    except Exception as exc:
+        return False, f"落地失败: {exc}"
+
+
+# ---------------------------------------------------------------- 兑现校验（compliance）
+
+def check_compliance(state: Mapping[str, Any], narrative: str,
+                    round_window: int = 2) -> dict[str, Any]:
+    """检查最近激活的 directives 是否在正文中兑现（关键词出现检查）。
+    
+    Args:
+        state: 游戏状态
+        narrative: 本回合正文
+        round_window: 检查窗口（激活后N回合内）
+    
+    Returns:
+        {
+            "checked": [{"id": int, "compliant": bool, "missing_keywords": [str]}],
+            "violations": [{"id": int, "fact": str, "rounds_since": int}],
+        }
+    """
+    current_round = int(state.get("round", 0) or 0)
+    checked = []
+    violations = []
+    
+    for row in active_directives(state):
+        directive_id = int(row.get("id") or 0)
+        activated_round = int(row.get("activated_round") or 0)
+        
+        # 只检查最近激活的（窗口内）
+        if activated_round == 0 or current_round - activated_round > round_window:
+            continue
+        
+        # 检查 keywords 是否在正文中出现
+        keywords = row.get("keywords") or []
+        if not keywords:
+            continue
+        
+        missing = [kw for kw in keywords if kw not in narrative]
+        compliant = len(missing) == 0
+        
+        checked.append({
+            "id": directive_id,
+            "compliant": compliant,
+            "missing_keywords": missing,
+            "rounds_since": current_round - activated_round,
+        })
+        
+        if not compliant:
+            violations.append({
+                "id": directive_id,
+                "fact": row.get("fact_norm", ""),
+                "rounds_since": current_round - activated_round,
+                "missing_keywords": missing,
+            })
+    
+    return {
+        "checked": checked,
+        "violations": violations,
+    }
+
+
+def mark_activated(state: dict, directive_id: int, round_no: int) -> bool:
+    """标记 directive 已激活（记录 activated_round）。"""
+    cheat = _cheat_box(state)
+    rows = cheat.get(LEDGER_KEY)
+    if not isinstance(rows, list):
+        return False
+    
+    for row in rows:
+        if isinstance(row, dict) and int(row.get("id") or 0) == directive_id:
+            row["activated_round"] = round_no
+            return True
+    return False
+
+
 # ---------------------------------------------------------------- 提示词
 
 
@@ -397,10 +622,11 @@ def clone_state_ledger(state: dict) -> dict:
 
 __all__ = [
     "LEDGER_KEY", "MIGRATED_FLAG", "SCOPES", "WILDCARD", "KINDS",
-    "KIND_WISH", "KIND_RELAY", "REGISTER_SPECS",
+    "KIND_WISH", "KIND_RELAY", "REGISTER_SPECS", "PAYLOAD_TYPES",
     "FACT_MAX", "AFFECTED_MAX_ITEMS", "AFFECTED_ITEM_MAX",
     "mechanism_guard", "directives", "active_directives",
     "parse_registration", "fallback_entry", "register", "mark_superseded",
     "select_relevant", "build_directives_block", "migrate_legacy",
     "build_registration_prompt", "snapshot", "clone_state_ledger",
+    "parse_typed_payload", "grant_typed_payload", "check_compliance", "mark_activated",
 ]

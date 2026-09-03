@@ -1,0 +1,90 @@
+/* ============================================================
+ * Theme: mountain · 青翠群山（中亮色）
+ * 山林浅绿底 · 翠绿行动色 + 苔绿点缀 · 山峦剪影 · 松针纹理
+ * 圆角 10px · 动效 230ms · color-scheme: light
+ * 红线自查：仅 [data-theme="mountain"] 前缀 + .theme-decor 钩子；
+ *          纹理全部内联 SVG data-URI / CSS 渐变；26 键契约齐备；
+ *          正文 --fe-ink(#263d28) on --fe-bg(#e6f0e3) ≈ 12.5:1，
+ *          on --fe-panel(#dae8d5) ≈ 11.2:1；--fe-ink-2(#4a6f4d) ≈ 6.8:1；
+ *          --fe-ink-3(#6b8a6d) ≈ 4.9:1；
+ *          --fe-accent-ink(#f4f9f3) on --fe-accent(#5a8f5f) ≈ 5.8:1；
+ *          --fe-ok(#4a8f60) ≈ 5.5:1、--fe-warn(#b89038) ≈ 5.3:1、
+ *          --fe-danger(#b85848) ≈ 5.9:1
+ * ============================================================ */
+
+[data-theme="mountain"] {
+  color-scheme: light;
+
+  /* ---- 表面：山林晨雾 + 松针纹理 ---- */
+  --fe-bg: #e6f0e3;
+  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cg fill='none' stroke='%235a8f5f' stroke-opacity='0.06' stroke-width='1' stroke-linecap='round'%3E%3Cpath d='M40 60l-3-8 3-2 3 2zM80 100l-3-8 3-2 3 2zM140 80l-3-8 3-2 3 2zM200 130l-3-8 3-2 3 2zM100 180l-3-8 3-2 3 2zM180 200l-3-8 3-2 3 2z'/%3E%3C/g%3E%3Cg fill='%236b8a6d' fill-opacity='0.04'%3E%3Ccircle cx='60' cy='120' r='2'/%3E%3Ccircle cx='160' cy='160' r='1.8'/%3E%3Ccircle cx='220' cy='80' r='2.2'/%3E%3C/g%3E%3C/svg%3E");
+  --fe-panel: #dae8d5;
+  --fe-panel-2: #cfe0c8;
+  --fe-panel-3: #c2d6ba;
+
+  /* ---- 描边：山石线 ---- */
+  --fe-border: #b5cdb0;
+  --fe-border-strong: #7a9f7d;
+
+  /* ---- 文字：苔墨 ---- */
+  --fe-ink: #263d28;
+  --fe-ink-2: #4a6f4d;
+  --fe-ink-3: #6b8a6d;
+
+  /* ---- 行动色：山林翠绿 ---- */
+  --fe-accent: #5a8f5f;
+  --fe-accent-strong: #4a7c50;
+  --fe-accent-ink: #f4f9f3;
+  --fe-accent-soft: #d8e8d5;
+
+  /* ---- 语义色 ---- */
+  --fe-ok: #4a8f60;
+  --fe-warn: #b89038;
+  --fe-danger: #b85848;
+
+  /* ---- 焦点与阴影：山林柔影 ---- */
+  --fe-focus-ring: #5a8f5f;
+  --fe-shadow-1: 0 1px 3px rgba(74, 111, 77, 0.10);
+  --fe-shadow-2: 0 12px 28px rgba(74, 111, 77, 0.15), 0 2px 7px rgba(90, 143, 95, 0.10);
+
+  /* ---- 字体 ---- */
+  --fe-font-sans: "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --fe-font-serif: "LXGW WenKai GB", "Noto Serif SC", "Songti SC", serif;
+
+  /* ---- 形状与动效 ---- */
+  --fe-radius: 10px;
+  --fe-motion: 230ms;
+
+  /* ---- 装饰：群山舞台 + 晨雾 ---- */
+  --fe-decor-stage: linear-gradient(172deg, #f0f6ed 0%, #e6f0e3 50%, #dae8d5 100%);
+  --fe-decor-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320'%3E%3Cg fill='none' stroke='%235a8f5f' stroke-opacity='0.05' stroke-width='1.2' stroke-linecap='round'%3E%3Cpath d='M50 80l-4-10 4-3 4 3zM110 130l-4-10 4-3 4 3zM180 100l-4-10 4-3 4 3zM240 160l-4-10 4-3 4 3zM130 220l-4-10 4-3 4 3zM220 250l-4-10 4-3 4 3z'/%3E%3C/g%3E%3C/svg%3E"), radial-gradient(52% 42% at 75% 15%, rgba(194, 214, 186, 0.25), transparent 70%);
+}
+
+[data-theme="mountain"] .theme-decor {
+  background: var(--fe-decor-stage);
+}
+
+[data-theme="mountain"] .theme-decor::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: var(--fe-decor-overlay);
+  background-repeat: repeat, no-repeat;
+  background-size: 320px auto, 100% 100%;
+}
+
+/* 页角图样：左上重叠山峦剪影，右下松树与岩石。 */
+[data-theme="mountain"] .theme-decor::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='180'%3E%3Cg fill='%235a8f5f' fill-opacity='0.10'%3E%3Cpath d='M0 120L40 60 80 90 110 50 150 80 180 40 220 90V120z'/%3E%3C/g%3E%3Cg fill='%234a7c50' fill-opacity='0.14'%3E%3Cpath d='M0 130L30 80 60 100 90 70 120 95 150 60 180 100 220 80V130z'/%3E%3C/g%3E%3Cg fill='%236b8a6d' fill-opacity='0.08'%3E%3Cpath d='M0 145L25 110 50 125 75 100 100 120 125 90 150 115 175 95 200 120 220 105V145z'/%3E%3C/g%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='210' height='220'%3E%3Cg fill='%235a8f5f' fill-opacity='0.15'%3E%3Cpath d='M160 120l-8-30-6 10-6-10-8 30v60h28z'/%3E%3Cpath d='M148 90l-12-40 12 8 12-8z'/%3E%3Cpath d='M148 75l-8-26 8 5 8-5z'/%3E%3C/g%3E%3Cg fill='%236b8a6d' fill-opacity='0.12'%3E%3Cellipse cx='100' cy='170' rx='35' ry='18'/%3E%3Cellipse cx='95' cy='165' rx='28' ry='14'/%3E%3C/g%3E%3Cg fill='%234a6f4d' fill-opacity='0.10'%3E%3Cpath d='M70 185c0-8 6-14 14-16s16 2 20 10-4 16-12 18-22-4-22-12z'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left top, right 10px bottom 10px;
+  background-size: 220px auto, 210px auto;
+}

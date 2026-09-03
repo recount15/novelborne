@@ -1,0 +1,42 @@
+{
+  "id": "user-张滨",
+  "role": "伙伴",
+  "name": "张滨",
+  "work": "《3a1691cb4eba4d3692db3547eb2f58ea_add9acb3e0f145179866e3413b1130c9_很纯很暧昧_校对版全本_作者_鱼人二代》",
+  "archetype": "气氛担当型",
+  "desire": "经营好公司，与朋友们保持轻松愉快的关系。",
+  "fear": "失去朋友或公司经营不善。",
+  "abilities": [],
+  "relationship_vector": {
+    "杨明": "损友兼商业伙伴",
+    "林芷韵": "同事与朋友"
+  },
+  "knowledge_scope": [],
+  "voice": "嗓门大，说话直率，爱开玩笑和抱怨。",
+  "unacceptable_actions": [
+    "在关键时刻背叛杨明",
+    "对朋友的困难袖手旁观",
+    "变得沉默寡言"
+  ],
+  "background": "杨明的好友，刘唯山珠宝公司的执行总裁，性格外向，是杨明朋友圈中的活跃分子。",
+  "skill_ids": [],
+  "source": "用户上传蒸馏",
+  "gender": "male",
+  "original_position": "配角",
+  "source_medium": "上传作品",
+  "source_region": "",
+  "slot_keys": {
+    "主角栏": [
+      "通用"
+    ],
+    "伴侣栏": [
+      "通用"
+    ],
+    "伙伴栏": [
+      "并肩作战型"
+    ],
+    "宿敌栏": [
+      "通用"
+    ]
+  }
+}
