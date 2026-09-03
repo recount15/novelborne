@@ -66,3 +66,6 @@ build/FateEngine/
 build/FateEngineWindowed/
 build/pkg/
 build/pkg_win/
+
+# ---- 用户自建角色卡（运行期生成，含个人信息，绝不入库）----
+assets/data/characters/user/
