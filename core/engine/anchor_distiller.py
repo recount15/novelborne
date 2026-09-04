@@ -366,10 +366,10 @@ class AnchorDistiller:
         back = radius if lookback is None else int(lookback)
         start = max(1, current - back)
         if lookback is not None and int(lookback) < 0:
-            # 向前看模式默认假定当前章锚点已蒸馏；若首章同步蒸馏失败
-            # （锚点文件缺失），仍须把当前章纳入队列重试，否则开局永久卡死。
-            if not (self.output_dir / ("%04d.json" % current)).is_file():
-                start = current
+            # 向前看模式：始终包含当前章，确保当前章锚点在窗口内且保持最新。
+            # 即使锚点文件已存在，也可能因剧情推进需要更新（修复第7回合bug）。
+            # 章级互斥锁保证同一章不会被重复蒸馏，性能影响可控。
+            start = current
         candidates = [n for n in range(start, current + radius + 1)]
         if total is not None:
             candidates = [n for n in candidates if n <= int(total)]
