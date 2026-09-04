@@ -27,7 +27,7 @@ def good_payload(**over):
 class TestParseRegistration(unittest.TestCase):
     def test_good_payload_passes(self):
         entry, errors = directives.parse_registration(
-            good_payload(), allowed=["北墙", "旧水道", "阿岚"])
+            good_payload(), allowed=["北墙", "旧水道", "苏叶"])
         self.assertEqual(errors, [])
         self.assertIsNotNone(entry)
         self.assertEqual(entry["scope"], "world")
@@ -139,7 +139,7 @@ class TestRegisterAndLedger(unittest.TestCase):
         a, _ = directives.parse_registration(
             good_payload(fact_norm="北墙有暗渠", affected=["北墙"]), allowed=())
         b, _ = directives.parse_registration(
-            good_payload(fact_norm="药铺掌柜通医术", affected=["林秋"]), allowed=())
+            good_payload(fact_norm="药铺掌柜通医术", affected=["周桐"]), allowed=())
         directives.register(state, a, kind="wish")
         directives.register(state, b, kind="wish")
         # affected 不重叠 → 两条都留在生效集；重复仲裁应当幂等（无副作用）。
@@ -155,8 +155,8 @@ class TestSelectRelevant(unittest.TestCase):
         wall, _ = directives.parse_registration(
             good_payload(fact_norm="北墙裂痕后有暗渠", affected=["北墙"]), allowed=())
         person, _ = directives.parse_registration(
-            good_payload(fact_norm="阿岚私藏一枚铜扣", scope="character",
-                         affected=["阿岚"]), allowed=())
+            good_payload(fact_norm="苏叶私藏一枚铜扣", scope="character",
+                         affected=["苏叶"]), allowed=())
         directives.register(self.state, wall, kind="wish")
         directives.register(self.state, person, kind="relay")
 
@@ -166,8 +166,8 @@ class TestSelectRelevant(unittest.TestCase):
 
     def test_member_hit(self):
         hits = directives.select_relevant(
-            self.state, present_members=[{"name": "阿岚"}])
-        self.assertEqual([row["fact_norm"] for row in hits], ["阿岚私藏一枚铜扣"])
+            self.state, present_members=[{"name": "苏叶"}])
+        self.assertEqual([row["fact_norm"] for row in hits], ["苏叶私藏一枚铜扣"])
 
     def test_no_hit_returns_empty(self):
         hits = directives.select_relevant(self.state, anchor_words=["南门"])
@@ -202,7 +202,7 @@ class TestMigrateLegacy(unittest.TestCase):
     def test_migrates_old_keys_and_is_idempotent(self):
         state: dict = {
             "wish_facts": [{"wish": "北墙有暗渠", "granted": "北墙确有暗渠", "round": 2}],
-            "relay_facts": [{"fact": "阿岚有铜扣", "text": "阿岚确有铜扣", "round": 3}],
+            "relay_facts": [{"fact": "苏叶有铜扣", "text": "苏叶确有铜扣", "round": 3}],
         }
         first = directives.migrate_legacy(state)
         self.assertEqual(first["migrated"], 2)
@@ -224,7 +224,7 @@ class TestMigrateLegacy(unittest.TestCase):
 class TestPrompt(unittest.TestCase):
     def test_prompt_contains_text_and_format(self):
         prompt = directives.build_registration_prompt(
-            "北墙裂痕后有暗渠", kind="wish", roster=["阿岚"], worldbook=["北墙"])
+            "北墙裂痕后有暗渠", kind="wish", roster=["苏叶"], worldbook=["北墙"])
         self.assertIn("北墙裂痕后有暗渠", prompt)
         self.assertIn("fact_norm", prompt)
         self.assertNotIn("@@", prompt)

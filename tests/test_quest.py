@@ -94,7 +94,7 @@ class TestDirectorPrompt(unittest.TestCase):
     def test_quest_hint_rendered(self):
         prompt = turn_blueprint.build_director_prompt(
             paper_label="卷", stage="setup", segment_count=2, target_chars=600,
-            action="行动", context_tail="前情", active_names=["阿岚"],
+            action="行动", context_tail="前情", active_names=["苏叶"],
             quest_hint="【进行中任务】查证北墙裂痕：目标｜剩余 3 回合")
         self.assertIn("【进行中任务】查证北墙裂痕", prompt)
         self.assertNotIn("无进行中任务", prompt)
@@ -107,7 +107,7 @@ class TestDirectorPrompt(unittest.TestCase):
 
 
 # —— 管线注入（复用 test_turn_pipeline 的 ScriptedModel 形状，本地精简版）——
-ANCHOR = json.dumps({"chapter": 1, "title": "城门风硬", "summary": "守军换岗时发现北墙裂痕",
+ANCHOR = json.dumps({"chapter": 1, "title": "青崖问剑", "summary": "守军换岗时发现北墙裂痕",
                      "events": ["换岗", "查证北墙"]}, ensure_ascii=False)
 STATE = {
     "round": 3, "chapter_round": 1, "turn_budget": 3, "paper_tier": 3,
@@ -160,7 +160,7 @@ class RecordingModel:
                 if len(nums) == 2:
                     low, high = nums
                 break
-        text = f"阿岚沿着北墙查验裂痕，因此守军的换岗节奏被彻底打乱。"
+        text = f"苏叶沿着北墙查验裂痕，因此守军的换岗节奏被彻底打乱。"
         while len(text) < low:
             text += "风声压过火把的噼啪，砖缝里的旧痕愈发清楚，随行的人不敢多问。"
         return text[:high - 1] if len(text) >= high else text
@@ -169,10 +169,10 @@ class RecordingModel:
 class TestPipelineInjection(unittest.TestCase):
     def _run(self, state):
         paper = papers.get_paper(3, "setup")
-        model = RecordingModel(paper, ["阿岚"])
+        model = RecordingModel(paper, ["苏叶"])
         result = tp.run_turn(
             state, None, "m", model_fn=model, message="查验北墙裂痕",
-            context_blocks="前文略", active_members=[{"name": "阿岚"}],
+            context_blocks="前文略", active_members=[{"name": "苏叶"}],
             anchor_text=ANCHOR)
         return result, model
 

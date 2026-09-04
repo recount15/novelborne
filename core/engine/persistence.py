@@ -17,6 +17,8 @@ import time
 from pathlib import Path
 from typing import Any, Mapping, Optional, Union
 
+from core.api.save_contract import validate_for_save
+
 SCHEMA = "fate-engine-save"
 # Version 2 adds a stable, redacted opening snapshot while retaining the full
 # state payload for compatibility with existing callers and saves.
@@ -182,6 +184,8 @@ def _opening_snapshot(state: Mapping[str, Any], params: Mapping[str, Any]) -> di
 
 def _snapshot(state: Optional[Mapping[str, Any]], start_params: Optional[Mapping[str, Any]]) -> dict[str, Any]:
     state = dict(state or {})
+    save_stage = validate_for_save(state)
+    state["save_stage"] = save_stage
     params = dict(start_params or state.get("start_params") or state.get("settings") or {})
     mechanics_keys = ("nemesis", "companion", "protagonist", "heroine", "female_lead",
                       "female_protagonist", "main_character", "ripple", "ripple_state")
@@ -197,6 +201,7 @@ def _snapshot(state: Optional[Mapping[str, Any]], start_params: Optional[Mapping
         "schema": SCHEMA,
         "version": VERSION,
         "saved_at": _now(),
+        "save_stage": save_stage,
         "start_params": _without_secrets(params),
         "opening_snapshot": _opening_snapshot(state, params),
         "history": _without_secrets(state.get("history", [])),
@@ -353,6 +358,10 @@ def _restore_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
     result["start_params"] = copy.deepcopy(payload.get("start_params", result.get("start_params", {})))
     result.update(copy.deepcopy(payload.get("current", {})))
     result.update(copy.deepcopy(payload.get("mechanics", {})))
+    # Stage was introduced after the original save schema.  Do not mutate or
+    # repair options here; callers need to distinguish an opening save from a
+    # corrupt formal save.
+    result.setdefault("save_stage", payload.get("save_stage"))
     return result
 
 

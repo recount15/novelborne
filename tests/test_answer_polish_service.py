@@ -6,7 +6,7 @@ import unittest
 
 from core.services import answer_polish_service as aps
 
-DRAFT = "阿岚接过旧册。沈砚看向北墙，随后将铜扣收进袖中。"
+DRAFT = "苏叶接过旧册。李青看向北墙，随后将铜扣收进袖中。"
 
 
 class Blueprint:
@@ -21,13 +21,13 @@ class TestPrompt(unittest.TestCase):
     def test_process_prompt_contains_four_stage_material(self):
         prompt = aps.build_polish_prompt(
             DRAFT, blueprint=Blueprint(), anchor_terms=["北墙", "暗渠"],
-            active_members=[{"name": "阿岚", "character_card": {
+            active_members=[{"name": "苏叶", "character_card": {
                 "goal": "守住北门", "fear": "城破", "speech_style": "短句",
                 "unacceptable_behaviors": ["背叛同伴"],
             }}], quest_break="任务目标：拿到旧册；碎锚阶段：查证暗记",
             window=(200, 300))
         for marker in ("第一步：事实锁定", "第二步：接缝整合", "第三步：文学润色",
-                       "第四步：输出整理", "线索显形", "北墙", "阿岚", "拿到旧册",
+                       "第四步：输出整理", "线索显形", "北墙", "苏叶", "拿到旧册",
                        "200–300", DRAFT):
             self.assertIn(marker, prompt)
         self.assertNotIn("@@", prompt)
@@ -36,7 +36,7 @@ class TestPrompt(unittest.TestCase):
 class TestPolishAnswer(unittest.TestCase):
     def test_successful_polish_replaces_draft(self):
         out = aps.polish_answer(
-            DRAFT, model_fn=lambda prompt: "阿岚接过旧册，沈砚看向北墙，铜扣在袖中发出轻响。",
+            DRAFT, model_fn=lambda prompt: "苏叶接过旧册，李青看向北墙，铜扣在袖中发出轻响。",
             window=(20, 300))
         self.assertTrue(out.used)
         self.assertIn("发出轻响", out.text)

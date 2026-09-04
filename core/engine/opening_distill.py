@@ -39,6 +39,7 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from core import prompts
 from core.engine import anchor_distiller, character_designer, parallel
+from core.engine import character_semantic_distiller
 from core.engine import plot_summary, structured, work_distiller
 
 Model = Callable[[str], Any]
@@ -368,6 +369,21 @@ def _characters_extract_job(model: Model, work_title: str,
     return {"kind": "characters", "cards": cards}
 
 
+def _semantic_character_job(model: Model, card: Mapping[str, Any],
+                            chapters: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
+    """抽取后的单卡四维语义蒸馏；嵌套 schema 与原文证据由专用模块严校验。"""
+    semantic, meta = character_semantic_distiller.distill_character(
+        model, card, chapters)
+    name = str(card.get("name") or "").strip()
+    if semantic is None:
+        raise ValueError("角色语义蒸馏失败（%s）：%s" % (
+            name or "未命名角色", "；".join(meta.get("errors") or []) or "字段或证据未通过校验"))
+    enriched = dict(card)
+    enriched.update(semantic)
+    return {"kind": "character_semantics", "name": name, "card": enriched,
+            "grounded": list(meta.get("grounded") or [])}
+
+
 def _anchor_pass_job(model: Model, number: int, full_text: str) -> Dict[str, Any]:
     """第 1 章两遍法第一遍作业：只产草稿不落盘（第二遍在波次二核验后写）。"""
     draft = _distill_anchor_once(model, number, full_text)
@@ -631,10 +647,11 @@ def _default_save_characters(cards: List[Mapping[str, Any]]) -> List[Dict[str, A
 
 
 def _process_characters(model: Model, work_title: str, raw_cards: Sequence[Any],
-                        anchor_entries: Sequence[str]
+                        anchor_entries: Sequence[str],
+                        chapters: Optional[Sequence[Mapping[str, Any]]] = None
                         ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """角色卡入库强化：归一 → 质量门（flat 重填一次仍不过丢弃）→ 排序截断
-    → 防编造剔除。返回 (待入库卡列表, 报告条目列表)。"""
+    → 防编造剔除 → 四维语义蒸馏（可选）。返回 (待入库卡列表, 报告条目列表)。"""
     entries: List[Dict[str, Any]] = []
     kept: List[Tuple[Dict[str, Any], Dict[str, Any]]] = []
     for raw in raw_cards or []:
@@ -672,6 +689,17 @@ def _process_characters(model: Model, work_title: str, raw_cards: Sequence[Any],
     final_cards: List[Dict[str, Any]] = []
     for card, quality in kept:
         removed = _sanitize_relationships(card, batch_names, anchor_entries)
+        # 四维语义蒸馏（可选，有章节原文时才执行）。
+        semantic_grounded: List[str] = []
+        if chapters:
+            try:
+                semantic, meta = character_semantic_distiller.distill_character(
+                    model, card, chapters, attempts=2)
+                if semantic is not None:
+                    card.update(semantic)
+                    semantic_grounded = list(meta.get("grounded") or [])
+            except Exception:  # noqa: BLE001 四维蒸馏失败不阻塞入库
+                pass
         final_cards.append(card)
         entries.append({
             "name": str(card.get("name") or ""),
@@ -682,6 +710,7 @@ def _process_characters(model: Model, work_title: str, raw_cards: Sequence[Any],
             "quality": {"score": quality.get("score"), "level": quality.get("level"),
                         "label": quality.get("label")},
             "removed_relation_keys": removed,
+            "semantic_grounded": semantic_grounded,
             "saved": False,
         })
     return final_cards, entries
@@ -985,13 +1014,13 @@ def run_opening_pipeline(book_dir: str | Path,
     timings["archive"] = round(time.perf_counter() - archive_started, 3)
     _emit_progress(progress, "archive_done", work_id=(work_entry or {}).get("work_id"))
 
-    # ---- 角色卡入库强化（质量门 + 防编造 + 入库）----
+    # ---- 角色卡入库强化（质量门 + 防编造 + 四维语义蒸馏 + 入库）----
     characters_started = time.perf_counter()
     if raw_cards is None:
         errors.append("角色抽取卷失败，本局未入库新角色卡")
     else:
         final_cards, entries = _process_characters(
-            model, work_title, raw_cards, anchor_entries)
+            model, work_title, raw_cards, anchor_entries, chapters)
         saver = save_characters_fn or _default_save_characters
         saved: List[Any] = []
         try:

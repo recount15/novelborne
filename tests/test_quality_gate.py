@@ -27,11 +27,11 @@ GOOD_OPTIONS = tuple({"key": key, "text": text} for key, text in zip(
     )))
 CONTEXT = {
     "world_terms": ["北墙", "守军"], "anchor_terms": ["北门失守"],
-    "character_names": ["沈青", "阿岚"],
+    "character_names": ["沈青", "苏叶"],
     "previous_narrative": "沈青在北墙发现守军换岗的裂痕。",
 }
 CONTRACTS = {"required_terms": ["玄铁令"], "forbidden_terms": ["系统提示"]}
-GOOD = "沈青握紧玄铁令，沿着北墙听见守军换岗的脚步。阿岚指向城门，低声道：‘北门失守。’雨幕中火把骤然熄灭，众人随即转身避开追兵。"
+GOOD = "沈青握紧玄铁令，沿着北墙听见守军换岗的脚步。苏叶指向城门，低声道：‘北门失守。’雨幕中火把骤然熄灭，众人随即转身避开追兵。"
 
 
 class QualityGateTests(unittest.TestCase):
@@ -67,13 +67,13 @@ class QualityGateTests(unittest.TestCase):
         self.assertIn("duplicate_options", codes)
 
     def test_required_forbidden_context_anchor_and_character_terms(self):
-        card = score_turn("阿岚沿着南街离开，系统提示：安全。", GOOD_OPTIONS, CONTEXT, CONTRACTS)
+        card = score_turn("苏叶沿着南街离开，系统提示：安全。", GOOD_OPTIONS, CONTEXT, CONTRACTS)
         codes = {issue.code for issue in card.issues}
         self.assertIn("missing_required_terms", codes)
         self.assertIn("forbidden_terms", codes)
         self.assertIn("partial_coverage", codes)
         self.assertIn("missing_anchor", codes)
-        self.assertNotIn("missing_character", codes)  # 阿岚 命中，至少一名角色即可
+        self.assertNotIn("missing_character", codes)  # 苏叶 命中，至少一名角色即可
 
     def test_judge_requires_supported_evidence(self):
         def supported(payload):

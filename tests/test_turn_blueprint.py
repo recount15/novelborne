@@ -9,7 +9,7 @@ from core.engine import turn_blueprint as tb
 
 ANCHOR = json.dumps({
     "chapter": 1,
-    "title": "城门风硬",
+    "title": "青崖问剑",
     "summary": "守军换岗时发现北墙裂痕",
     "events": ["换岗", "查证北墙"],
     "quotes": ["城门的风很硬"],
@@ -55,7 +55,7 @@ class TestAnchorTerms(unittest.TestCase):
 class TestParseBlueprint(unittest.TestCase):
     def setUp(self):
         self.terms = tb.extract_anchor_terms(ANCHOR)
-        self.names = ["阿岚", "林秋"]
+        self.names = ["苏叶", "周桐"]
 
     def test_good_blueprint_passes(self):
         plan, errors = tb.parse_blueprint(
@@ -152,7 +152,7 @@ class TestSynthesizeBlueprint(unittest.TestCase):
         plan = tb.synthesize_blueprint(
             segment_roles=[("开场", (200, 300)), ("收束", (300, 420))],
             action="查验北墙裂痕", anchor_terms=terms,
-            active_names=["阿岚"], gf_hint="先知", persona_hint="苟道")
+            active_names=["苏叶"], gf_hint="先知", persona_hint="苟道")
         self.assertEqual(plan.origin, "synthesized")
         self.assertEqual(len(plan.segments), 2)
         self.assertEqual(len(plan.option_seeds), 6)
@@ -180,10 +180,10 @@ class TestDirectorPrompt(unittest.TestCase):
     def test_prompt_renders_all_placeholders(self):
         prompt = tb.build_director_prompt(
             paper_label="标准", stage="climax", segment_count=3, target_chars=950,
-            action="查验北墙", context_tail="前文", active_names=["阿岚"],
+            action="查验北墙", context_tail="前文", active_names=["苏叶"],
             anchor_text=ANCHOR, ripple_hint="L1", gf_hint="先知", persona_hint="苟道")
         self.assertNotIn("@@", prompt)
-        self.assertIn("阿岚", prompt)
+        self.assertIn("苏叶", prompt)
         self.assertIn("950", prompt)
 
 

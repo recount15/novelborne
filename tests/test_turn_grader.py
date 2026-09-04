@@ -239,7 +239,7 @@ class TestGradeOptions(unittest.TestCase):
 
 class TestGradeCharacterPatch(unittest.TestCase):
     NARRATIVE = "雨夜渡口，沈青接过玄铁令，看向舱内昏睡的少年，两人短暂交谈后各自戒备。"
-    ROSTER = ("沈青", "阿岚")
+    ROSTER = ("沈青", "苏叶")
 
     def _patch(self, **overrides):
         base = dict(name="沈青", evidence="沈青接过玄铁令",
@@ -256,7 +256,7 @@ class TestGradeCharacterPatch(unittest.TestCase):
 
     def test_unknown_name(self):
         valid, rejected = turn_grader.grade_character_patch(
-            [self._patch(name="林秋")], self.ROSTER, self.NARRATIVE)
+            [self._patch(name="周桐")], self.ROSTER, self.NARRATIVE)
         self.assertEqual(valid, [])
         self.assertEqual(len(rejected), 1)
         self.assertIn("名册", rejected[0][1])
@@ -287,13 +287,13 @@ class TestGradeCharacterPatch(unittest.TestCase):
 
     def test_mixed_split(self):
         patches = [self._patch(),
-                   self._patch(name="林秋"),
-                   self._patch(name="阿岚", evidence="看向舱内昏睡的少年",
+                   self._patch(name="周桐"),
+                   self._patch(name="苏叶", evidence="看向舱内昏睡的少年",
                                relationship_delta="稳定", summary="仍在观望")]
         valid, rejected = turn_grader.grade_character_patch(patches, self.ROSTER, self.NARRATIVE)
-        self.assertEqual([item["name"] for item in valid], ["沈青", "阿岚"])
+        self.assertEqual([item["name"] for item in valid], ["沈青", "苏叶"])
         self.assertEqual(len(rejected), 1)
-        self.assertEqual(rejected[0][0]["name"], "林秋")
+        self.assertEqual(rejected[0][0]["name"], "周桐")
 
 
 CLEAN_TEXT = (

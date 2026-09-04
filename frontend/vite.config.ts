@@ -5,7 +5,8 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [vue(), tailwindcss()],
   build: {
-    emptyOutDir: false,
+    // Release builds must never retain files emitted by an older bundle.
+    emptyOutDir: true,
   },
   server: {
     proxy: {

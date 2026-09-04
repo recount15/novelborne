@@ -29,21 +29,21 @@ def make_card(cid: str, name: str, work: str, *, archetype: str = "配角",
 
 
 CARDS = [
-    make_card("w1", "沈砚", "城门风硬"),
-    make_card("w1b", "阿岚", "《城门风硬》"),
-    make_card("w2", "楚牧", "很纯很暧昧"),
-    make_card("w3", "林秋", "机娘纪元"),
+    make_card("w1", "角色甲", "原创示例一"),
+    make_card("w1b", "角色乙", "《原创示例一》"),
+    make_card("w2", "角色丙", "原创示例二"),
+    make_card("w3", "角色丁", "机娘纪元"),
     make_card("g1", "原创甲", ""),
 ]
 
 
 class TestSameWork(unittest.TestCase):
     def test_normalizes_brackets_and_extension(self):
-        self.assertTrue(server._same_work("《城门风硬》", "城门风硬.txt"))
-        self.assertTrue(server._same_work("城门风硬", "城门风硬"))
-        self.assertFalse(server._same_work("城门风硬", "机娘纪元"))
-        self.assertFalse(server._same_work("", "城门风硬"))
-        self.assertFalse(server._same_work("城门风硬", ""))
+        self.assertTrue(server._same_work("《青崖问剑》", "青崖问剑.txt"))
+        self.assertTrue(server._same_work("青崖问剑", "青崖问剑"))
+        self.assertFalse(server._same_work("青崖问剑", "机娘纪元"))
+        self.assertFalse(server._same_work("", "青崖问剑"))
+        self.assertFalse(server._same_work("青崖问剑", ""))
 
 
 class TestPoolWorkFilter(unittest.TestCase):
@@ -62,11 +62,11 @@ class TestPoolWorkFilter(unittest.TestCase):
     def test_no_work_returns_all(self):
         self.assertEqual(
             self._names(self._pool()),
-            sorted(["沈砚", "阿岚", "楚牧", "林秋", "原创甲"]))
+            sorted(["角色甲", "角色乙", "角色丙", "角色丁", "原创甲"]))
 
     def test_work_filter_keeps_same_book_and_generic(self):
-        names = self._names(self._pool(work="城门风硬"))
-        self.assertEqual(names, ["原创甲", "沈砚", "阿岚"])
+        names = self._names(self._pool(work="原创示例一"))
+        self.assertEqual(sorted(names), ["原创甲", "角色乙", "角色甲"])
 
     def test_work_filter_without_match_keeps_only_generic(self):
         # 宁缺毋滥：查无此书的卡不展示，只剩无出处（原创/通用）卡。

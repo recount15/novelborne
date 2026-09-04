@@ -11,6 +11,7 @@ import re
 import queue
 import threading
 import contextvars
+from core.api import save_contract
 from core.ui import gradio_compat as gr
 
 from core import fate_engine as fe
@@ -464,7 +465,7 @@ def _finalize_options(state, acc, structured_options=None):
         items = [item for item in structured_options
                  if isinstance(item, dict) and str(item.get("text") or "").strip()]
         if items:
-            state["options"] = [
+            candidate = [
                 {"key": str(item.get("key") or "").strip().upper(),
                  "text": str(item.get("text") or "").strip(),
                  "preview": str(item.get("preview") or "").strip(),
@@ -472,18 +473,21 @@ def _finalize_options(state, acc, structured_options=None):
                  "factors": item.get("factors")
                  or engine.match_option_factors(str(item.get("text") or ""), factors)}
                 for item in items]
-            narrative = engine.strip_options_block(display) or display
-            options_block = options_service.render_display_block(state["options"])
-            return narrative, options_block
+            if save_contract.valid_options(candidate):
+                state["options"] = candidate
+                narrative = engine.strip_options_block(display) or display
+                options_block = options_service.render_display_block(state["options"])
+                return narrative, options_block
     parsed = engine.parse_options(display)
-    state["options"] = [
+    candidate = [
         {"key": item["key"], "text": item["text"],
          "factors": engine.match_option_factors(item["text"], factors)}
         for item in parsed
     ]
-    if not parsed:
+    state["options"] = candidate if save_contract.valid_options(candidate) else []
+    if not save_contract.valid_options(candidate):
         return display, ""
-    return engine.strip_options_block(display), engine.render_options_block(parsed)
+    return engine.strip_options_block(display), engine.render_options_block(candidate)
 
 
 def _render_engine_log(state, message, narrative, round_no, rumor=None):
@@ -1882,6 +1886,7 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
                             "renames": renames, "roster_card_ids": list(roster_card_ids or []),
                             "thinking_mode": thinking_mode, "thinking_param": thinking_param},
            "persona": persona_label, "convergence": convergence, "options": [],
+           "save_stage": "opening" if enhanced else "streaming",
            "story_richness": story_richness,
            "paper_tier": int(paper_tier),
            "paper_family": engine.papers.family_for_tier(int(paper_tier)),
@@ -1948,13 +1953,7 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
                                                            gf_confirmed=True, gf_stage="confirmed",
                                                            opening_confirmed=True, started=True,
                                                            phase=opening_flow.PHASE_STARTED)
-    # 每次开局都先保存完整配置和初始运行状态；API Key 由 persistence 统一脱敏。
-    if not enhanced:
-        try:
-            engine.persistence.save_state(st0, root=fe.WRITABLE_DIR, start_params=st0.get("start_params"),
-                           session_id=str(st0.get("session_id") or "") or None)
-        except (OSError, TypeError, ValueError):
-            pass
+    # 基础模式不在选项生成前落盘：没有 A-F 的状态不能作为可继续存档。
     try:
         client = fe.make_client(api_key, provider, base_url)
         # 开局前模型准备的降级日志在此落 wiring（st0 已存在）
@@ -2037,17 +2036,23 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
             # 起接续前瞻（enqueue 自动跳过已落盘章节），不再同步补首章。
             _start_background_distillation(st0, client, model, sync_first=False)
             # 强化模式在此只完成剧情准备；正式第一幕必须由聊天框两步确认后触发。
+            # 生成开局回执
+            from core.engine import opening_receipt
+            receipt = opening_receipt.build_opening_receipt(st0)
+            st0["opening_receipt"] = receipt
+            receipt_text = opening_receipt.format_receipt_text(receipt)
+
             st0["history"] = [
                 {"role": "assistant", "content": _gameplay_briefing(mode, nemesis_on)},
                 {"role": "assistant", "content": (
-                    "✅ TXT 已切章，剧情提取已完成。\n\n"
-                    "剧情大概：\n" + _humanize_plot_summary(summary) + "\n\n"
+                    "✅ TXT 已切章，剧情提取已完成。" + "\n\n"
+                    + receipt_text + "\n\n"
                     + ("" if st0.get("traverse_receipt") else
                        "开局核对将列出「穿越对照表」：逐一交代每位穿越者（主角、伴侣、伙伴、宿敌）"
-                       "穿越成了书中哪位角色及其生理性别——附身不受性别限制，以书中身体为准。\n\n")
+                       "穿越成了书中哪位角色及其生理性别——附身不受性别限制，以书中身体为准。" + "\n\n")
                     + "请在本聊天框输入“确认金手指”（或“确认无金手指”），然后再输入“确认开局”。"
                 )},
-            ]
+]
             st0["system"] += "\n\n【开局门禁】等待正式游戏聊天框确认金手指与开局设定后，才生成第一幕。"
             st0["anchor_timeline"] = _anchor_timeline(st0)
             if st0.get("traverse_receipt"):
@@ -2069,6 +2074,7 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
                 st0["session"] = session
             except (OSError, TypeError, ValueError):
                 pass
+            st0["save_stage"] = "opening"
             engine.persistence.save_state(st0, root=fe.WRITABLE_DIR, start_params=st0.get("start_params"),
                            session_id=str(st0.get("session_id") or "") or None)
             yield _out_start([{"role": "assistant", "content": st0["history"][0]["content"]}], st0,
@@ -2076,7 +2082,16 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
                              u1=hide, u2=show, u3=chat_on, u4=gr.update(visible=True))
             return
         # 基础模式同样先给玩家一份玩法速览（进持久历史，加载存档后仍可回看）。
-        opening_msgs = [{"role": "assistant", "content": _gameplay_briefing(mode, nemesis_on)}]
+        # 生成开局回执
+        from core.engine import opening_receipt
+        receipt = opening_receipt.build_opening_receipt(st0)
+        st0["opening_receipt"] = receipt
+        receipt_text = opening_receipt.format_receipt_text(receipt)
+        
+        opening_msgs = [
+            {"role": "assistant", "content": _gameplay_briefing(mode, nemesis_on)},
+            {"role": "assistant", "content": receipt_text},
+        ]
         if st0.get("traverse_receipt"):
             opening_msgs.append({"role": "assistant", "content": st0["traverse_receipt"]})
         history = history + opening_msgs
@@ -2102,8 +2117,15 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
         opening_display, opening_options_block = _finalize_options(st0, acc)
         opening_content = (opening_display + "\n\n" + opening_options_block).strip() \
             if opening_options_block else opening_display
+        if not save_contract.valid_options(st0.get("options")):
+            raise ValueError("开局未生成完整 A-F 选项，正式状态未提交；请重试")
+        st0["history"] = history
+        st0["save_stage"] = "committed"
+        engine.persistence.save_state(
+            st0, root=fe.WRITABLE_DIR, start_params=st0.get("start_params"),
+            session_id=str(st0.get("session_id") or "") or None)
         yield _out_start([{"role": "assistant", "content": opening_content}],
-                         dict(st0, history=history), status,
+                         st0, status,
                          u1=hide, u2=show, u3=chat_on, u4=gr.update(visible=True))
     except Exception as e:  # noqa: BLE001
         yield _out_start([{"role": "assistant", "content": f"⚠️ 调用模型服务失败：{e}"}],
@@ -2226,6 +2248,10 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
             state["opening_state"] = result["state"]
             state["gf_confirmed"] = True
             state["gf_stage"] = "confirmed"
+            state["save_stage"] = "opening"
+            engine.persistence.save_state(
+                state, root=fe.WRITABLE_DIR, start_params=state.get("start_params"),
+                session_id=str(state.get("session_id") or "") or None)
             chatbot = chatbot + [{"role": "user", "content": message}, {"role": "assistant", "content": "✅ 金手指已在正式游戏聊天框确认。请继续输入“确认开局”，我才会生成第一幕。"}]
             yield _out_send(chatbot, state, msg_update=gr.update(value=""))
             return
@@ -2254,6 +2280,10 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
             state["opening_state"] = result["state"]
             state["opening_confirmed"] = True
             state["opening_phase"] = opening_flow.PHASE_OPENING_CONFIRMED
+            state["save_stage"] = "opening"
+            engine.persistence.save_state(
+                state, root=fe.WRITABLE_DIR, start_params=state.get("start_params"),
+                session_id=str(state.get("session_id") or "") or None)
             chatbot = chatbot + [{"role": "user", "content": message}, {"role": "assistant", "content": "✅ 开局设定已确认，正在生成第一幕。"}]
             yield _out_send(chatbot, state, msg_update=gr.update(value=""))
             message = "开始第一幕。请依据已确认设定生成正式开场。"
@@ -2265,6 +2295,8 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
     state["thinking_param"] = thinking_param or state.get("thinking_param", "")
     request_kwargs = _thinking_kwargs(provider, state["thinking_mode"], state["thinking_param"])
     state["request_kwargs"] = request_kwargs
+    # 初始化客户端必须早于压缩分支：每 10 回合登记的压缩在下一回合开头执行。
+    client = fe.make_client(api_key, provider, base_url)
     # —— 回合计数与机械章节预算 ——
     # 强化回合必须是事务：锚点缺失、模型异常或输出未通过硬门禁时，运行态均要回滚。
     enhanced = (state.get("mode") or "").startswith("强化")
@@ -2304,6 +2336,7 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
     transaction_snapshot = {
         key: copy.deepcopy(state.get(key)) for key in state_schema.TRANSACTIONAL_KEYS
     }
+    state["save_stage"] = "streaming"
     state["round"] = state.get("round", 0) + 1
     r = state["round"]
     # v2.0.5 S3：上回合登记的压缩在此执行（用户此刻在等待新回合生成，压缩
@@ -2395,7 +2428,6 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
                          {"role": "assistant", "content": "…"}]
     yield _out_send(chatbot, dict(state, history=history))
     try:
-        client = fe.make_client(api_key, provider, base_url)
         # —— M5：铁律账本按相关性选择注入（未命中不注入，解决 relay 无限累积）。
         #     旧 wish_facts/relay_facts 在门面内惰性迁移，前端契约不变。 ——
         turn_system = state["system"]
@@ -2798,7 +2830,6 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
         # v2.0.5 S3：上下文压缩移出回合关键路径——不再阻塞本回合最终推送，
         # 改为登记待压缩回合号，在下一回合 on_send 开头（用户已在读上一回合
         # 正文时）执行；压缩失败/降级语义与原版一致（保留原 history）。
-        history = history + [{"role": "assistant", "content": acc}]
         if engine.context_compressor.should_compress(r):
             state["compression_due_round"] = r
         if enhanced and not state.get("opening_started"):
@@ -2908,6 +2939,17 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
         # —— 选项结构化：选项块从叙事正文剥离写入 state["options"]，由前端按钮渲染；
         #    旧界面在正文末尾重挂规范化文本选项，保持可读。——
         narrative, options_block = _finalize_options(state, final_display, structured_options or None)
+        if not save_contract.valid_options(state.get("options")):
+            for key, value in transaction_snapshot.items():
+                if value is None:
+                    state.pop(key, None)
+                else:
+                    state[key] = copy.deepcopy(value)
+            state["save_stage"] = "committed"
+            chatbot[-1] = {"role": "assistant", "content": "⚠️ 本回合未生成完整 A-F 选项，已回滚本回合状态，请重试。"}
+            yield _out_send(chatbot, state)
+            return
+        state["save_stage"] = "committed"
         chatbot[-1] = {"role": "assistant",
                        "content": (narrative + "\n\n" + options_block).strip() if options_block else narrative}
         # 十回合压缩可能改变 history；最终落盘和事件必须使用同一版本。
@@ -2916,6 +2958,13 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
                            session_id=str(state.get("session_id") or "") or None)
         yield _out_send(chatbot, state)
     except Exception as e:  # noqa: BLE001
+        # Any failed turn must leave the last committed snapshot usable.
+        for key, value in transaction_snapshot.items():
+            if value is None:
+                state.pop(key, None)
+            else:
+                state[key] = copy.deepcopy(value)
+        state["save_stage"] = "committed"
         # M3 前置修复：回滚前先收拢选项生成线程——不 join 会泄漏在途模型调用，
         # 用户立刻重试时叠加多个并发额度占用。短超时后放弃等待（daemon 线程）。
         try:
@@ -2923,8 +2972,6 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
         except Exception:  # noqa: BLE001 线程未启动/已结束均忽略
             pass
         if enhanced:
-            for key, value in transaction_snapshot.items():
-                state[key] = copy.deepcopy(value)
             state["scene_gate"] = False
             state["scene_gate_reason"] = "模型服务调用失败，已回滚本回合运行状态。"
         chatbot[-1] = {"role": "assistant", "content": f"⚠️ 调用模型服务失败：{e}"}

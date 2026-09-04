@@ -17,7 +17,7 @@ from core.services import directives_service as ds
 def base_state(**over):
     state = {
         "round": 5,
-        "companions": [{"name": "阿岚"}, {"name": "林秋"}],
+        "companions": [{"name": "苏叶"}, {"name": "周桐"}],
         "lore_hits": ["北墙"],
         "state_memory": {"location": {"name": "城门", "region": "北境"}},
         "ledger": {"cheat": {}},
@@ -27,8 +27,8 @@ def base_state(**over):
 
 
 def register_json(**over):
-    payload = {"fact_norm": "阿岚其实是旧部统领的遗孤",
-               "scope": "character", "affected": ["阿岚"], "conflicts": []}
+    payload = {"fact_norm": "苏叶其实是旧部统领的遗孤",
+               "scope": "character", "affected": ["苏叶"], "conflicts": []}
     payload.update(over)
     return json.dumps(payload, ensure_ascii=False)
 
@@ -38,14 +38,14 @@ class TestGrantWish(unittest.TestCase):
         state = base_state()
         cheat_code.arm(state)
         before = cheat_code.remaining_wishes(state)
-        result = ds.grant_wish(state, "让阿岚成为旧部统领的遗孤",
+        result = ds.grant_wish(state, "让苏叶成为旧部统领的遗孤",
                                model_fn=lambda p: register_json())
         self.assertTrue(result["granted"])
         self.assertEqual(result["remaining"], before - 1)
         rows = directives.active_directives(state)
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["kind"], "wish")
-        self.assertEqual(rows[0]["affected"], ["阿岚"])
+        self.assertEqual(rows[0]["affected"], ["苏叶"])
 
     def test_no_charge_when_registration_and_fallback_fail(self):
         """护栏剥空 → 客户端错误 → 绝不扣费（原子性）。"""
@@ -98,9 +98,9 @@ class TestGrantWish(unittest.TestCase):
         cheat_code.arm(state)
         secret = "sk-abcdef123456"
         result = ds.grant_wish(
-            state, f"让阿岚带着 {secret} 出现",
+            state, f"让苏叶带着 {secret} 出现",
             api_key=secret,
-            model_fn=lambda p: register_json(fact_norm=f"阿岚握着 {secret} 的信物"))
+            model_fn=lambda p: register_json(fact_norm=f"苏叶握着 {secret} 的信物"))
         blob = json.dumps(directives.directives(state), ensure_ascii=False)
         self.assertNotIn(secret, blob, "账本不得留存 API Key")
         self.assertNotIn(secret, json.dumps(result, ensure_ascii=False))

@@ -24,15 +24,15 @@ from core.engine import opening_distill  # noqa: E402
 
 # ---------------------------------------------------------------- 测试书原文
 
-CH1 = ("沈砚推开城门，风雪扑面而来。他握紧了手中的刀，望向长街尽头的灯火。"
+CH1 = ("李青推开城门，风雪扑面而来。他握紧了手中的刀，望向长街尽头的灯火。"
        "白芷在城楼上点灯，影子被拉得很长。这是一个关于复仇与守护的故事的开端。")
 CH1_QUOTE = "他握紧了手中的刀，望向长街尽头的灯火。"
 
 CH2 = ("第二日的清晨，雪终于停了。白芷递来一封信，信上只有四个字：城主要见。"
-       "沈砚沉默良久，把信收进了袖中。")
+       "李青沉默良久，把信收进了袖中。")
 
 _LONG_PARA = ("北境的战线绵延千里，军旗在风里猎猎作响。斥候来报，敌军已过冰河。"
-              "沈砚下令就地扎营，白芷清点了粮草。夜里他翻开旧地图，圈出三处隘口。")
+              "李青下令就地扎营，白芷清点了粮草。夜里他翻开旧地图，圈出三处隘口。")
 CH3 = _LONG_PARA * 60  # > 3500 字，触发长章 map-reduce
 
 CH4 = "尾声未至，长夜仍需点灯。城门的钥匙最终交到了谁的手上，无人知晓。"
@@ -101,8 +101,8 @@ class FakeModel:
 
 def plot_sample_reply(prompt: str) -> str:
     return json.dumps({
-        "main_events": ["沈砚风雪夜入城", "城主递信召见", "北境战事将起"],
-        "characters": ["沈砚", "白芷"],
+        "main_events": ["李青风雪夜入城", "城主递信召见", "北境战事将起"],
+        "characters": ["李青", "白芷"],
         "tone": "冷峻苍茫的东方玄幻",
         "threads": ["灭门旧案", "城主之谜", "北境战事"],
     }, ensure_ascii=False)
@@ -111,14 +111,14 @@ def plot_sample_reply(prompt: str) -> str:
 def plot_merge_reply(prompt: str) -> str:
     return json.dumps({
         "genre": "东方玄幻（复仇流）",
-        "premise": "废刀之刃沈砚重回边城，在城主召见与北境战事之间周旋，誓要查清当年灭门真相。",
+        "premise": "废刀之刃李青重回边城，在城主召见与北境战事之间周旋，誓要查清当年灭门真相。",
         "major_threads": ["灭门旧案", "城主之谜", "北境战事"],
         "tone": "冷峻克制",
     }, ensure_ascii=False)
 
 
 RICH_CARD = {
-    "name": "沈砚", "gender": "male", "original_position": "主角",
+    "name": "李青", "gender": "male", "original_position": "主角",
     "archetype": "隐忍复仇者", "desire": "查清灭门真相并复仇", "fear": "再次失去珍视之人",
     "voice": "短句冷峻，少言", "voice_samples": ["风雪要来了。", "刀在人在。"],
     "background": "沈家灭门后隐居边城的旧刀客", "unacceptable_actions": ["伤害无辜", "背叛同伴"],
@@ -131,7 +131,7 @@ FLAT_CARD = {"name": "路人乙", "gender": "unknown", "original_position": "配
 
 #: 半成品卡：缺 desire/台词样本/行为禁区 → flat，但重填可救活。
 SEMI_CARD = {
-    "name": "沈砚", "gender": "male", "original_position": "主角",
+    "name": "李青", "gender": "male", "original_position": "主角",
     "fear": "再次失去珍视之人", "voice": "短句冷峻，少言",
     "background": "沈家灭门后隐居边城的旧刀客",
     "relationship_vector": {"白芷": "互相信任的盟友"},
@@ -175,7 +175,7 @@ def anchor_pass_reply(prompt: str) -> str:
     return json.dumps({
         "chapter": number, "title": "第%d章锚点" % number,
         "summary": _sentence(original), "events": ["主角入城", "城楼点灯"],
-        "characters": ["沈砚", "白芷"], "world": "北境边城风雪连年。",
+        "characters": ["李青", "白芷"], "world": "北境边城风雪连年。",
         "foreshadowing": ["城主的信"], "quotes": [quote], "ripple": "复仇之局初开。",
     }, ensure_ascii=False)
 
@@ -185,7 +185,7 @@ def block_reply(prompt: str) -> str:
     block_text = prompt.split("【块原文】", 1)[1]
     return json.dumps({
         "summary": "本块：北境战线推进与扎营。",
-        "events": ["敌军过冰河", "沈砚下令扎营"], "characters": ["沈砚", "白芷"],
+        "events": ["敌军过冰河", "李青下令扎营"], "characters": ["李青", "白芷"],
         "quotes": [_sentence(block_text)], "world": "北境战线绵延。",
         "foreshadowing": ["三处隘口"], "ripple": "战事升级。",
     }, ensure_ascii=False)
@@ -201,7 +201,7 @@ def anchor_merge_reply(prompt: str) -> str:
                 picked.append(quote)
     return json.dumps({
         "chapter": 3, "title": "北境扎营", "summary": "战线推进，沈嬛下令扎营备战。",
-        "events": ["敌军过冰河", "沈砚扎营", "圈定隘口"], "characters": ["沈砚", "白芷"],
+        "events": ["敌军过冰河", "李青扎营", "圈定隘口"], "characters": ["李青", "白芷"],
         "world": "北境战线绵延千里。", "foreshadowing": ["三处隘口"],
         "quotes": picked[:3] or [_sentence(section)], "ripple": "战事全面升级。",
     }, ensure_ascii=False)
@@ -212,8 +212,8 @@ def verify_reply(prompt: str) -> str:
     original = prompt.split("【章节原文】", 1)[1]
     return json.dumps({
         "chapter": 1, "title": "城门风雪（核验）",
-        "summary": _sentence(original), "events": ["沈砚入城", "白芷点灯"],
-        "characters": ["沈砚", "白芷"], "world": "北境边城风雪连年。",
+        "summary": _sentence(original), "events": ["李青入城", "白芷点灯"],
+        "characters": ["李青", "白芷"], "world": "北境边城风雪连年。",
         "foreshadowing": ["城主的信"], "quotes": [_sentence(original), CH1_QUOTE],
         "ripple": "复仇之局经核验。",
     }, ensure_ascii=False)
@@ -325,11 +325,11 @@ class TestOpeningPipeline(unittest.TestCase):
         report, model = self._run(FULL_RULES)
         by_name = {entry["name"]: entry for entry in report["characters"]}
         # playable 卡入库：质量档位达标且经注入通道保存。
-        rich = by_name.get("沈砚")
+        rich = by_name.get("李青")
         self.assertIsNotNone(rich)
         self.assertIn(rich["quality"]["level"], ("playable", "soulful"))
         self.assertTrue(rich["saved"])
-        self.assertEqual(self.saved_cards[0]["name"], "沈砚")
+        self.assertEqual(self.saved_cards[0]["name"], "李青")
         # flat 卡重填一次仍不过 → 丢弃并记录，不入库。
         flat = by_name.get("路人乙")
         self.assertIsNotNone(flat)
@@ -358,7 +358,7 @@ class TestOpeningPipeline(unittest.TestCase):
         ]
         report, model = self._run(rules)
         by_name = {entry["name"]: entry for entry in report["characters"]}
-        card = by_name.get("沈砚")
+        card = by_name.get("李青")
         self.assertIsNotNone(card)
         self.assertEqual(model.count("角色卡重填"), 1)  # flat 触发了一次定向重填
         self.assertIn(card["quality"]["level"], ("playable", "soulful"))

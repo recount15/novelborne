@@ -17,10 +17,8 @@ from typing import Any, Callable
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 OUT_DIR = ROOT / "outputs"
-# 数据与工具分离：默认样本 TXT 放 data/samples/（不属于本工具包）。
-# 可用 PLAYTEST_TXT 环境变量覆盖；runner 启动配置里也可用 txt_path 字段注入。
-TXT_PATH = Path(os.environ.get(
-    "PLAYTEST_TXT", str(ROOT / "assets" / "data" / "samples" / "边城档案.txt")))
+# 原著 TXT 不随工具包分发：必须通过 PLAYTEST_TXT 环境变量或启动配置 txt_path 注入。
+TXT_PATH = Path(os.environ["PLAYTEST_TXT"]) if os.environ.get("PLAYTEST_TXT") else None
 REPORT_PATH = OUT_DIR / "playtest_monitor_report.json"
 
 
@@ -123,7 +121,9 @@ def run(rep, should_stop: Callable[[], bool]) -> None:
     cfg = rep.config
     import os
     base = str(cfg.get("base") or "http://127.0.0.1:8000")
-    api_key = str(cfg.get("_api_key") or os.environ.get("FATE_API_KEY", ""))
+    api_key = str(getattr(rep, "private_config", {}).get("api_key") or
+                  cfg.get("api_key") or cfg.get("_api_key") or
+                  os.environ.get("FATE_API_KEY", ""))
     provider = str(cfg.get("provider") or "deepseek")
     model = str(cfg.get("model") or "")
     base_url = str(cfg.get("base_url") or "")
@@ -240,10 +240,10 @@ def run(rep, should_stop: Callable[[], bool]) -> None:
         "persona_preset": "苟道（稳健发育、保命优先）", "persona_custom": "",
         "distill_enabled": True,
         "companion_roster": [cfg.get("companion") or
-                             {"name": "阿岚", "skill": "情报",
+                             {"name": "苏叶", "skill": "情报",
                               "background": "同行的观测者", "participation": 8}],
         "heroine_roster": [cfg.get("heroine") or
-                           {"name": "林秋", "skill": "医术",
+                           {"name": "周桐", "skill": "医术",
                             "background": "药铺掌柜", "participation": 7}],
         "heroine_mode": "单女主", "enable_nemesis": True,
         "nemesis_select": cfg.get("nemesis") or "幕后掮客（暗中操纵货物失踪案）",

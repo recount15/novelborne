@@ -8,12 +8,12 @@ import unittest
 from core.memory import blank_state
 from core.services import character_service
 
-NARRATIVE = "阿岚接过北墙旧册，看向沈砚说道：这份证据足够了。"
+NARRATIVE = "苏叶接过北墙旧册，看向李青说道：这份证据足够了。"
 
 
 def good_json():
     return json.dumps({"patches": [{
-        "name": "阿岚", "evidence": "阿岚接过北墙旧册",
+        "name": "苏叶", "evidence": "苏叶接过北墙旧册",
         "relationship_delta": "升温", "summary": "因托付证据而增加信任",
     }]}, ensure_ascii=False)
 
@@ -23,24 +23,24 @@ class TestCharacterService(unittest.TestCase):
         state = {"mode": "强化模式", "state_memory": blank_state("强化模式", "")}
         out = character_service.generate_patch(
             state, None, "m", narrative=NARRATIVE,
-            active_members=[{"name": "阿岚"}], round_no=4,
+            active_members=[{"name": "苏叶"}], round_no=4,
             model_fn=lambda p: good_json())
         self.assertTrue(out["ok"])
         self.assertEqual(len(out["valid"]), 1)
         rows = state["state_memory"]["relationships"]["characters"]
-        self.assertEqual(rows[0]["name"], "阿岚")
+        self.assertEqual(rows[0]["name"], "苏叶")
         self.assertEqual(rows[0]["relationship_delta"], "升温")
-        self.assertEqual(state["active_summaries"]["阿岚"], "因托付证据而增加信任")
+        self.assertEqual(state["active_summaries"]["苏叶"], "因托付证据而增加信任")
 
     def test_bad_evidence_skipped(self):
         bad = json.dumps({"patches": [{
-            "name": "阿岚", "evidence": "正文里不存在的证据",
+            "name": "苏叶", "evidence": "正文里不存在的证据",
             "relationship_delta": "升温", "summary": "无效",
         }]}, ensure_ascii=False)
         state = {"mode": "强化模式", "state_memory": blank_state("强化模式", "")}
         out = character_service.generate_patch(
             state, None, "m", narrative=NARRATIVE,
-            active_members=[{"name": "阿岚"}], round_no=4,
+            active_members=[{"name": "苏叶"}], round_no=4,
             model_fn=lambda p: bad)
         self.assertTrue(out["ok"])
         self.assertEqual(out["valid"], [])
@@ -53,7 +53,7 @@ class TestCharacterService(unittest.TestCase):
         state = {"mode": "强化模式", "state_memory": blank_state("强化模式", "")}
         out = character_service.generate_patch(
             state, None, "m", narrative=NARRATIVE,
-            active_members=[{"name": "阿岚"}], round_no=4, model_fn=boom)
+            active_members=[{"name": "苏叶"}], round_no=4, model_fn=boom)
         self.assertFalse(out["ok"])
         self.assertIn("upstream", out["error"])
 
@@ -69,15 +69,15 @@ class TestCharacterService(unittest.TestCase):
 
     def test_existing_rows_preserved(self):
         memory = blank_state("强化模式", "")
-        memory["relationships"]["characters"] = [{"name": "林秋", "note": "旧字段"}]
+        memory["relationships"]["characters"] = [{"name": "周桐", "note": "旧字段"}]
         state = {"mode": "强化模式", "state_memory": memory}
         out = character_service.generate_patch(
             state, None, "m", narrative=NARRATIVE,
-            active_members=[{"name": "阿岚"}], round_no=4,
+            active_members=[{"name": "苏叶"}], round_no=4,
             model_fn=lambda p: good_json())
         self.assertTrue(out["ok"])
         rows = state["state_memory"]["relationships"]["characters"]
-        self.assertEqual([r["name"] for r in rows], ["林秋", "阿岚"])
+        self.assertEqual([r["name"] for r in rows], ["周桐", "苏叶"])
         self.assertEqual(rows[0]["note"], "旧字段")
 
 

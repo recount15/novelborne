@@ -108,7 +108,7 @@ class TestOpeningService(unittest.TestCase):
         self.assertEqual(state["opening_distill"]["status"], "done")
         self.assertIn("开局蒸馏完成", state["distill_status"])
         # 入库走注入通道（磁盘隔离），playable 卡 1 张。
-        self.assertEqual([card["name"] for card in self.saved_cards], ["沈砚"])
+        self.assertEqual([card["name"] for card in self.saved_cards], ["李青"])
         # 临时库落盘，而非真实库。
         text = self.library_path.read_text(encoding="utf-8")
         self.assertIn("### W01 · 《城门风雪》", text)

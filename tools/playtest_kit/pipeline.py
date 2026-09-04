@@ -42,12 +42,31 @@ class _Reporter:
         self.ended_at: float | None = None
         self.error: str | None = None
         self.config: dict[str, Any] = {}
+        self.private_config: dict[str, Any] = {}
         self.session_id: str | None = None
         self.stop_flag = False
 
+    def _sanitize(self, value: Any) -> Any:
+        """Remove secret-shaped fields and redact the in-memory API key."""
+        secret = str(self.private_config.get("api_key") or "")
+        if isinstance(value, dict):
+            return {
+                str(key): "[REDACTED]" if str(key).lower() in {"api_key", "_api_key", "authorization"}
+                else self._sanitize(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [self._sanitize(item) for item in value]
+        if isinstance(value, str) and secret:
+            return value.replace(secret, "[REDACTED]")
+        return value
+
+    def scrub(self, value: Any) -> Any:
+        return self._sanitize(value)
+
     # ---- 结构化事件 ----
     def emit(self, kind: str, payload: dict[str, Any]) -> None:
-        event = {"kind": kind, "t": time.strftime("%H:%M:%S"), **payload}
+        event = self._sanitize({"kind": kind, "t": time.strftime("%H:%M:%S"), **payload})
         LIVE_DIR = OUT_DIR
         LIVE_DIR.mkdir(exist_ok=True)
         with open(LIVE_LOG, "a", encoding="utf-8") as f:
@@ -59,25 +78,26 @@ class _Reporter:
                 pass
 
     def phase(self, name: str, detail: str = "") -> None:
-        item = {"name": name, "detail": detail, "t": time.strftime("%H:%M:%S")}
+        item = self._sanitize({"name": name, "detail": detail, "t": time.strftime("%H:%M:%S")})
         self.phases.append(item)
         self.emit("phase", item)
 
     def check(self, step: str, ok: bool, detail: str = "") -> bool:
-        item = {"step": step, "ok": bool(ok), "detail": str(detail)[:200], "t": time.strftime("%H:%M:%S")}
+        item = {"step": step, "ok": bool(ok), "detail": str(self._sanitize(detail))[:200], "t": time.strftime("%H:%M:%S")}
         self.checks.append(item)
         self.emit("check", item)
         return bool(ok)
 
     def note(self, text: str) -> None:
-        item = {"text": text, "t": time.strftime("%H:%M:%S")}
+        item = {"text": str(self._sanitize(text))[:500], "t": time.strftime("%H:%M:%S")}
         self.notes.append(item)
         self.emit("note", item)
 
     def round_update(self, data: dict[str, Any]) -> None:
-        data["t"] = time.strftime("%H:%M:%S")
-        self.rounds.append(data)
-        self.emit("round", data)
+        clean = self._sanitize(dict(data))
+        clean["t"] = time.strftime("%H:%M:%S")
+        self.rounds.append(clean)
+        self.emit("round", clean)
 
     def snapshot(self) -> dict[str, Any]:
         passed = sum(1 for c in self.checks if c["ok"])
@@ -87,7 +107,7 @@ class _Reporter:
             "session_id": self.session_id,
             "started_at": self.started_at,
             "ended_at": self.ended_at,
-            "error": self.error,
+            "error": self._sanitize(self.error),
             "phases": self.phases[-30:],
             "checks_tail": self.checks[-120:],
             "checks_total": len(self.checks),
@@ -133,8 +153,9 @@ def start_run(config: dict[str, Any], runner: Callable[[Any, Callable[[], bool]]
         rep = _Reporter()
         rep.status = "running"
         rep.started_at = time.time()
-        rep.config = {k: v for k, v in config.items() if k != "api_key"}
-        rep.config["api_key_masked"] = _masked(str(config.get("api_key") or ""))
+        rep.config = {k: v for k, v in config.items() if k not in {"api_key", "_api_key"}}
+        rep.private_config = {"api_key": str(config.get("api_key") or config.get("_api_key") or "")}
+        rep.config["api_key_masked"] = _masked(rep.private_config["api_key"])
         if LIVE_LOG.exists():
             LIVE_LOG.write_text("", encoding="utf-8")
         _RUN = {"reporter": rep}

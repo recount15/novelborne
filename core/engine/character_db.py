@@ -149,6 +149,18 @@ def init_database() -> None:
                 )
             """)
             
+            # 创建四维语义字段扩展表（向后兼容，存储 JSON）
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS character_semantic_fields (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    character_id TEXT NOT NULL,
+                    field_name TEXT NOT NULL,
+                    field_data TEXT NOT NULL,
+                    FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+                    UNIQUE(character_id, field_name)
+                )
+            """)
+            
             # 创建索引
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_characters_role ON characters(role)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_characters_gender ON characters(gender)")
@@ -158,6 +170,7 @@ def init_database() -> None:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_character_relationships_character_id ON character_relationships(character_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_character_slots_character_id ON character_slots(character_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_character_slots_slot_name ON character_slots(slot_name)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_character_semantic_fields_character_id ON character_semantic_fields(character_id)")
 
             # 栏位名迁移：历史"主线栏"统一改写为"伴侣栏"
             cursor.execute(

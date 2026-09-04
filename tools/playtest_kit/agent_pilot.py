@@ -32,7 +32,7 @@ sys.path.insert(0, str(ROOT))
 
 _SAMPLE_ACTIONS = [
     "我先去码头的旧仓库查探那批失踪货物的线索，尽量隐蔽行事",
-    "带着阿岚去酒馆打听昨夜信使的下落，顺便观察有没有人跟踪我们",
+    "带着苏叶去酒馆打听昨夜信使的下落，顺便观察有没有人跟踪我们",
     "整理今日线索，写一封信给守卫队长说明目前的疑点",
 ]
 
@@ -93,7 +93,7 @@ def start_game(agent_mode: bool, provider: str, model: str, base_url: str,
     state = {
         "system": "\n\n".join(system_parts),
         "history": [{"role": "user", "content": (
-            f"【开局】我穿越成{book_id}世界的一名码头小吏，身边有同伴阿岚。"
+            f"【开局】我穿越成{book_id}世界的一名码头小吏，身边有同伴苏叶。"
             "最近一批军械货物离奇失踪，守卫队长正在彻查。开局交代环境与人物关系，并以六个选项收尾。")}],
         "round": 1, "mode": "强化模式", "log": "",
         "provider": provider, "base_url": base_url, "model": model,

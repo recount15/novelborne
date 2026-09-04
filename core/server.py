@@ -12,6 +12,7 @@ import socket
 import threading
 import time
 import uuid
+import copy
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -43,6 +44,7 @@ from core.services import ask_service  # noqa: E402  (ask 端点业务逻辑，P
 from core.services import chat_service  # noqa: E402  (角色闲聊服务，Phase F)
 from core.engine.distill import distill_model  # noqa: E402  (从老版 app._distill_model 提炼)
 from core.api.contracts import gradio_state_from_output, public_state, stream_event_from_gradio  # noqa: E402
+from core.api import save_contract  # noqa: E402
 from core.api.sessions import SessionManager, read_upload  # noqa: E402
 from core.api.operations import OperationJournal  # noqa: E402
 from core.engine import catalog  # noqa: E402
@@ -582,12 +584,7 @@ def characters_pool_detail(card_id: str, slot: str = "宿敌栏") -> dict[str, A
 
 
 def _restore_session_from_disk(session_id: str):
-    """页面刷新/服务重启后的会话回填：按 session_id 找磁盘上最新存档重建会话。
-
-    强化/基础模式在开局与每回合都会落盘存档（latest 等），state 完整可恢复；
-    凭据不落盘，恢复后由玩家在连接区重填（或请求体携带）。任何失败都返回
-    None 交由调用方按 404 处理，绝不抛错阻断。
-    """
+    """页面刷新/服务重启后的会话回填：按 session_id 找磁盘上最新存档重建会话。"""
     try:
         saves = engine.persistence.list_saves(root=fe.WRITABLE_DIR)
         candidates = [item for item in saves if item.get("session_id") == session_id]
@@ -601,10 +598,9 @@ def _restore_session_from_disk(session_id: str):
         )
         if not restored or not restored.get("system"):
             return None
-        # 存档里不带 game_ready（它是流式提交时才写入内存的），
-        # 回填时与 load 端点一致置位，否则前端会把恢复后的会话误判为未开局。
-        restored["game_ready"] = True
-        restored["session_id"] = session_id
+        restored = _normalize_restored_state(restored, session_id)
+        if not save_contract.is_usable_state(restored):
+            return None
         session = sessions.create(session_id)
         session.state = restored
         return session
@@ -623,18 +619,8 @@ def _session_or_404(session_id: str):
 
 
 def _game_ready(state: Any) -> bool:
-    """只有含系统规则和至少一条助手消息的状态才算完成开局。"""
-    if not isinstance(state, dict) or not state.get("system"):
-        return False
-    if state.get("game_ready") is True:
-        return True
-    history = state.get("history")
-    return isinstance(history, list) and any(
-        isinstance(item, dict)
-        and item.get("role") == "assistant"
-        and str(item.get("content") or "").strip()
-        for item in history
-    )
+    """Only opening and committed states are active; streaming/corrupt states are not."""
+    return save_contract.is_usable_state(state)
 
 
 def _require_game(session) -> dict[str, Any]:
@@ -662,8 +648,9 @@ def _stream_response(
 ) -> StreamingResponse:
     def body() -> Iterator[bytes]:
         previous_assistant = ""
-        previous_state = dict(session.state)
+        previous_state = copy.deepcopy(session.state)
         start_committed = operation != "start"
+        durable_seen = False
         operation_id = None
         
         # Create operation journal entry if client provided request ID
@@ -684,15 +671,24 @@ def _stream_response(
                 data = event.data
                 chat = data.get("chat") if isinstance(data, dict) else None
 
+                progress_frame = (
+                    operation == "start"
+                    and raw_state is not None
+                    and not raw_state.get("system")
+                    and isinstance(raw_state.get("opening_distill"), dict)
+                    and raw_state["opening_distill"].get("status") == "running"
+                )
+                if progress_frame:
+                    # The opening distillation progress is a transient view. It
+                    # may be exposed to the browser, but has no resumable system.
+                    raw_state = dict(raw_state)
+                    raw_state["save_stage"] = "streaming"
+                    raw_state["game_ready"] = False
+                    # Keep the last durable session state untouched.
+                    raw_state["session_id"] = session.session_id
+
                 if operation == "start" and raw_state is not None and not raw_state.get("system"):
-                    opening = raw_state.get("opening_distill")
-                    if isinstance(opening, dict) and opening.get("status") == "running":
-                        # 强化模式开局蒸馏首帧通知：on_start 故意清空 system 只推进度。
-                        # 提交该帧（携带 distill_key，/state 轮询由此读到进度注册表），
-                        # 透传事件后继续消费生成器直到蒸馏完成——不得当作开局失败终止。
-                        session.state = dict(raw_state)
-                        session.state["session_id"] = session.session_id
-                    else:
+                    if not progress_frame:
                         session.state = previous_state
                         message = str(data.get("status") or "开局失败，请检查设定后重试")
                         if operation_id:
@@ -703,29 +699,51 @@ def _stream_response(
                         }, ensure_ascii=False) + "\n").encode("utf-8")
                         return
 
-                if raw_state is not None:
-                    ready = _game_ready(raw_state)
-                    if operation != "start" or ready:
-                        session.state = dict(raw_state)
-                        session.state["game_ready"] = True
-                        # 会话对象是归属唯一真源：读档 state 可能携带旧会话，必须覆盖。
-                        session.state["session_id"] = session.session_id
-                        if operation == "start" and api_key_on_commit is not None:
-                            session.api_key = api_key_on_commit
+                if raw_state is not None and not progress_frame:
+                    stage = save_contract.classify_state(raw_state)
+                    # A confirmation response is durable opening state, while a
+                    # normal message starts from a committed state and is only
+                    # durable again after its next complete option set.
+                    is_confirmation = (
+                        operation == "message"
+                        and str(raw_state.get("save_stage") or "") == "opening"
+                    )
+                    if operation == "message" and not is_confirmation:
+                        stage = "streaming" if not save_contract.valid_options(raw_state.get("options")) else stage
+                    # Every output before the final option commit is a temporary
+                    # stream snapshot. It may be rendered to the client but must
+                    # never replace the last durable session state.
+                    if stage in ("opening", "committed") and raw_state.get("system"):
+                        durable_state = dict(raw_state)
+                        durable_state["save_stage"] = stage
+                        durable_state["game_ready"] = True
+                        durable_state["session_id"] = session.session_id
+                        session.state = durable_state
+                        durable_seen = True
                         start_committed = True
-                        
-                        # Emit operation progress event
-                        if operation_id:
-                            try:
-                                operation_journal.progress(operation_id, {
-                                    "phase": "state_update",
-                                    "round": raw_state.get("round", 0)
-                                })
-                            except Exception:  # noqa: BLE001
-                                pass
-                    
+                        try:
+                            engine.persistence.save_state(
+                                durable_state,
+                                root=fe.WRITABLE_DIR,
+                                start_params=durable_state.get("start_params"),
+                                session_id=session.session_id,
+                            )
+                        except (OSError, TypeError, ValueError) as exc:
+                            session.state = previous_state
+                            durable_seen = False
+                            start_committed = operation != "start"
+                            raise ValueError(f"正式状态保存失败：{exc}") from exc
+                    elif stage == "streaming":
+                        pass
+                    if operation == "start" and api_key_on_commit is not None and durable_seen:
+                        session.api_key = api_key_on_commit
                     if isinstance(data.get("state"), dict):
-                        data["state"]["game_ready"] = ready
+                        data["state"]["save_stage"] = stage
+                        data["state"]["game_ready"] = bool(
+                            durable_seen
+                            or stage in ("opening", "committed")
+                            or (operation != "start" and save_contract.is_usable_state(previous_state))
+                        )
                 if operation != "start" or start_committed:
                     data["session_id"] = session.session_id
                 data["operation"] = operation
@@ -1747,6 +1765,8 @@ def message(session_id: str, request: MessageRequest) -> StreamingResponse:
     provider = request.provider or state.get("provider") or "deepseek"
     config = fe.provider_config(provider, request.base_url or state.get("base_url"))
     try:
+        working_state = copy.deepcopy(state)
+        working_state["save_stage"] = "streaming"
         generator = gradio_app.on_send(
             provider,
             request.base_url or state.get("base_url") or config["base_url"],
@@ -1755,8 +1775,8 @@ def message(session_id: str, request: MessageRequest) -> StreamingResponse:
             request.thinking_mode or state.get("thinking_mode") or "auto",
             request.thinking_param if request.thinking_param is not None else state.get("thinking_param", ""),
             request.message,
-            state.get("history", []),
-            state,
+            working_state.get("history", []),
+            working_state,
         )
     except Exception as exc:  # noqa: BLE001
         sessions.release(session)
@@ -2262,13 +2282,16 @@ def save(session_id: str, request: SaveRequest) -> dict[str, Any]:
         raise HTTPException(status_code=409, detail="该 session 正在处理另一个请求")
     try:
         state = _require_game(session)
-        engine.persistence.save_state(
-            state,
-            save_id=request.save_id,
-            root=fe.WRITABLE_DIR,
-            start_params=state.get("start_params"),
-            session_id=session.session_id,
-        )
+        try:
+            engine.persistence.save_state(
+                state,
+                save_id=request.save_id,
+                root=fe.WRITABLE_DIR,
+                start_params=state.get("start_params"),
+                session_id=session.session_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         metadata = engine.persistence.save_metadata(
             request.save_id, root=fe.WRITABLE_DIR, session_id=session.session_id)
         return {
@@ -2288,24 +2311,19 @@ def list_all_saves() -> dict[str, Any]:
 
 
 def _normalize_restored_state(restored: dict[str, Any], session_id: str) -> dict[str, Any]:
-    """统一旧/新存档的开局确认态，保证读档后前端仍有交互入口。
-
-    蒸馏产物保真（读档不重蒸）：
-    - distill_key 缺失时按 chapter_index.book_id 回填，锚点蒸馏器/锚点面板
-      在任意进程重启后都命中同一 books/<id>/anchors/ 目录；
-    - opening_distill 缺失或非 done（旧档/中断档）时按档内与磁盘产物落定
-      终态标记，绝不显示"蒸馏中"误导玩家，也绝不触发重蒸馏。
-    """
+    """统一旧/新存档的开局确认态，不修复缺失的正式选项。"""
     nested = restored.get("opening_state") if isinstance(restored.get("opening_state"), dict) else {}
     for key in ("gf_confirmed", "opening_confirmed"):
         if key not in restored and key in nested:
             restored[key] = bool(nested[key])
     restored.setdefault("gf_confirmed", False)
     restored.setdefault("opening_confirmed", False)
-    restored["game_ready"] = True
     restored["session_id"] = session_id
+    stage = save_contract.classify_state(restored)
+    restored["save_stage"] = stage
+    restored["game_ready"] = stage in ("opening", "committed")
     if not isinstance(restored.get("options"), list):
-        restored["options"] = []
+        restored["options"] = None
     if not str(restored.get("distill_key") or "").strip():
         index = restored.get("chapter_index") if isinstance(restored.get("chapter_index"), dict) else {}
         book_id = (index or {}).get("book_id")
@@ -2326,7 +2344,7 @@ def _normalize_restored_state(restored: dict[str, Any], session_id: str) -> dict
                 "status": "done", "stage": "开局蒸馏完成（读档恢复）", "ok": True,
                 "plot_ready": plot_ready, "restored": True, "anchors_on_disk": anchors_count,
             }
-        elif str(restored.get("mode") or "").startswith("强化"):
+        elif str(restored.get("mode") or "").startswith("强化") and stage == "opening":
             restored["opening_distill"] = {
                 "status": "done", "stage": "该存档未含开局蒸馏产物，本局按需自动补锚点",
                 "ok": False, "restored": True,
@@ -2345,6 +2363,8 @@ def load_any_save(request: LoadRequest) -> dict[str, Any]:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     restored = _normalize_restored_state(restored, session.session_id)
+    if not save_contract.is_usable_state(restored):
+        raise HTTPException(status_code=409, detail="存档一致性错误：正式对局缺少完整 A-F 选项，无法继续")
     session.state = restored
     metadata = engine.persistence.save_metadata(request.save_id, root=fe.WRITABLE_DIR)
     return {
@@ -2366,7 +2386,10 @@ def load(session_id: str, request: LoadRequest) -> dict[str, Any]:
         if not restored or not restored.get("system"):
             raise HTTPException(status_code=404, detail="未找到可恢复的存档")
         restored = _normalize_restored_state(restored, session.session_id)
+        if not save_contract.is_usable_state(restored):
+            raise HTTPException(status_code=409, detail="存档一致性错误：正式对局缺少完整 A-F 选项，无法继续")
         session.state = restored
+
         metadata = engine.persistence.save_metadata(request.save_id, root=fe.WRITABLE_DIR)
         return {
             "session_id": session.session_id,
@@ -2498,6 +2521,9 @@ def export_save_novel(save_id: str, request: ExportNovelRequest) -> dict[str, An
     restored = engine.persistence.load_state_strict(save_id, root=fe.WRITABLE_DIR)
     if not restored:
         raise HTTPException(status_code=404, detail="未找到可导出的存档")
+    restored = _normalize_restored_state(restored, "export")
+    if not save_contract.is_usable_state(restored):
+        raise HTTPException(status_code=409, detail="存档一致性错误：正式对局缺少完整 A-F 选项，无法导出")
     provider = request.provider or "deepseek"
     config = fe.provider_config(provider, request.base_url)
     api_key = (request.api_key or "").strip() or os.environ.get(config.get("env_key", ""), "")

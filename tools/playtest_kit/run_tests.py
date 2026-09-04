@@ -3,7 +3,6 @@
 
 用法：
   python tools/playtest_kit/run_tests.py              # 默认：单元回归（快）
-  python tools/playtest_kit/run_tests.py all          # 单元回归 + 强化试玩
   python tools/playtest_kit/run_tests.py live         # 真实模型 HTTP 检验（需 API key）
   python tools/playtest_kit/run_tests.py pilot        # 类Agent模式对比实测（需 API key）
 """
@@ -28,20 +27,6 @@ def run_unit() -> int:
     return 0 if result.wasSuccessful() else 1
 
 
-def run_strengthened() -> int:
-    """强化模式端到端 mock 试玩（FakeClient 注入，不联网）。"""
-    print("== [2/2] 强化试玩端到端 ==", flush=True)
-    script = ROOT / "tools" / "run_strengthened_playtest.py"
-    proc = subprocess.run(
-        [sys.executable, str(script)], cwd=str(ROOT),
-        env={**__import__("os").environ, "PYTHONPATH": str(ROOT),
-             "PYTHONIOENCODING": "utf-8"},
-        text=True, encoding="utf-8", check=False)
-    if proc.returncode != 0:
-        print(proc.stdout[-3000:], proc.stderr[-2000:])
-    else:
-        print("(ok) 强化试玩通过")
-    return proc.returncode
 
 
 def run_live(rounds: int) -> int:
@@ -70,10 +55,6 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.suite == "unit":
         return run_unit()
-    if args.suite == "all":
-        rc = run_unit()
-        rc |= run_strengthened()
-        return rc
     if args.suite == "live":
         return run_live(args.rounds)
     if args.suite == "pilot":

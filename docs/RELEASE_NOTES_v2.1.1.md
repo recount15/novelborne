@@ -52,7 +52,7 @@ if lookback is not None and int(lookback) < 0:
 ### 次要修复：测试脚本provider硬编码
 
 **问题描述**:
-- 测试脚本 `play_100_hcya.py` 硬编码 `provider: "custom"`
+- 测试脚本 `play_100_play100.py` 硬编码 `provider: "custom"`
 - 无法使用智谱、通义等官方API
 
 **修复方案**:
@@ -64,10 +64,10 @@ if lookback is not None and int(lookback) < 0:
 ```bash
 # 方式1：环境变量
 export FATE_PROVIDER="zhipu"
-python play_100_hcya.py --rounds 20
+python play_100_play100.py --rounds 20
 
 # 方式2：命令行参数
-python play_100_hcya.py --provider zhipu --rounds 20
+python play_100_play100.py --provider zhipu --rounds 20
 ```
 
 ---
@@ -75,7 +75,7 @@ python play_100_hcya.py --provider zhipu --rounds 20
 ### 次要修复：测试报告生成崩溃
 
 **问题描述**:
-- `play_100_hcya.py` 生成报告时崩溃
+- `play_100_play100.py` 生成报告时崩溃
 - 错误：`KeyError: 'final_load_ok'`
 
 **修复方案**:

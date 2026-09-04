@@ -25,8 +25,8 @@ MAX_LIST_ITEMS = 12             # 与 character_library.MAX_LIST_ITEMS 对齐
 # ---------------------------------------------------------------- 第一步：身份
 
 IDENTITY_FIELDS: List[Dict[str, Any]] = [
-    {"id": "name", "label": "角色名", "required": True, "placeholder": "如：沈砚"},
-    {"id": "work", "label": "出处作品", "required": False, "placeholder": "如：《城门风硬》；原创可留空"},
+    {"id": "name", "label": "角色名", "required": True, "placeholder": "如：李青"},
+    {"id": "work", "label": "出处作品", "required": False, "placeholder": "如：《示例作品》；原创可留空"},
     {"id": "role_type", "label": "角色定位", "required": False,
      "options": ["主角", "伙伴", "女主", "反派", "配角"],
      "hint": "入库时映射为数据库 role：伙伴→伙伴，女主→single_heroine，反派→宿敌可饰"},

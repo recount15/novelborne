@@ -161,6 +161,11 @@ class CharacterCard:
     source_region: str = ""
     slot_keys: dict[str, tuple[str, ...]] = field(default_factory=dict)
     distill_level: str = "normal"
+    # —— 四维语义字段（规格 §3）：全部向后兼容，缺失给空字典 ——
+    mind_model: dict[str, list] = field(default_factory=lambda: {"rules": [], "evidence": []})
+    decision_policy: dict[str, list] = field(default_factory=lambda: {"rules": [], "evidence": []})
+    voice_transfer: dict[str, list] = field(default_factory=lambda: {"rules": [], "evidence": []})
+    behavior_boundaries: dict[str, list] = field(default_factory=lambda: {"rules": [], "evidence": []})
 
     @property
     def protagonist_type(self) -> tuple[str, ...]:
@@ -213,6 +218,9 @@ class CharacterCard:
         for slot_name in SLOT_NAMES:
             if not slot_keys.get(slot_name):
                 slot_keys[slot_name] = ("通用",)
+        # 四维语义字段兜底
+        from core.engine import character_semantic_distiller
+        semantic_fields = character_semantic_distiller.normalize_semantic_fields(raw)
         return cls(
             id=str(raw.get("id") or f"character-{index}"),
             role=role,
@@ -235,6 +243,10 @@ class CharacterCard:
             source_region=str(raw.get("source_region") or "").strip().lower(),
             slot_keys=slot_keys,
             distill_level=distill_level,
+            mind_model=semantic_fields["mind_model"],
+            decision_policy=semantic_fields["decision_policy"],
+            voice_transfer=semantic_fields["voice_transfer"],
+            behavior_boundaries=semantic_fields["behavior_boundaries"],
         )
 
 

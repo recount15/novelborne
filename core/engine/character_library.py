@@ -122,6 +122,11 @@ def build_record(payload: Mapping[str, Any]) -> dict[str, Any]:
             "宿敌栏": list(_clip_list(payload.get("nemesis_type"))),
         },
     }
+    # 四维语义字段（可选，向后兼容）
+    from core.engine import character_semantic_distiller
+    semantic_fields = character_semantic_distiller.normalize_semantic_fields(payload)
+    for field_name in character_semantic_distiller.SEMANTIC_FIELDS:
+        record[field_name] = semantic_fields[field_name]
     # 四维兜底：任何维度缺失或为空都填"通用"，确保每张卡四栏均可选。
     for _slot in ("主角栏", "伴侣栏", "伙伴栏", "宿敌栏"):
         if not record["slot_keys"].get(_slot):

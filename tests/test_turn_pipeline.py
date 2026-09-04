@@ -13,7 +13,7 @@ import unittest
 from core.engine import papers, parallel, turn_blueprint
 from core.services import turn_pipeline as tp
 
-ANCHOR = json.dumps({"chapter": 1, "title": "城门风硬",
+ANCHOR = json.dumps({"chapter": 1, "title": "青崖问剑",
                      "summary": "守军换岗时发现北墙裂痕",
                      "events": ["换岗", "查证北墙"]}, ensure_ascii=False)
 
@@ -61,7 +61,7 @@ def options_json():
     return json.dumps({"options": items}, ensure_ascii=False)
 
 
-def filler(low, high, name="阿岚"):
+def filler(low, high, name="苏叶"):
     """造一段落在窗口内、含点名与因果词的合格段落。"""
     base = f"{name}沿着北墙查验裂痕，因此守军的换岗节奏被彻底打乱。"
     text = base
@@ -140,7 +140,7 @@ class TestRunTurn(unittest.TestCase):
     def setUp(self):
         self.paper = papers.get_paper(3, "setup")
         self.terms = turn_blueprint.extract_anchor_terms(ANCHOR)
-        self.names = ["阿岚", "林秋"]
+        self.names = ["苏叶", "周桐"]
 
     def _run(self, model, **kw):
         return tp.run_turn(
@@ -189,7 +189,7 @@ class TestRunTurn(unittest.TestCase):
         # 终检防线：组装正文混入脚手架短语时，即便后处理未救回也不得
         # 以 TurnResult 出厂（返回 LEGACY 交由单卷路径重写）。
         model = ScriptedModel(self.paper, self.terms, self.names,
-                              segment="（推进与转折）阿岚就地应对。北墙随之显形。")
+                              segment="（推进与转折）苏叶就地应对。北墙随之显形。")
         result = self._run(model)
         self.assertEqual(result, tp.LEGACY)
 

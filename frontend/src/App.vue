@@ -439,14 +439,11 @@ const openingStep = computed<'gf' | 'opening' | null>(() => {
   if (!openingConfirmed) return 'opening'
   return null
 })
-// 正式开局若旧存档缺少 options，保留自由输入入口，避免读档后死界面。
-const openingInputDisabled = computed(() => busy.value || (!openingStep.value && Array.isArray(state.value.options) && state.value.options.length > 0))
+const openingInputDisabled = computed(() => busy.value || !openingStep.value)
 const openingInputPlaceholder = computed(() =>
   openingStep.value === 'gf'
     ? '输入「确认金手指」或点上方按钮'
-    : openingStep.value === 'opening'
-      ? '输入「确认开局」或点上方按钮'
-      : '请使用下方选项按钮推进',
+    : '输入「确认开局」或点上方按钮',
 )
 
 const QUEST_KIND_OPTIONS: Array<{ value: QuestKind; label: string }> = [
@@ -611,6 +608,16 @@ const compressionKept = computed(() => numeric(compressionRecord.value?.kept_mes
 const compressionDegraded = computed(() => compressionRecord.value?.fidelity === 'degraded')
 
 const OPTION_KEYS = ['A', 'B', 'C', 'D', 'E', 'F'] as const
+function hasCompleteOptions(value: unknown): boolean {
+  if (!Array.isArray(value) || value.length !== OPTION_KEYS.length) return false
+  return value.every((item, index) => {
+    const record = recordOf(item)
+    return record.key === OPTION_KEYS[index]
+      && typeof record.text === 'string'
+      && record.text.trim().length > 0
+  })
+}
+
 const options = computed<GameOption[]>(() => {
   const raw = state.value.options
   if (!Array.isArray(raw)) return []
@@ -628,6 +635,7 @@ const options = computed<GameOption[]>(() => {
   }
   return result
 })
+const hasValidOptions = computed(() => hasCompleteOptions(state.value.options))
 
 interface TimelineEntry {
   kind: 'past' | 'current' | 'upcoming'
@@ -677,6 +685,16 @@ const startDisabled = computed(() => {
   return !workValid.value
 })
 const inGame = computed(() => Boolean(sessionId.value && state.value.game_ready === true))
+const saveStage = computed(() => String(state.value.save_stage ?? ''))
+const saveConsistencyError = computed(() => Boolean(
+  inGame.value
+  && !openingStep.value
+  && !hasValidOptions.value
+  && saveStage.value !== 'streaming',
+))
+const formalTurnReady = computed(() => Boolean(
+  inGame.value && !openingStep.value && hasValidOptions.value && saveStage.value !== 'corrupt',
+))
 
 // —— 刷新恢复：sessionId 持久化 + 启动时自动找回会话（服务端内存丢失时由
 //    磁盘存档回填），刷新页面不再丢档。 ——
@@ -706,7 +724,10 @@ async function restoreSession(id: string, source: 'link' | 'storage' | 'sync' = 
     const data = await fetchSessionState(id)
     const restored = (data?.state ?? {}) as Record<string, unknown>
     const history = Array.isArray(restored.history) ? restored.history as ChatMessage[] : []
-    const usable = restored.game_ready === true || history.length > 0
+    const usable = restored.game_ready === true
+      && (restored.save_stage === 'opening'
+        || restored.save_stage === 'committed'
+        || (restored.save_stage == null && hasCompleteOptions(restored.options)))
     if (!usable) {
       if (source !== 'sync') window.localStorage.removeItem(SESSION_KEY)
       return false
@@ -1614,7 +1635,7 @@ function startNewGame(): void {
 }
 
 function chooseOption(option: GameOption): void {
-  if (busy.value || !inGame.value) return
+  if (busy.value || !formalTurnReady.value) return
   // 增补通路接通：点击仅切换勾选（可多选），由「按已选项行动」合并发送
   if (relayActive.value) {
     const index = relaySelectedKeys.value.indexOf(option.key)
@@ -1631,7 +1652,7 @@ function chooseOption(option: GameOption): void {
 
 // 增补通路：把所有勾选选项合并成一条消息发送，附可选的本回合增补内容
 function submitRelayChoices(): void {
-  if (busy.value || !inGame.value) return
+  if (busy.value || !formalTurnReady.value) return
   const picked = options.value.filter((option) => relaySelectedKeys.value.includes(option.key))
   if (!picked.length) return
   const lines = picked.map((option) => `选择${option.key}：${option.text}`)
@@ -1643,7 +1664,7 @@ function submitRelayChoices(): void {
 }
 
 async function autoplay(): Promise<void> {
-  if (busy.value || autoplayBusy.value || !inGame.value || !sessionId.value || !options.value.length) return
+  if (busy.value || autoplayBusy.value || !formalTurnReady.value || !sessionId.value || !options.value.length) return
   autoplayBusy.value = true
   try {
     const result = await autoplayChoice(sessionId.value)
@@ -1669,6 +1690,10 @@ function confirmOpeningStep(): void {
 async function sendUserContent(content: string): Promise<void> {
   if (!content || busy.value || !inGame.value || !sessionId.value) {
     selectedOption.value = null
+    return
+  }
+  if (!openingStep.value && !formalTurnReady.value) {
+    error.value = '当前存档缺少完整 A-F 选项，已阻止剧情输入；请重新读取有效存档。'
     return
   }
   status.value = '正在推演下一幕'
@@ -3119,35 +3144,73 @@ watch([compressionRecord, round], () => {
               </div>
             </div>
 
-            <!-- ========== 角色闲聊 UI（v2.0.4 Agent_refill 优化） ========== -->
-            <div v-if="chatRoster.length && inGame" class="mb-3">
-              <div class="chat-header">
-                <MessageCircle :size="13" class="text-(--fe-accent)" />
-                <span class="text-[11px] font-bold text-(--fe-ink-2)">角色闲聊</span>
+            <div v-if="openingStep" class="mb-3 rounded-md border border-(--fe-border) bg-(--fe-panel-2) p-2">
+              <div class="flex gap-1.5">
+                <textarea
+                  v-model="actionInput"
+                  rows="2"
+                  class="field min-h-0 flex-1 resize-none px-2 py-2 text-[13px] leading-5"
+                  :disabled="openingInputDisabled"
+                  :placeholder="openingInputPlaceholder"
+                  @keydown.enter.exact.prevent="submitAction"
+                />
                 <button
                   type="button"
-                  class="ml-auto text-[10px] text-(--fe-accent) hover:underline"
-                  @click="chatOpen = !chatOpen"
+                  class="small-action primary h-9 shrink-0 self-end"
+                  :disabled="openingInputDisabled || !actionInput.trim()"
+                  @click="submitAction"
                 >
-                  {{ chatOpen ? '收起' : '展开' }}
+                  <LoaderCircle v-if="busy" class="animate-spin" :size="12" />
+                  <Send v-else :size="12" /> 发送
                 </button>
               </div>
-              
-              <div v-if="chatOpen" class="chat-panel">
-                <select
-                  v-model="selectedCharacter"
-                  class="field h-8 w-full px-2 text-xs"
-                  :disabled="busy || chatBusy"
-                  @change="onCharacterChange"
-                >
-                  <option value="">选择角色开始聊天…</option>
-                  <option v-for="char in chatRoster" :key="char.name" :value="char.name">
-                    {{ char.name }}
-                  </option>
-                </select>
+              <button
+                type="button"
+                class="mt-1.5 flex h-8 w-full items-center justify-center gap-2 rounded-md bg-(--fe-accent) px-3 text-[12px] font-bold text-(--fe-accent-ink) hover:bg-(--fe-accent-strong) disabled:bg-(--fe-panel-3) disabled:text-(--fe-ink-3)"
+                :disabled="busy"
+                @click="confirmOpeningStep"
+              >
+                <Check :size="13" />
+                {{ openingStep === 'gf' ? '确认金手指' : '确认开局' }}
+              </button>
+            </div>
 
-                <div v-if="selectedCharacter" class="mt-2">
-                  <div v-if="chatMessages.length" class="chat-messages scrollbar">
+            <div v-else-if="formalTurnReady" class="mb-3 rounded-md border border-(--fe-border) bg-(--fe-panel-2) p-2">
+              <div v-if="chatRoster.length" class="border-t-0 pt-0">
+                <div class="flex items-center gap-1.5">
+                  <MessageCircle :size="13" class="shrink-0 text-(--fe-accent)" />
+                  <span class="shrink-0 text-[10px] font-bold text-(--fe-ink-3)">闲聊</span>
+                  <select
+                    v-model="selectedCharacter"
+                    class="field h-8 min-w-0 flex-1 px-2 text-xs"
+                    :disabled="busy || chatBusy"
+                    aria-label="选择闲聊角色"
+                    @change="onCharacterChange"
+                  >
+                    <option value="">选择角色…</option>
+                    <option v-for="char in chatRoster" :key="char.name" :value="char.name">
+                      {{ char.name }}
+                    </option>
+                  </select>
+                  <button
+                    v-if="selectedCharacter"
+                    type="button"
+                    class="small-action h-8 shrink-0"
+                    :disabled="busy || chatBusy"
+                    :title="chatOpen ? '收起闲聊' : '展开闲聊'"
+                    @click="chatOpen = !chatOpen"
+                  >
+                    <Minus v-if="chatOpen" :size="12" />
+                    <ChevronDown v-else :size="12" />
+                    <span class="sr-only">{{ chatOpen ? '收起' : '展开' }}</span>
+                  </button>
+                </div>
+
+                <div v-if="selectedCharacter && chatOpen" class="mt-2 rounded-md border border-(--fe-border) bg-(--fe-panel) p-2">
+                  <div class="chat-messages scrollbar">
+                    <div v-if="chatMessages.length === 0" class="py-1 text-center text-[10px] text-(--fe-ink-3)">
+                      尚无对话记录，输入内容即可开始。
+                    </div>
                     <div v-for="(msg, idx) in chatMessages" :key="idx" class="chat-bubble-group">
                       <div class="chat-bubble player">
                         <div class="bubble-label">你</div>
@@ -3163,142 +3226,37 @@ watch([compressionRecord, round], () => {
                   <div class="mt-2 flex gap-1.5">
                     <input
                       v-model="chatInput"
+                      type="text"
                       class="field h-8 flex-1 px-2 text-xs"
                       :disabled="busy || chatBusy"
-                      placeholder="与角色闲聊（不影响剧情）…"
+                      :placeholder="`与 ${selectedCharacter} 闲聊…`"
                       maxlength="500"
                       @keydown.enter.exact.prevent="sendChat"
                     />
                     <button
                       type="button"
-                      class="small-action primary h-8"
+                      class="small-action primary h-8 shrink-0"
                       :disabled="busy || chatBusy || !chatInput.trim()"
                       @click="sendChat"
                     >
-                      <LoaderCircle v-if="chatBusy" class="animate-spin" :size="12" />
-                      <Send v-else :size="12" />
+                      <LoaderCircle v-if="chatBusy" class="animate-spin" :size="11" />
+                      <Send v-else :size="11" />
                     </button>
                   </div>
-                  
-                  <p class="mt-1 text-[9px] text-(--fe-ink-3)">
-                    闲聊由 Agent_refill 优化生成，不消耗回合，不改变剧情状态
-                  </p>
+                  <p class="mt-1 text-[9px] text-(--fe-ink-3)">闲聊不消耗回合，也不会改变剧情状态。</p>
                 </div>
+              </div>
+              <div v-else class="flex items-center gap-1.5 text-[11px] text-(--fe-ink-3)">
+                <MessageCircle :size="13" /> 当前没有可闲聊的活跃角色
               </div>
             </div>
 
-            <div v-if="openingStep" class="mb-3">
-              <button
-                type="button"
-                class="flex h-10 w-full items-center justify-center gap-2 rounded-md bg-(--fe-accent) px-3 text-[13px] font-bold text-(--fe-accent-ink) hover:bg-(--fe-accent-strong) disabled:bg-(--fe-panel-3) disabled:text-(--fe-ink-3)"
-                :disabled="busy"
-                @click="confirmOpeningStep"
-              >
-                <Check :size="14" />
-                {{ openingStep === 'gf' ? '确认金手指' : '确认开局' }}
-              </button>
-              <p class="mt-1 text-center text-[10px] text-(--fe-ink-3)">
-                {{ openingStep === 'gf' ? '点击即确认当前金手指，然后进入开局确认' : '点击后立即生成第一幕' }}
-              </p>
+            <div v-else-if="saveConsistencyError" class="mb-3 flex items-start gap-2 rounded-md border border-(--fe-danger) bg-(--fe-panel-2) p-2 text-[11px] text-(--fe-danger)">
+              <CircleAlert class="mt-0.5 shrink-0" :size="14" />
+              <span>存档一致性错误：正式对局缺少完整 A-F 选项，已阻止自由剧情输入。请重新读取有效存档。</span>
             </div>
 
-            <div v-if="inGame" class="mb-3 flex gap-1.5">
-              <textarea
-                v-model="actionInput"
-                rows="2"
-                class="field min-h-0 flex-1 resize-none px-2 py-2 text-[13px] leading-5"
-                :disabled="openingInputDisabled"
-                :placeholder="openingInputPlaceholder"
-                @keydown.enter.exact.prevent="submitAction"
-              />
-              <button
-                type="button"
-                class="small-action primary h-9 shrink-0 self-end"
-                :disabled="openingInputDisabled || !actionInput.trim()"
-                @click="submitAction"
-              >
-                <LoaderCircle v-if="busy" class="animate-spin" :size="12" />
-                <Send v-else :size="12" /> 发送
-              </button>
-            </div>
-
-            <!-- v2.0.4: 角色闲聊 UI（阶段 F）-->
-            <div v-if="inGame && chatRoster.length > 0" class="mb-3">
-              <div class="mb-1.5 flex items-center gap-2">
-                <MessageCircle :size="14" class="text-(--fe-ink-3)" />
-                <select
-                  v-model="selectedCharacter"
-                  class="field h-8 flex-1 px-2 text-xs"
-                  :disabled="busy || chatBusy"
-                  @change="onCharacterChange"
-                >
-                  <option value="">选择角色闲聊…</option>
-                  <option v-for="char in chatRoster" :key="char.name" :value="char.name">
-                    {{ char.name }}
-                  </option>
-                </select>
-                <button
-                  v-if="selectedCharacter && !chatOpen"
-                  type="button"
-                  class="small-action"
-                  :disabled="busy || chatBusy"
-                  @click="chatOpen = true"
-                >
-                  <ChevronDown :size="12" /> 展开
-                </button>
-                <button
-                  v-if="selectedCharacter && chatOpen"
-                  type="button"
-                  class="small-action"
-                  @click="chatOpen = false"
-                >
-                  <Minus :size="12" /> 收起
-                </button>
-              </div>
-              
-              <!-- 聊天抽屉 -->
-              <div v-if="selectedCharacter && chatOpen" class="rounded-md border border-(--fe-border) bg-(--fe-panel-2) p-2">
-                <div class="mb-2 max-h-[200px] space-y-2 overflow-y-auto">
-                  <div v-if="chatMessages.length === 0" class="text-center text-[11px] text-(--fe-ink-3)">
-                    尚无对话记录
-                  </div>
-                  <div v-for="(msg, idx) in chatMessages" :key="idx" class="space-y-1">
-                    <div class="flex justify-end">
-                      <div class="max-w-[80%] rounded-lg bg-(--fe-accent) px-2 py-1 text-[11px] text-(--fe-accent-ink)">
-                        {{ msg.player }}
-                      </div>
-                    </div>
-                    <div class="flex justify-start">
-                      <div class="max-w-[80%] rounded-lg bg-(--fe-panel-3) px-2 py-1 text-[11px] text-(--fe-ink)">
-                        {{ msg.reply }}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                <div class="flex gap-1.5">
-                  <input
-                    v-model="chatInput"
-                    type="text"
-                    class="field h-8 flex-1 px-2 text-xs"
-                    :disabled="busy || chatBusy"
-                    :placeholder="`与 ${selectedCharacter} 闲聊…`"
-                    @keydown.enter.prevent="sendChat"
-                  />
-                  <button
-                    type="button"
-                    class="small-action primary h-8"
-                    :disabled="busy || chatBusy || !chatInput.trim()"
-                    @click="sendChat"
-                  >
-                    <LoaderCircle v-if="chatBusy" class="animate-spin" :size="11" />
-                    <Send v-else :size="11" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div v-if="options.length && inGame" class="mb-1.5 flex items-center justify-end gap-2">
+            <div v-if="hasValidOptions && inGame" class="mb-1.5 flex items-center justify-end gap-2">
               <span class="text-[10px] text-(--fe-ink-3)">点一次仅托管本回合</span>
               <button
                 type="button"
@@ -3312,7 +3270,7 @@ watch([compressionRecord, round], () => {
               </button>
             </div>
 
-            <div v-if="options.length" class="options-grid">
+            <div v-if="hasValidOptions" class="options-grid">
               <button
                 v-for="option in options"
                 :key="option.key"
@@ -3327,7 +3285,7 @@ watch([compressionRecord, round], () => {
               </button>
             </div>
             <!-- 增补通路接通：多选合并 + 本回合增补输入 -->
-            <div v-if="relayActive && options.length && inGame" class="mt-1.5">
+            <div v-if="relayActive && hasValidOptions && inGame" class="mt-1.5">
               <textarea
                 v-model="relaySupplement"
                 rows="2"
@@ -3346,7 +3304,7 @@ watch([compressionRecord, round], () => {
             </div>
             <div v-else class="options-placeholder" :class="busy ? 'waiting' : ''">
               <LoaderCircle v-if="busy" class="animate-spin" :size="14" />
-              {{ busy ? '正在推演下一幕' : inGame ? '等待引擎给出选项' : '开局后由引擎给出选项' }}
+              {{ busy ? '正在推演下一幕' : inGame ? (saveConsistencyError ? '存档需要修复' : '等待引擎给出选项') : '开局后由引擎给出选项' }}
             </div>
 
             <div class="mt-1.5 flex items-center gap-2">

@@ -59,8 +59,8 @@ const DEFAULT_CORPUS_KINDS: DesignerCorpusKind[] = [
   { id: 'reference_character', label: '参照角色', hint: '只借原型与语言骨架，不借具体设定。' },
 ]
 const DEFAULT_FIELDS: DesignerField[] = [
-  { key: 'name', label: '角色名', required: true, placeholder: '例如：沈砚' },
-  { key: 'work', label: '出处作品', placeholder: '例如：城门风硬' },
+  { key: 'name', label: '角色名', required: true, placeholder: '例如：李青' },
+  { key: 'work', label: '出处作品', placeholder: '例如：示例作品' },
   { key: 'role_type', label: '角色定位', options: DEFAULT_ROLE_TYPES },
   { key: 'gender', label: '性别（male/female）', options: DEFAULT_GENDERS },
   { key: 'original_position', label: '原著定位（影响宿敌强度评估）', options: DEFAULT_POSITIONS },
