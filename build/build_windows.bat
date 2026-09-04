@@ -35,6 +35,9 @@ if not exist dist\FateEngine\FateEngine.exe (
   exit /b 1
 )
 
+REM 运行时数据绝不入包：清除本地试跑残留在发行目录里的 var/。
+if exist dist\FateEngine\var rmdir /s /q dist\FateEngine\var
+
 echo.
 echo Build complete: dist\FateEngine\FateEngine.exe
 echo Distribute the complete dist\FateEngine directory, not the EXE alone.
