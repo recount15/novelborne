@@ -47,7 +47,7 @@ _PUBLIC_ASSET_FILES = (
     *(f'rules/{name}' for name in _RULE_FILES),
 )
 _APPROVED_SHA256 = {
-    'rules/work_library.md': '3f81403c24952dc7f0e76388a8a1e57cf3fd5acd1a031696d80d9e867809f2c8',
+    'rules/work_library.md': '2bc3e7079aeda813d5284a78b0ae924d3055413dd809d02bc604bb7f2303c34b',
 }
 _FRONTEND_SUFFIXES = {
     '.css', '.html', '.ico', '.jpeg', '.jpg', '.js', '.json', '.png',
