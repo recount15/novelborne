@@ -43,10 +43,10 @@ TRANSACTIONAL_KEYS: frozenset[str] = frozenset({
     # round 回滚但 scene_validation/options/agent_meta 残留上一回合结果）。
     "scene_validation", "scene_gate", "scene_gate_reason", "scene_regen",
     "elastic_repair", "options", "options_source", "agent_meta", "history", "save_stage",
-    "active_summaries", "anchor_timeline", "directive_meta",
+    "active_summaries", "anchor_timeline", "directive_meta", "story_ledger",
     "paper_key", "paper_tier", "paper_family", "compose_mode",
     # v2.0.4 作弊码增补：relay_activated（永久通路激活标志，回合内可变需回滚）
-    "relay_activated",
+    "relay_activated", "sequence_feedback", "plot_thread_map", "chapter_arc_plan", "generation_brief", "repair_report", "degraded", "task_registry", "task_progress_log", "conversation_memory", "conversation_commitments", "mechanism_windows",
 })
 
 

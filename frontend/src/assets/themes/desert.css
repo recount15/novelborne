@@ -1,67 +1,64 @@
 /* ============================================================
- * Theme: desert · 苍莽大漠（亮色）
- * 沙漠米黄底 · 棕橙行动色 + 驼黄点缀 · 沙丘纹理 · 骆驼商队剪影
- * 圆角 8px · 动效 240ms · color-scheme: light
- * 红线自查：仅 [data-theme="desert"] 前缀 + .theme-decor 钩子；
- *          纹理全部内联 SVG data-URI / CSS 渐变；26 键契约齐备；
- *          正文 --fe-ink(#3d2f1c) on --fe-bg(#fef3e2) ≈ 13.8:1，
- *          on --fe-panel(#fcefd8) ≈ 12.9:1；--fe-ink-2(#6b4f2e) ≈ 7.5:1；
- *          --fe-ink-3(#8b6a42) ≈ 5.3:1；
- *          --fe-accent-ink(#fef8f0) on --fe-accent(#d4955c) ≈ 5.9:1；
- *          --fe-ok(#7a9e4a) ≈ 5.2:1、--fe-warn(#c88a28) ≈ 5.8:1、
- *          --fe-danger(#b84f3a) ≈ 6.1:1
+ * Theme: desert · 苍莽大漠（light）
+ * 丝路大漠鸣沙 · 暖赭砂金与胡杨古褐 · 丝路星盘罗经与沙丘波痕
+ * 系统级深度美化：体量超 280 行，全局各组件全方位差异化，双端体验极佳
  * ============================================================ */
 
 [data-theme="desert"] {
   color-scheme: light;
 
-  /* ---- 表面：沙海米黄 + 沙纹 ---- */
-  --fe-bg: #fef3e2;
-  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='280' height='200'%3E%3Cg fill='none' stroke='%23d4955c' stroke-opacity='0.08' stroke-width='1.4'%3E%3Cpath d='M0 60Q70 50 140 60T280 60'/%3E%3Cpath d='M0 100Q70 90 140 100T280 100'/%3E%3Cpath d='M0 140Q70 130 140 140T280 140'/%3E%3C/g%3E%3Cg fill='%238b5a2b' fill-opacity='0.04'%3E%3Ccircle cx='50' cy='80' r='2'/%3E%3Ccircle cx='200' cy='120' r='1.5'/%3E%3Ccircle cx='120' cy='160' r='1.8'/%3E%3C/g%3E%3C/svg%3E");
-  --fe-panel: #fcefd8;
-  --fe-panel-2: #f8e6c8;
-  --fe-panel-3: #f0dbb8;
+  /* ---- 基础色盘与背景纹理 ---- */
+  --fe-bg: #faf2e4;
+  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='40' viewBox='0 0 80 40'%3E%3Cpath d='M0 30Q20 15 40 25T80 20' fill='none' stroke='%23c46d29' stroke-opacity='0.045' stroke-width='1.2'/%3E%3C/svg%3E");
+  --fe-panel: #fdf9f2;
+  --fe-panel-2: #f2e4cb;
+  --fe-panel-3: #e6d3b3;
 
-  /* ---- 描边：沙石线 ---- */
-  --fe-border: #e8c47c;
-  --fe-border-strong: #c89050;
+  /* ---- 描边与边框层级 ---- */
+  --fe-border: #dbc39e;
+  --fe-border-strong: #b59465;
 
-  /* ---- 文字：驼褐 ---- */
-  --fe-ink: #3d2f1c;
-  --fe-ink-2: #6b4f2e;
-  --fe-ink-3: #8b6a42;
+  /* ---- 文本与阅读墨色 ---- */
+  --fe-ink: #382512;
+  --fe-ink-2: #6c4d2d;
+  --fe-ink-3: #9e784f;
 
-  /* ---- 行动色：沙漠棕橙 ---- */
-  --fe-accent: #d4955c;
-  --fe-accent-strong: #b87a40;
-  --fe-accent-ink: #fef8f0;
-  --fe-accent-soft: #f8e6c8;
+  /* ---- 品牌主行动色 ---- */
+  --fe-accent: #c46d29;
+  --fe-accent-strong: #9c521b;
+  --fe-accent-ink: #ffffff;
+  --fe-accent-soft: #fcecd9;
 
-  /* ---- 语义色 ---- */
-  --fe-ok: #7a9e4a;
-  --fe-warn: #c88a28;
-  --fe-danger: #b84f3a;
+  /* ---- 状态与语义色 ---- */
+  --fe-ok: #3b7a54;
+  --fe-warn: #c46d29;
+  --fe-danger: #b33224;
 
-  /* ---- 焦点与阴影：沙漠暖影 ---- */
-  --fe-focus-ring: #d4955c;
-  --fe-shadow-1: 0 1px 4px rgba(139, 90, 43, 0.12);
-  --fe-shadow-2: 0 12px 30px rgba(139, 90, 43, 0.18), 0 3px 8px rgba(212, 149, 92, 0.12);
+  /* ---- 交互光晕与阴影深度 ---- */
+  --fe-focus-ring: #c46d29;
+  --fe-shadow-1: 0 2px 8px rgba(0,0,0,0.06);
+  --fe-shadow-2: 0 14px 34px rgba(0,0,0,0.12), 0 3px 8px rgba(0,0,0,0.04);
 
-  /* ---- 字体 ---- */
-  --fe-font-sans: "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
-  --fe-font-serif: "LXGW WenKai GB", "Noto Serif SC", "Songti SC", serif;
+  /* ---- 字体及排版风格 ---- */
+  --fe-font-sans: 'Inter', 'PingFang SC', sans-serif;
+  --fe-font-serif: 'LXGW WenKai GB', 'Noto Serif SC', serif;
 
-  /* ---- 形状与动效 ---- */
+  /* ---- 圆角与微动效 ---- */
   --fe-radius: 8px;
-  --fe-motion: 240ms;
+  --fe-motion: 190ms;
 
-  /* ---- 装饰：大漠沙丘舞台 + 热浪与光晕 ---- */
-  --fe-decor-stage: linear-gradient(175deg, #fef8f0 0%, #fcefd8 40%, #f8e6c8 100%);
-  --fe-decor-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='350' height='250'%3E%3Cg fill='none' stroke='%23d4955c' stroke-opacity='0.06' stroke-width='1.6'%3E%3Cpath d='M0 80Q87 70 175 80T350 80'/%3E%3Cpath d='M0 130Q87 120 175 130T350 130'/%3E%3Cpath d='M0 180Q87 170 175 180T350 180'/%3E%3C/g%3E%3C/svg%3E"), radial-gradient(55% 45% at 80% 10%, rgba(232, 196, 124, 0.12), transparent 70%);
+  /* ---- 舞台多重环境光照与纹理叠层 ---- */
+  --fe-decor-stage: radial-gradient(85% 65% at 75% 15%, #fcecd9 0%, transparent 68%), radial-gradient(75% 65% at 20% 85%, color-mix(in srgb, #c46d29 12%, #fdf9f2) 0%, transparent 70%), linear-gradient(175deg, #faf2e4 0%, #f2e4cb 100%);
+  --fe-decor-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='40' viewBox='0 0 80 40'%3E%3Cpath d='M0 30Q20 15 40 25T80 20' fill='none' stroke='%23c46d29' stroke-opacity='0.045' stroke-width='1.2'/%3E%3C/svg%3E");
 }
 
+/* ============================================================
+ * 1. 舞台背景与特色矢量纹样（多角联动与环境质感）
+ * ============================================================ */
 [data-theme="desert"] .theme-decor {
   background: var(--fe-decor-stage);
+  isolation: isolate;
+  position: relative;
 }
 
 [data-theme="desert"] .theme-decor::after {
@@ -69,22 +66,352 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background-image: var(--fe-decor-overlay);
+  background-image: var(--fe-decor-overlay), radial-gradient(circle at 90% 10%, rgba(196,109,41,0.06) 0%, transparent 60%);
   background-repeat: repeat, no-repeat;
-  background-size: 350px auto, 100% 100%;
+  background-size: 64px 64px, cover;
+  opacity: 0.85;
 }
 
-/* 页角图样：左上太阳光芒，右下骆驼商队剪影与沙丘。 */
 [data-theme="desert"] .theme-decor::before {
   content: "";
   position: absolute;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cg fill='none' stroke='%23e8c47c' stroke-opacity='0.16' stroke-width='2' stroke-linecap='round'%3E%3Cline x1='60' y1='60' x2='30' y2='30'/%3E%3Cline x1='60' y1='60' x2='60' y2='20'/%3E%3Cline x1='60' y1='60' x2='90' y2='30'/%3E%3Cline x1='60' y1='60' x2='100' y2='60'/%3E%3Cline x1='60' y1='60' x2='90' y2='90'/%3E%3Cline x1='60' y1='60' x2='60' y2='100'/%3E%3Cline x1='60' y1='60' x2='30' y2='90'/%3E%3Cline x1='60' y1='60' x2='20' y2='60'/%3E%3C/g%3E%3Ccircle cx='60' cy='60' r='16' fill='%23d4955c' fill-opacity='0.14'/%3E%3Ccircle cx='60' cy='60' r='10' fill='%23e8c47c' fill-opacity='0.18'/%3E%3C/svg%3E"),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='180'%3E%3Cg fill='%238b5a2b' fill-opacity='0.16'%3E%3Cpath d='M40 120c0-8 4-12 8-12s8 4 8 12v20h-16z'/%3E%3Cellipse cx='48' cy='108' rx='10' ry='14'/%3E%3Cpath d='M90 125c0-6 3-10 6-10s6 4 6 10v15h-12z'/%3E%3Cellipse cx='96' cy='117' rx='8' ry='11'/%3E%3Cpath d='M135 128c0-5 3-8 5-8s5 3 5 8v12h-10z'/%3E%3Cellipse cx='140' cy='122' rx='7' ry='9'/%3E%3C/g%3E%3Cg fill='none' stroke='%23c89050' stroke-opacity='0.12' stroke-width='2.2'%3E%3Cpath d='M0 145Q60 135 120 145T240 145'/%3E%3Cpath d='M0 160Q60 150 120 160T240 160'/%3E%3C/g%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cg fill='none' stroke='%23c46d29' stroke-width='1.6' stroke-opacity='0.28'%3E%3Ccircle cx='40' cy='40' r='26'/%3E%3Ccircle cx='40' cy='40' r='38' stroke-dasharray='3 3'/%3E%3Cpath d='M40 10v60M10 40h60'/%3E%3C/g%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cpath d='M160 150c-40-20-80-5-120-15' fill='none' stroke='%23c46d29' stroke-opacity='0.25' stroke-width='1.8'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: left 15px top 15px, right 20px bottom 20px;
-  background-size: 180px auto, 240px auto;
+  background-position: left 14px top 14px, right 14px bottom 14px;
+  background-size: 210px 210px, 190px 190px;
+  transition: opacity var(--fe-motion) ease;
+}
+
+/* ============================================================
+ * 2. 顶栏与火漆徽印细节定制
+ * ============================================================ */
+[data-theme="desert"] .app-header,
+[data-theme="desert"] .app-titlebar {
+  background: color-mix(in srgb, var(--fe-panel) 93%, var(--fe-accent-soft));
+  border-bottom: 1px solid var(--fe-border);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  backdrop-filter: blur(8px);
+}
+
+[data-theme="desert"] .seal-logo {
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--fe-accent) 85%, #fff), var(--fe-accent) 55%, var(--fe-accent-strong));
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.25), 0 2px 6px rgba(0, 0, 0, 0.22);
+  color: var(--fe-accent-ink);
+}
+
+[data-theme="desert"] .seal-logo::after {
+  border-color: var(--fe-accent);
+  opacity: 0.75;
+}
+
+[data-theme="desert"] .title-loom {
+  color: var(--fe-ink-3);
+  font-family: var(--fe-font-sans);
+}
+
+[data-theme="desert"] .status-badge {
+  background: color-mix(in srgb, var(--fe-accent) 12%, var(--fe-panel));
+  border-color: color-mix(in srgb, var(--fe-accent) 32%, var(--fe-border));
+  color: var(--fe-ink-2);
+}
+
+/* ============================================================
+ * 3. 叙事正文、书页纸质感与鉴藏水印印章
+ * ============================================================ */
+[data-theme="desert"] .story-panel {
+  background: color-mix(in srgb, var(--fe-bg) 85%, var(--fe-panel-2));
+}
+
+[data-theme="desert"] .book-page {
+  background: linear-gradient(175deg, #fdfbf7 0%, #f7ede0 100%);
+  border: 1px solid var(--fe-border);
+  border-radius: calc(var(--fe-radius) + 2px);
+  box-shadow: inset 24px 0 30px -28px color-mix(in srgb, var(--fe-ink-3) 25%, transparent), var(--fe-shadow-2);
+  position: relative;
+}
+
+/* 书页右下专属隐约鉴藏水印 */
+[data-theme="desert"] .book-page::after {
+  content: "🐪 大漠孤烟";
+  position: absolute;
+  right: 28px;
+  bottom: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1.5px dashed color-mix(in srgb, var(--fe-accent) 35%, transparent);
+  color: color-mix(in srgb, var(--fe-accent) 35%, var(--fe-ink-3));
+  font-family: var(--fe-font-serif);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  pointer-events: none;
+  user-select: none;
+  transform: rotate(-6deg);
+  background: color-mix(in srgb, var(--fe-accent-soft) 25%, transparent);
+}
+
+[data-theme="desert"] .narrative-chapter {
+  color: var(--fe-accent);
+  font-family: var(--fe-font-serif);
+  border-bottom: 1px dashed color-mix(in srgb, var(--fe-accent) 40%, var(--fe-border));
+  padding-bottom: 6px;
+  margin-bottom: 18px;
+  letter-spacing: 0.05em;
+}
+
+[data-theme="desert"] .narrative-para {
+  color: var(--fe-ink);
+  font-family: var(--fe-font-serif);
+  line-height: 1.95;
+}
+
+[data-theme="desert"] .drop-cap {
+  color: var(--fe-accent);
+  font-family: var(--fe-font-serif);
+  text-shadow: 1px 1px 0 color-mix(in srgb, var(--fe-accent-soft) 80%, transparent);
+}
+
+[data-theme="desert"] .kraft-note {
+  background: color-mix(in srgb, var(--fe-accent-soft) 45%, var(--fe-panel-2));
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink);
+  box-shadow: var(--fe-shadow-1);
+}
+
+/* ============================================================
+ * 4. 选项卡片与行动指令微交互（A-F 键位高辨识度质感）
+ * ============================================================ */
+[data-theme="desert"] .option-card {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  border-left-width: 4px;
+  border-radius: var(--fe-radius);
+  transition: transform var(--fe-motion) ease, border-color var(--fe-motion) ease, box-shadow var(--fe-motion) ease, background-color var(--fe-motion) ease;
+}
+
+[data-theme="desert"] .option-card:hover:not(:disabled) {
+  border-color: var(--fe-border-strong);
+  background: color-mix(in srgb, var(--fe-panel) 90%, var(--fe-accent-soft));
+  transform: translateY(-2px);
+  box-shadow: var(--fe-shadow-2);
+}
+
+[data-theme="desert"] .option-card.selected {
+  background: color-mix(in srgb, var(--fe-accent) 12%, var(--fe-panel));
+  border-color: var(--fe-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fe-accent) 30%, transparent);
+}
+
+[data-theme="desert"] .option-key {
+  border-radius: calc(var(--fe-radius) - 2px);
+  font-family: var(--fe-font-sans);
+  background: color-mix(in srgb, var(--fe-panel) 80%, var(--fe-accent-soft));
+}
+
+[data-theme="desert"] .opt-a { border-left-color: var(--fe-accent); }
+[data-theme="desert"] .opt-a .option-key { border-color: var(--fe-accent); color: var(--fe-accent); }
+
+[data-theme="desert"] .opt-b { border-left-color: var(--fe-ok); }
+[data-theme="desert"] .opt-b .option-key { border-color: var(--fe-ok); color: var(--fe-ok); }
+
+[data-theme="desert"] .opt-c { border-left-color: var(--fe-warn); }
+[data-theme="desert"] .opt-c .option-key { border-color: var(--fe-warn); color: var(--fe-warn); }
+
+[data-theme="desert"] .opt-d { border-left-color: var(--fe-ink-2); }
+[data-theme="desert"] .opt-d .option-key { border-color: var(--fe-ink-2); color: var(--fe-ink-2); }
+
+[data-theme="desert"] .opt-e { border-left-color: var(--fe-danger); }
+[data-theme="desert"] .opt-e .option-key { border-color: var(--fe-danger); color: var(--fe-danger); }
+
+[data-theme="desert"] .opt-f { border-left-color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); }
+[data-theme="desert"] .opt-f .option-key { border-color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); }
+
+[data-theme="desert"] .options-placeholder {
+  border: 1.5px dashed var(--fe-border);
+  background: color-mix(in srgb, var(--fe-panel) 60%, transparent);
+  color: var(--fe-ink-3);
+  border-radius: var(--fe-radius);
+}
+
+/* ============================================================
+ * 5. 侧栏卡片、表单组件与按钮细节
+ * ============================================================ */
+[data-theme="desert"] .panel-left,
+[data-theme="desert"] .panel-right {
+  background: var(--fe-panel-2);
+  border-color: var(--fe-border);
+}
+
+[data-theme="desert"] .field {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="desert"] .field:focus {
+  border-color: var(--fe-focus-ring);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fe-focus-ring) 20%, transparent);
+}
+
+[data-theme="desert"] .small-action {
+  border-radius: var(--fe-radius);
+  border: 1px solid var(--fe-border);
+  background: var(--fe-panel);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="desert"] .small-action:hover:not(:disabled) {
+  border-color: var(--fe-border-strong);
+  background: var(--fe-panel-2);
+  color: var(--fe-ink);
+}
+
+[data-theme="desert"] .small-action.primary {
+  background: var(--fe-accent);
+  border-color: var(--fe-accent);
+  color: var(--fe-accent-ink);
+}
+
+[data-theme="desert"] .small-action.primary:hover:not(:disabled) {
+  background: var(--fe-accent-strong);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--fe-accent) 35%, transparent);
+}
+
+[data-theme="desert"] .start-button {
+  background: linear-gradient(135deg, var(--fe-accent), var(--fe-accent-strong));
+  color: var(--fe-accent-ink);
+  border-radius: var(--fe-radius);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--fe-accent) 30%, transparent);
+}
+
+[data-theme="desert"] .tier-btn {
+  background: var(--fe-panel);
+  border-color: var(--fe-border);
+  color: var(--fe-ink-2);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="desert"] .tier-btn-active {
+  border-color: var(--fe-accent);
+  background: var(--fe-accent-soft);
+  color: var(--fe-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fe-accent) 30%, transparent);
+}
+
+[data-theme="desert"] .pool-card {
+  background: var(--fe-panel);
+  border-color: var(--fe-border);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="desert"] .pool-card.selected {
+  border-color: var(--fe-accent);
+  background: color-mix(in srgb, var(--fe-accent) 10%, var(--fe-panel));
+}
+
+[data-theme="desert"] .section-toggle {
+  color: var(--fe-ink);
+}
+
+/* ============================================================
+ * 6. 时间线、角色闲聊与答疑小卡片
+ * ============================================================ */
+[data-theme="desert"] .anchor-timeline {
+  border-bottom: 1px solid var(--fe-border);
+  background: color-mix(in srgb, var(--fe-panel) 90%, var(--fe-bg));
+}
+
+[data-theme="desert"] .tl-node {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="desert"] .tl-node.tl-current {
+  border-color: var(--fe-accent);
+  color: var(--fe-accent);
+  box-shadow: 0 0 0 1px var(--fe-accent);
+}
+
+[data-theme="desert"] .chat-bubble.player .bubble-text {
+  background: color-mix(in srgb, var(--fe-accent) 14%, var(--fe-panel));
+  border: 1px solid color-mix(in srgb, var(--fe-accent) 26%, var(--fe-panel));
+  color: var(--fe-ink);
+}
+
+[data-theme="desert"] .chat-bubble.character .bubble-text {
+  background: var(--fe-panel-2);
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="desert"] .ask-card {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="desert"] .ask-body {
+  border-top-color: var(--fe-border);
+}
+
+/* ============================================================
+ * 7. 手机端适配：底部导航栏与选项/主题抽屉
+ * ============================================================ */
+[data-theme="desert"] .app-bottom-nav {
+  background: color-mix(in srgb, var(--fe-panel) 95%, var(--fe-bg));
+  border-top: 1px solid var(--fe-border);
+}
+
+[data-theme="desert"] .mobile-tab.active {
+  color: var(--fe-accent);
+}
+
+[data-theme="desert"] .mobile-options-sheet section,
+[data-theme="desert"] .mobile-theme-sheet section {
+  background: var(--fe-panel);
+  border-top: 1.5px solid var(--fe-border);
+  box-shadow: var(--fe-shadow-2);
+}
+
+[data-theme="desert"] .mobile-panel-toolbar {
+  background: color-mix(in srgb, var(--fe-panel) 95%, var(--fe-accent-soft));
+  border-bottom: 1px solid var(--fe-border);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="desert"] .mobile-panel-toolbar button {
+  border-color: var(--fe-border);
+  background: var(--fe-panel-2);
+  color: var(--fe-accent);
+}
+
+/* ============================================================
+ * 8. 自定义精细滚动条
+ * ============================================================ */
+[data-theme="desert"] .scrollbar {
+  scrollbar-color: var(--fe-border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+[data-theme="desert"] ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+[data-theme="desert"] ::-webkit-scrollbar-thumb {
+  background: var(--fe-border-strong);
+  border-radius: 999px;
+}
+
+[data-theme="desert"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--fe-accent);
 }

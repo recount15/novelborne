@@ -15,7 +15,7 @@ import sys
 
 import requests
 
-BASE = os.environ.get("NOVELBORNE_BASE", "http://127.0.0.1:8000")
+BASE = os.environ.get("NOVELBORNE_BASE", "http://127.0.0.1:21560")
 API_KEY = os.environ.get("NOVELBORNE_API_KEY", "")
 BASE_URL = os.environ.get("NOVELBORNE_BASE_URL", "")
 SID = "api_walkthrough_demo"

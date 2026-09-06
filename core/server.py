@@ -63,7 +63,7 @@ FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
 sessions = SessionManager(PROJECT_ROOT)
 operation_journal = OperationJournal(PROJECT_ROOT / "var" / "operations.jsonl")
 question_service = structured_question_service.StructuredQuestionService()
-app = FastAPI(title="书中行 API", version="2.1.0")
+app = FastAPI(title="书中行 API", version="2.2.0")
 _cors_origins = [item.strip() for item in os.getenv("FATE_CORS_ORIGINS", "").split(",") if item.strip()]
 if _cors_origins:
     app.add_middleware(
@@ -871,7 +871,7 @@ def _lan_session_id(value: str | None) -> str | None:
 
 def _lan_info(port: int | None, session_id: str | None = None) -> dict[str, Any]:
     addresses = _lan_addresses()
-    port = int(port or os.getenv("FATE_API_PORT", "8000"))
+    port = int(port or os.getenv("FATE_API_PORT", "21560"))
     linked_session = _lan_session_id(session_id)
 
     def _url(address: str) -> str:
@@ -2319,6 +2319,20 @@ def _normalize_restored_state(restored: dict[str, Any], session_id: str) -> dict
     restored.setdefault("gf_confirmed", False)
     restored.setdefault("opening_confirmed", False)
     restored["session_id"] = session_id
+    if not isinstance(restored.get("story_ledger"), list):
+        restored["story_ledger"] = []
+    if not isinstance(restored.get("sequence_feedback"), list):
+        restored["sequence_feedback"] = []
+    if not isinstance(restored.get("plot_thread_map"), dict):
+        restored["plot_thread_map"] = {}
+    if not isinstance(restored.get("generation_brief"), dict):
+        restored["generation_brief"] = {}
+    if not isinstance(restored.get("repair_report"), dict):
+        restored["repair_report"] = {}
+    restored["degraded"] = bool(restored.get("degraded", False))
+    for key, default in (("chapter_arc_plan", {}), ("task_registry", []), ("task_progress_log", []), ("conversation_memory", []), ("conversation_commitments", []), ("mechanism_windows", {})):
+        if not isinstance(restored.get(key), type(default)):
+            restored[key] = default
     stage = save_contract.classify_state(restored)
     restored["save_stage"] = stage
     restored["game_ready"] = stage in ("opening", "committed")
@@ -2424,9 +2438,17 @@ def _run_export(state: dict[str, Any], style: str, creds: dict[str, Any]) -> dic
         raise HTTPException(
             status_code=400, detail=f"style 必须是 {sorted(exporter.STYLES)} 之一")
 
-    segments = exporter.extract_narrative(state)
+    segments, source_meta, source_check = exporter.prepare_source(state)
+    source_kind = source_meta["source_kind"]
+    story_ledger = state.get("story_ledger") if isinstance(state.get("story_ledger"), list) else []
+    if source_kind == "story_ledger" and not source_check.get("ok"):
+        raise HTTPException(status_code=409, detail={"message":"故事账本存在缺口或重复回合，拒绝导出不完整小说", "continuity": source_check})
+    if source_kind == "history_fallback" and not source_check.get("complete"):
+        raise HTTPException(status_code=409, detail={"message":"旧存档叙事来源无法证明完整，拒绝导出", "continuity": source_check})
     if not segments:
         raise HTTPException(status_code=400, detail="没有可导出的正文")
+    if source_kind == "history_fallback" and not source_check.get("complete"):
+        raise HTTPException(status_code=409, detail={"message":"旧存档叙事来源无法证明完整，拒绝导出","continuity":source_check})
     chapters = exporter.plan_chapters(exporter.merge_narrative(segments))
     total = len(chapters)
 
@@ -2473,6 +2495,8 @@ def _run_export(state: dict[str, Any], style: str, creds: dict[str, Any]) -> dic
         ) from exc
 
     full_text = _scrub(exporter.assemble(records))
+    from core.engine.export_continuity import report as continuity_report
+    continuity = continuity_report(segments)
     chapter_texts: dict[Any, dict[str, Any]] = {}
     for record in records:
         if record.get("output"):
@@ -2482,12 +2506,22 @@ def _run_export(state: dict[str, Any], style: str, creds: dict[str, Any]) -> dic
                 "text": str(record["output"]),
             }
     manifest = exporter.build_export_manifest(
-        source_meta, chapters, style, model_used=True)
+        {**source_meta, "source_kind": source_kind,
+         "source_round_min": min((int(s.get("round") or 0) for s in segments), default=0),
+         "source_round_max": max((int(s.get("round") or 0) for s in segments), default=0),
+         "source_turn_count": len(segments),
+         "source_gaps": source_meta.get("source_gaps", []),
+         "migration_uncertain": source_meta.get("migration_uncertain", False),
+         "complete": source_meta.get("complete", False),
+         "expected_round": source_meta.get("expected_round"),
+         "committed_only": source_kind == "story_ledger"},
+        chapters, style, model_used=True)
     token_chars = sum(len(r.get("prompt", "")) + len(str(r.get("output") or "")) for r in records)
     return {
         "manifest": manifest,
         "chapters": [chapter_texts[key] for key in sorted(chapter_texts)],
         "full_text": full_text,
+        "continuity": continuity,
         "tokens_est": (len(full_text) + token_chars) // 2,
     }
 
@@ -2562,7 +2596,7 @@ def playtest_start(request: PlaytestStartRequest) -> dict[str, Any]:
     if not (request.base_url or "").strip() and not cfg.get("base_url"):
         raise HTTPException(status_code=400, detail="该供应商需要填写 Base URL")
     config = {
-        "base": "http://127.0.0.1:" + str(os.getenv("FATE_API_PORT", "8000")),
+        "base": "http://127.0.0.1:" + str(os.getenv("FATE_API_PORT", "21560")),
         "provider": request.provider,
         "base_url": request.base_url or "",
         "model": request.model.strip(),
@@ -2766,4 +2800,4 @@ if __name__ == "__main__":
     import uvicorn
 
     # 直接以 app 对象启动（老写法 "api_server:app" 引用不存在的模块名，直跑必失败）
-    uvicorn.run(app, host=os.getenv("FATE_API_HOST", "127.0.0.1"), port=int(os.getenv("FATE_API_PORT", "8000")))
+    uvicorn.run(app, host=os.getenv("FATE_API_HOST", "127.0.0.1"), port=int(os.getenv("FATE_API_PORT", "21560")))

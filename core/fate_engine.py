@@ -71,6 +71,8 @@ PROVIDERS = {
                          "glm-4.5-air", "glm-4-plus"], "env_key": "ZHIPUAI_API_KEY"},
     "openai": {"label": "OpenAI", "base_url": "https://api.openai.com/v1",
                "models": ["gpt-4o-mini", "gpt-4o"], "env_key": "OPENAI_API_KEY"},
+    "anthropic": {"label": "Anthropic", "base_url": "https://api.anthropic.com",
+                  "models": ["claude-haiku-4-5-20251001"], "env_key": "ANTHROPIC_API_KEY"},
     "custom": {"label": "自定义 OpenAI 兼容", "base_url": "", "models": [], "env_key": ""},
 }
 PROVIDER_CHOICES = [(item["label"], key) for key, item in PROVIDERS.items()]
@@ -191,11 +193,14 @@ def make_client(api_key, provider="deepseek", base_url=None):
     SDK 只对连接建立与可安全重放的请求重试，流中途断开不重放。
     个别旧版 SDK 不认 timeout 元组时回退默认客户端。
     """
-    from openai import OpenAI
     cfg = provider_config(provider, base_url)
     if not cfg["base_url"]:
         raise ValueError("请先填写 OpenAI 兼容服务的 Base URL")
     api_key = (api_key or "").strip()
+    if provider == "anthropic":
+        from anthropic import Anthropic
+        return Anthropic(api_key=api_key, base_url=cfg["base_url"], timeout=300.0, max_retries=2)
+    from openai import OpenAI
     try:
         return OpenAI(api_key=api_key, base_url=cfg["base_url"],
                       timeout=300.0, connect=15.0, max_retries=3)
@@ -211,10 +216,11 @@ def _model_sort_key(model_id: str):
 
 
 def fetch_models(api_key, provider="deepseek", base_url=None):
-    """通过 OpenAI 兼容 /models 获取实时模型 ID 列表（拉取失败由调用方回退预设）。"""
+    """获取实时模型 ID；Anthropic SDK 迭代器自动遍历分页。"""
     client = make_client(api_key, provider, base_url)
     result = client.models.list()
-    ids = [item.id for item in getattr(result, "data", []) if getattr(item, "id", None)]
+    items = result if provider == "anthropic" else getattr(result, "data", [])
+    ids = [item.id for item in items if getattr(item, "id", None)]
     return sorted(ids, key=_model_sort_key)
 
 
@@ -223,13 +229,14 @@ def test_connection(api_key, provider="deepseek", base_url=None, model=None):
     client = make_client(api_key, provider, base_url)
     try:
         models = client.models.list()
-        ids = [item.id for item in getattr(models, "data", []) if getattr(item, "id", None)]
+        items = models if provider == "anthropic" else getattr(models, "data", [])
+        ids = [item.id for item in items if getattr(item, "id", None)]
         return True, f"连接成功，可用模型 {len(ids)} 个"
     except Exception:
         if not model:
             raise
-        client.chat.completions.create(model=model, messages=[{"role": "user", "content": "ping"}],
-                                       max_tokens=1)
+        from core.services.native_gateway import native_complete
+        native_complete(client, provider, model, "ping", max_tokens=1)
         return True, "连接成功"
 
 DIFFICULTIES = [
@@ -745,6 +752,12 @@ def trim_history(history, max_messages=8):
 def stream_reply(client, model, system_prompt, history, usage_box=None, extra_kwargs=None,
                  provider="deepseek", thinking_mode="auto", thinking_param=""):
     """流式生成助手回复；思考参数不兼容时自动去掉后重试一次。"""
+    if provider == "anthropic":
+        from core.services.native_gateway import anthropic_stream
+        yield from anthropic_stream(
+            client, model, system_prompt, history, usage_box=usage_box,
+            extra=extra_kwargs or thinking_kwargs(provider, thinking_mode, thinking_param))
+        return
     messages = [{"role": "system", "content": system_prompt}] + history
     thinking = dict(extra_kwargs or thinking_kwargs(provider, thinking_mode, thinking_param))
     kwargs = dict(model=model, messages=messages, stream=True, temperature=0.8)
@@ -794,7 +807,10 @@ def stream_reply_with_retry(client, model, system_prompt, history, usage_box=Non
     语义与 stream_reply 完全一致（累积缓冲）。
     """
     try:
-        from openai import APIConnectionError as _ConnError
+        if provider == "anthropic":
+            from anthropic import APIConnectionError as _ConnError
+        else:
+            from openai import APIConnectionError as _ConnError
     except ImportError:  # pragma: no cover  无 SDK 环境退化为不重试
         yield from stream_reply(client, model, system_prompt, history,
                                 usage_box=usage_box, extra_kwargs=extra_kwargs,

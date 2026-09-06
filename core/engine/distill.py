@@ -7,6 +7,39 @@
 from __future__ import annotations
 
 from typing import Any
+import os
+import time
+
+
+DEFAULT_MODEL_ATTEMPTS = 4
+
+
+def _attempts() -> int:
+    try:
+        return max(1, int(os.getenv("FATE_MODEL_ATTEMPTS", str(DEFAULT_MODEL_ATTEMPTS))))
+    except ValueError:
+        return DEFAULT_MODEL_ATTEMPTS
+
+
+def _subcall_timeout() -> float:
+    """子调用默认读超时的环境变量覆盖：慢中转站可调大（如 FATE_SUBCALL_TIMEOUT=240）。
+
+    只影响未显式传 timeout 的调用；调用方已指定的（quest_offer 120s 等）不受影响。
+    """
+    try:
+        return max(30.0, float(os.getenv("FATE_SUBCALL_TIMEOUT", str(DEFAULT_SUBCALL_TIMEOUT))))
+    except ValueError:
+        return DEFAULT_SUBCALL_TIMEOUT
+
+
+def _retryable(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return isinstance(exc, (TimeoutError, ConnectionError)) or any(
+        marker in text for marker in ("timeout", "timed out", "temporarily", "502", "503", "429", "rate limit", "upstream"))
+
+
+def _backoff(index: int) -> None:
+    time.sleep(min(0.5 * (2 ** index), 4.0))
 
 
 #: 内部子调用的单请求读超时（秒）。客户端级默认 300s 对**持锁**子调用过长：
@@ -14,6 +47,7 @@ from typing import Any
 #: 慢响应会让其他端点一直 409；且降级阶梯会把等待放大数倍。
 #: 调用方显式传 timeout 的（quest_offer 120s、break_anchor_offer 30s）不受影响。
 DEFAULT_SUBCALL_TIMEOUT = 120.0
+DEFAULT_SUBCALL_MAX_TOKENS = 12000
 
 #: 后台线程子调用超时（秒）：锚点蒸馏等**不持会话锁**的通道用。主流式生成
 #: 与后台蒸馏共用同一 Key 时上游会排队，120s 会把排队中的合法请求掐死
@@ -40,6 +74,35 @@ def distill_model(client, model: str, prompt: str,
     """
     # 延迟导入：fate_engine 属于老版接入层，仅在源码运行时位于项目根或 legacy/ 下。
     from core import fate_engine as fe
+    if provider == "anthropic":
+        from core.services.native_gateway import native_complete
+        options = dict(extra_kwargs or {})
+        effective_timeout = timeout if timeout is not None else options.get("timeout", _subcall_timeout())
+        last_error = None
+        for attempt in range(_attempts()):
+            try:
+                result = native_complete(client, provider, model, prompt,
+                                         max_tokens=int(options.get("max_tokens", DEFAULT_SUBCALL_MAX_TOKENS) or DEFAULT_SUBCALL_MAX_TOKENS),
+                                         timeout=effective_timeout, extra=options)
+                if result.text.strip():
+                    break
+                last_error = ValueError("模型响应成功但正文为空")
+            except Exception as exc:
+                last_error = exc
+                if not _retryable(exc) and attempt == 0:
+                    raise
+            if attempt + 1 < _attempts(): _backoff(attempt)
+        else:
+            raise last_error or ValueError("模型调用失败")
+        # Empty responses still consume tokens; accounting must not hide results.
+        try:
+            from core.engine import token_accounting
+            token_accounting.record_usage(result.input_tokens, result.output_tokens, usage_category)
+        except Exception:
+            pass
+        if not result.text.strip():
+            raise ValueError("模型响应成功但正文为空")
+        return result.text
 
     thinking: dict[str, Any] = dict(extra_kwargs or fe.thinking_kwargs(provider))
     if provider == "zhipu" and isinstance(thinking.get("thinking"), dict):
@@ -51,10 +114,10 @@ def distill_model(client, model: str, prompt: str,
     # 还会占用思考链），放宽到 4000；空正文仍会降级到无预算的裸参数级。
     # 超时优先级：显式形参 > extra_kwargs 携带 > 持锁默认 120s。
     if timeout is None:
-        timeout = thinking.get("timeout", DEFAULT_SUBCALL_TIMEOUT)
+        timeout = thinking.get("timeout", _subcall_timeout())
     thinking.pop("timeout", None)
     full = dict(model=model, messages=[{"role": "user", "content": prompt}],
-                temperature=0.1, max_tokens=4000)
+                temperature=0.1, max_tokens=DEFAULT_SUBCALL_MAX_TOKENS)
     # 级别 1：剥思考参数；级别 2：连 temperature/max_tokens 也剥掉。
     last_error: Exception = ValueError("distill_model 所有级别均未返回有效正文")
     for kwargs in (

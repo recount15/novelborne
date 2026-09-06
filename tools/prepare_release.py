@@ -26,7 +26,6 @@ CLEAN_DIRS = [
     "outputs", 
     "ip_vault",
     "build/FateEngine",
-    "build/FateEngineWindowed",
     "build/pkg",
     "build/pkg_win",
     "frontend/node_modules",

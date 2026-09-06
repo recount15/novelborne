@@ -120,7 +120,7 @@ def run(rep, should_stop: Callable[[], bool]) -> None:
     from tools.playtest_kit.pipeline import wait_for_stop
     cfg = rep.config
     import os
-    base = str(cfg.get("base") or "http://127.0.0.1:8000")
+    base = str(cfg.get("base") or "http://127.0.0.1:21560")
     api_key = str(getattr(rep, "private_config", {}).get("api_key") or
                   cfg.get("api_key") or cfg.get("_api_key") or
                   os.environ.get("FATE_API_KEY", ""))

@@ -58,7 +58,7 @@ Novelborne-2.0.0-clean-source/
 ├── tools/              # 开发工具
 │
 ├── run_app.py          # 启动脚本（Gradio）
-├── run_windowed.py     # 窗口模式启动
+├── run_app.py     # 窗口模式启动
 ├── verify_c_d_f_e.py  # 验证脚本
 └── requirements.txt    # 依赖
 ```

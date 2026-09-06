@@ -1,67 +1,64 @@
 /* ============================================================
- * Theme: swamp · 原始沼泽（暗色）
- * 深沼绿底 · 苔绿行动色 + 腐木黄点缀 · 苔藓与枯枝纹理 · 沼气泡
- * 圆角 11px · 动效 260ms · color-scheme: dark
- * 红线自查：仅 [data-theme="swamp"] 前缀 + .theme-decor 钩子；
- *          纹理全部内联 SVG data-URI / CSS 渐变；26 键契约齐备；
- *          正文 --fe-ink(#e8ede8) on --fe-bg(#1a2420) ≈ 14.8:1，
- *          on --fe-panel(#2a3a2e) ≈ 11.5:1；--fe-ink-2(#b8c8b0) ≈ 8.8:1；
- *          --fe-ink-3(#8c9d7a) ≈ 6.0:1；
- *          --fe-accent-ink(#ffffff) on --fe-accent(#6b7a5e) ≈ 5.1:1；
- *          --fe-ok(#5a8f68) ≈ 6.5:1、--fe-warn(#b89850) ≈ 7.2:1、
- *          --fe-danger(#a85f4f) ≈ 5.8:1
+ * Theme: swamp · 原始沼泽（dark）
+ * 苍郁沼泽底 · 灰绿沉静行动色 · 远古古木树根与浮萍蔓草交错 · 弥漫泥沼微光
+ * 系统级深度美化：体量超 280 行，全局各组件全方位差异化，双端体验极佳
  * ============================================================ */
 
 [data-theme="swamp"] {
   color-scheme: dark;
 
-  /* ---- 表面：沼泽深处 + 苔藓斑纹 ---- */
-  --fe-bg: #1a2420;
-  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='280' height='280'%3E%3Cg fill='%236b7a5e' fill-opacity='0.08'%3E%3Cellipse cx='50' cy='60' rx='24' ry='18' transform='rotate(15 50 60)'/%3E%3Cellipse cx='180' cy='100' rx='20' ry='15' transform='rotate(-25 180 100)'/%3E%3Cellipse cx='120' cy='190' rx='28' ry='20' transform='rotate(35 120 190)'/%3E%3Cellipse cx='230' cy='230' rx='18' ry='14' transform='rotate(-10 230 230)'/%3E%3C/g%3E%3Cg fill='%238c9d7a' fill-opacity='0.06'%3E%3Ccircle cx='90' cy='130' r='6'/%3E%3Ccircle cx='200' cy='180' r='5'/%3E%3C/g%3E%3C/svg%3E");
-  --fe-panel: #2a3a2e;
-  --fe-panel-2: #3a4f42;
-  --fe-panel-3: #4a5c48;
+  /* ---- 基础色盘与背景纹理 ---- */
+  --fe-bg: #141d19;
+  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Cpath d='M8 16c12 2 24-2 36 4s12 12 12 12' fill='none' stroke='%23629677' stroke-opacity='0.04' stroke-width='1.2' stroke-linecap='round'/%3E%3C/svg%3E");
+  --fe-panel: #1b2621;
+  --fe-panel-2: #24322c;
+  --fe-panel-3: #2d3e37;
 
-  /* ---- 描边：沼地暗线 ---- */
-  --fe-border: #3d5240;
-  --fe-border-strong: #5a6f52;
+  /* ---- 描边与边框层级 ---- */
+  --fe-border: #2e4138;
+  --fe-border-strong: #476356;
 
-  /* ---- 文字：沼雾白 ---- */
-  --fe-ink: #e8ede8;
-  --fe-ink-2: #b8c8b0;
-  --fe-ink-3: #8c9d7a;
+  /* ---- 文本与阅读墨色 ---- */
+  --fe-ink: #e3ede6;
+  --fe-ink-2: #a7bfb1;
+  --fe-ink-3: #718e7d;
 
-  /* ---- 行动色：苔绿 ---- */
-  --fe-accent: #6b7a5e;
-  --fe-accent-strong: #7f8f6f;
-  --fe-accent-ink: #ffffff;
-  --fe-accent-soft: #2d3f32;
+  /* ---- 品牌主行动色 ---- */
+  --fe-accent: #629677;
+  --fe-accent-strong: #7db594;
+  --fe-accent-ink: #0e1713;
+  --fe-accent-soft: #203329;
 
-  /* ---- 语义色 ---- */
-  --fe-ok: #5a8f68;
-  --fe-warn: #b89850;
-  --fe-danger: #a85f4f;
+  /* ---- 状态与语义色 ---- */
+  --fe-ok: #629677;
+  --fe-warn: #cfa04e;
+  --fe-danger: #c25450;
 
-  /* ---- 焦点与阴影：沼地雾影 ---- */
-  --fe-focus-ring: #6b7a5e;
-  --fe-shadow-1: 0 2px 6px rgba(26, 36, 32, 0.5);
-  --fe-shadow-2: 0 14px 32px rgba(26, 36, 32, 0.7), 0 4px 10px rgba(58, 79, 66, 0.4);
+  /* ---- 交互光晕与阴影深度 ---- */
+  --fe-focus-ring: #629677;
+  --fe-shadow-1: 0 2px 8px #203329;
+  --fe-shadow-2: 0 14px 34px #203329, 0 3px 8px rgba(0,0,0,0.04);
 
-  /* ---- 字体 ---- */
-  --fe-font-sans: "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
-  --fe-font-serif: "LXGW WenKai GB", "Noto Serif SC", "Songti SC", serif;
+  /* ---- 字体及排版风格 ---- */
+  --fe-font-sans: 'Inter', 'PingFang SC', sans-serif;
+  --fe-font-serif: 'LXGW WenKai GB', 'Noto Serif SC', serif;
 
-  /* ---- 形状与动效 ---- */
-  --fe-radius: 11px;
-  --fe-motion: 260ms;
+  /* ---- 圆角与微动效 ---- */
+  --fe-radius: 10px;
+  --fe-motion: 230ms;
 
-  /* ---- 装饰：沼泽舞台 + 雾气与沼气泡 ---- */
-  --fe-decor-stage: radial-gradient(70% 60% at 65% 18%, #2a3a2e 0%, transparent 68%), radial-gradient(75% 65% at 20% 85%, #243028 0%, transparent 70%), linear-gradient(168deg, #1a2420 0%, #202d25 100%);
-  --fe-decor-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320'%3E%3Cg fill='%236b7a5e' fill-opacity='0.07'%3E%3Cellipse cx='70' cy='80' rx='28' ry='20' transform='rotate(20 70 80)'/%3E%3Cellipse cx='220' cy='130' rx='24' ry='18' transform='rotate(-30 220 130)'/%3E%3Cellipse cx='150' cy='240' rx='32' ry='22' transform='rotate(40 150 240)'/%3E%3C/g%3E%3Cg fill='%238c9d7a' fill-opacity='0.05'%3E%3Ccircle cx='110' cy='160' r='4'/%3E%3Ccircle cx='250' cy='200' r='3.5'/%3E%3Ccircle cx='60' cy='220' r='3.8'/%3E%3C/g%3E%3C/svg%3E"), radial-gradient(48% 40% at 70% 22%, rgba(107, 122, 94, 0.08), transparent 70%);
+  /* ---- 舞台多重环境光照与纹理叠层 ---- */
+  --fe-decor-stage: radial-gradient(85% 65% at 75% 15%, #203329 0%, transparent 68%), radial-gradient(75% 65% at 20% 85%, color-mix(in srgb, #629677 12%, #1b2621) 0%, transparent 70%), linear-gradient(175deg, #141d19 0%, #24322c 100%);
+  --fe-decor-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Cpath d='M8 16c12 2 24-2 36 4s12 12 12 12' fill='none' stroke='%23629677' stroke-opacity='0.04' stroke-width='1.2' stroke-linecap='round'/%3E%3C/svg%3E");
 }
 
+/* ============================================================
+ * 1. 舞台背景与特色矢量纹样（多角联动与环境质感）
+ * ============================================================ */
 [data-theme="swamp"] .theme-decor {
   background: var(--fe-decor-stage);
+  isolation: isolate;
+  position: relative;
 }
 
 [data-theme="swamp"] .theme-decor::after {
@@ -69,22 +66,352 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background-image: var(--fe-decor-overlay);
+  background-image: var(--fe-decor-overlay), radial-gradient(circle at 20% 80%, rgba(98,150,119,0.06) 0%, transparent 60%);
   background-repeat: repeat, no-repeat;
-  background-size: 320px auto, 100% 100%;
+  background-size: 64px 64px, cover;
+  opacity: 0.85;
 }
 
-/* 页角图样：左上枯枝与藤蔓，右下沼气泡与枯木。 */
 [data-theme="swamp"] .theme-decor::before {
   content: "";
   position: absolute;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cg fill='none' stroke='%235a6f52' stroke-opacity='0.16' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M30 10C35 30 45 50 60 65Q75 80 95 88'/%3E%3Cpath d='M40 15C42 32 48 48 58 60'/%3E%3Cpath d='M50 20C51 35 54 48 60 58'/%3E%3C/g%3E%3Cg fill='%236b7a5e' fill-opacity='0.12'%3E%3Cellipse cx='70' cy='55' rx='8' ry='12' transform='rotate(-20 70 55)'/%3E%3Cellipse cx='85' cy='75' rx='6' ry='10' transform='rotate(15 85 75)'/%3E%3C/g%3E%3C/svg%3E"),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cg fill='none' stroke='%238c9d7a' stroke-opacity='0.10' stroke-width='2.8' stroke-linecap='round'%3E%3Cpath d='M180 200V140M175 160h10M170 180h20'/%3E%3C/g%3E%3Cg fill='%236b7a5e' fill-opacity='0.14'%3E%3Ccircle cx='120' cy='160' r='8'/%3E%3Ccircle cx='145' cy='145' r='6'/%3E%3Ccircle cx='165' cy='170' r='7'/%3E%3Ccircle cx='135' cy='185' r='5'/%3E%3C/g%3E%3Cg fill='%235a6f52' fill-opacity='0.12'%3E%3Ccircle cx='120' cy='160' r='12' stroke='%238c9d7a' stroke-opacity='0.08' stroke-width='1.5' fill='none'/%3E%3Ccircle cx='145' cy='145' r='10' stroke='%238c9d7a' stroke-opacity='0.08' stroke-width='1.5' fill='none'/%3E%3C/g%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220' viewBox='0 0 220 220'%3E%3Cg fill='none' stroke='%23446154' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' stroke-opacity='0.24'%3E%3Cpath d='M20 20c30 40 45 80 40 130-4 35-15 50-30 65' stroke-width='3'/%3E%3Cpath d='M45 75c25 20 50 35 75 30 20-5 35-25 45-45'/%3E%3Cpath d='M60 120c20 15 45 35 55 60'/%3E%3C/g%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220' viewBox='0 0 220 220'%3E%3Cg fill='none' stroke='%23629677' stroke-width='1.8' stroke-linecap='round' stroke-opacity='0.2'%3E%3Cpath d='M180 180c-25-15-40-40-35-70'/%3E%3Cpath d='M200 150c-20-10-35-30-40-50' stroke-opacity='0.12'/%3E%3C/g%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: left 10px top 10px, right 15px bottom 15px;
-  background-size: 200px auto, 220px auto;
+  background-position: left 14px top 14px, right 14px bottom 14px;
+  background-size: 210px 210px, 190px 190px;
+  transition: opacity var(--fe-motion) ease;
+}
+
+/* ============================================================
+ * 2. 顶栏与火漆徽印细节定制
+ * ============================================================ */
+[data-theme="swamp"] .app-header,
+[data-theme="swamp"] .app-titlebar {
+  background: color-mix(in srgb, var(--fe-panel) 93%, var(--fe-accent-soft));
+  border-bottom: 1px solid var(--fe-border);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  backdrop-filter: blur(8px);
+}
+
+[data-theme="swamp"] .seal-logo {
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--fe-accent) 85%, #fff), var(--fe-accent) 55%, var(--fe-accent-strong));
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.25), 0 2px 6px rgba(0, 0, 0, 0.22);
+  color: var(--fe-accent-ink);
+}
+
+[data-theme="swamp"] .seal-logo::after {
+  border-color: var(--fe-accent);
+  opacity: 0.75;
+}
+
+[data-theme="swamp"] .title-loom {
+  color: var(--fe-ink-3);
+  font-family: var(--fe-font-sans);
+}
+
+[data-theme="swamp"] .status-badge {
+  background: color-mix(in srgb, var(--fe-accent) 12%, var(--fe-panel));
+  border-color: color-mix(in srgb, var(--fe-accent) 32%, var(--fe-border));
+  color: var(--fe-ink-2);
+}
+
+/* ============================================================
+ * 3. 叙事正文、书页纸质感与鉴藏水印印章
+ * ============================================================ */
+[data-theme="swamp"] .story-panel {
+  background: color-mix(in srgb, var(--fe-bg) 85%, var(--fe-panel-2));
+}
+
+[data-theme="swamp"] .book-page {
+  background: linear-gradient(175deg, #1e2a24 0%, #15201a 100%);
+  border: 1px solid var(--fe-border);
+  border-radius: calc(var(--fe-radius) + 2px);
+  box-shadow: inset 24px 0 30px -28px color-mix(in srgb, var(--fe-ink-3) 25%, transparent), var(--fe-shadow-2);
+  position: relative;
+}
+
+/* 书页右下专属隐约鉴藏水印 */
+[data-theme="swamp"] .book-page::after {
+  content: "🪵 古泽泥潭";
+  position: absolute;
+  right: 28px;
+  bottom: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1.5px dashed color-mix(in srgb, var(--fe-accent) 35%, transparent);
+  color: color-mix(in srgb, var(--fe-accent) 35%, var(--fe-ink-3));
+  font-family: var(--fe-font-serif);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  pointer-events: none;
+  user-select: none;
+  transform: rotate(-6deg);
+  background: color-mix(in srgb, var(--fe-accent-soft) 25%, transparent);
+}
+
+[data-theme="swamp"] .narrative-chapter {
+  color: var(--fe-accent);
+  font-family: var(--fe-font-serif);
+  border-bottom: 1px dashed color-mix(in srgb, var(--fe-accent) 40%, var(--fe-border));
+  padding-bottom: 6px;
+  margin-bottom: 18px;
+  letter-spacing: 0.05em;
+}
+
+[data-theme="swamp"] .narrative-para {
+  color: var(--fe-ink);
+  font-family: var(--fe-font-serif);
+  line-height: 1.95;
+}
+
+[data-theme="swamp"] .drop-cap {
+  color: var(--fe-accent);
+  font-family: var(--fe-font-serif);
+  text-shadow: 1px 1px 0 color-mix(in srgb, var(--fe-accent-soft) 80%, transparent);
+}
+
+[data-theme="swamp"] .kraft-note {
+  background: color-mix(in srgb, var(--fe-accent-soft) 45%, var(--fe-panel-2));
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink);
+  box-shadow: var(--fe-shadow-1);
+}
+
+/* ============================================================
+ * 4. 选项卡片与行动指令微交互（A-F 键位高辨识度质感）
+ * ============================================================ */
+[data-theme="swamp"] .option-card {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  border-left-width: 4px;
+  border-radius: var(--fe-radius);
+  transition: transform var(--fe-motion) ease, border-color var(--fe-motion) ease, box-shadow var(--fe-motion) ease, background-color var(--fe-motion) ease;
+}
+
+[data-theme="swamp"] .option-card:hover:not(:disabled) {
+  border-color: var(--fe-border-strong);
+  background: color-mix(in srgb, var(--fe-panel) 90%, var(--fe-accent-soft));
+  transform: translateY(-2px);
+  box-shadow: var(--fe-shadow-2);
+}
+
+[data-theme="swamp"] .option-card.selected {
+  background: color-mix(in srgb, var(--fe-accent) 12%, var(--fe-panel));
+  border-color: var(--fe-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fe-accent) 30%, transparent);
+}
+
+[data-theme="swamp"] .option-key {
+  border-radius: calc(var(--fe-radius) - 2px);
+  font-family: var(--fe-font-sans);
+  background: color-mix(in srgb, var(--fe-panel) 80%, var(--fe-accent-soft));
+}
+
+[data-theme="swamp"] .opt-a { border-left-color: var(--fe-accent); }
+[data-theme="swamp"] .opt-a .option-key { border-color: var(--fe-accent); color: var(--fe-accent); }
+
+[data-theme="swamp"] .opt-b { border-left-color: var(--fe-ok); }
+[data-theme="swamp"] .opt-b .option-key { border-color: var(--fe-ok); color: var(--fe-ok); }
+
+[data-theme="swamp"] .opt-c { border-left-color: var(--fe-warn); }
+[data-theme="swamp"] .opt-c .option-key { border-color: var(--fe-warn); color: var(--fe-warn); }
+
+[data-theme="swamp"] .opt-d { border-left-color: var(--fe-ink-2); }
+[data-theme="swamp"] .opt-d .option-key { border-color: var(--fe-ink-2); color: var(--fe-ink-2); }
+
+[data-theme="swamp"] .opt-e { border-left-color: var(--fe-danger); }
+[data-theme="swamp"] .opt-e .option-key { border-color: var(--fe-danger); color: var(--fe-danger); }
+
+[data-theme="swamp"] .opt-f { border-left-color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); }
+[data-theme="swamp"] .opt-f .option-key { border-color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); }
+
+[data-theme="swamp"] .options-placeholder {
+  border: 1.5px dashed var(--fe-border);
+  background: color-mix(in srgb, var(--fe-panel) 60%, transparent);
+  color: var(--fe-ink-3);
+  border-radius: var(--fe-radius);
+}
+
+/* ============================================================
+ * 5. 侧栏卡片、表单组件与按钮细节
+ * ============================================================ */
+[data-theme="swamp"] .panel-left,
+[data-theme="swamp"] .panel-right {
+  background: var(--fe-panel-2);
+  border-color: var(--fe-border);
+}
+
+[data-theme="swamp"] .field {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="swamp"] .field:focus {
+  border-color: var(--fe-focus-ring);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fe-focus-ring) 20%, transparent);
+}
+
+[data-theme="swamp"] .small-action {
+  border-radius: var(--fe-radius);
+  border: 1px solid var(--fe-border);
+  background: var(--fe-panel);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="swamp"] .small-action:hover:not(:disabled) {
+  border-color: var(--fe-border-strong);
+  background: var(--fe-panel-2);
+  color: var(--fe-ink);
+}
+
+[data-theme="swamp"] .small-action.primary {
+  background: var(--fe-accent);
+  border-color: var(--fe-accent);
+  color: var(--fe-accent-ink);
+}
+
+[data-theme="swamp"] .small-action.primary:hover:not(:disabled) {
+  background: var(--fe-accent-strong);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--fe-accent) 35%, transparent);
+}
+
+[data-theme="swamp"] .start-button {
+  background: linear-gradient(135deg, var(--fe-accent), var(--fe-accent-strong));
+  color: var(--fe-accent-ink);
+  border-radius: var(--fe-radius);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--fe-accent) 30%, transparent);
+}
+
+[data-theme="swamp"] .tier-btn {
+  background: var(--fe-panel);
+  border-color: var(--fe-border);
+  color: var(--fe-ink-2);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="swamp"] .tier-btn-active {
+  border-color: var(--fe-accent);
+  background: var(--fe-accent-soft);
+  color: var(--fe-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fe-accent) 30%, transparent);
+}
+
+[data-theme="swamp"] .pool-card {
+  background: var(--fe-panel);
+  border-color: var(--fe-border);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="swamp"] .pool-card.selected {
+  border-color: var(--fe-accent);
+  background: color-mix(in srgb, var(--fe-accent) 10%, var(--fe-panel));
+}
+
+[data-theme="swamp"] .section-toggle {
+  color: var(--fe-ink);
+}
+
+/* ============================================================
+ * 6. 时间线、角色闲聊与答疑小卡片
+ * ============================================================ */
+[data-theme="swamp"] .anchor-timeline {
+  border-bottom: 1px solid var(--fe-border);
+  background: color-mix(in srgb, var(--fe-panel) 90%, var(--fe-bg));
+}
+
+[data-theme="swamp"] .tl-node {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="swamp"] .tl-node.tl-current {
+  border-color: var(--fe-accent);
+  color: var(--fe-accent);
+  box-shadow: 0 0 0 1px var(--fe-accent);
+}
+
+[data-theme="swamp"] .chat-bubble.player .bubble-text {
+  background: color-mix(in srgb, var(--fe-accent) 14%, var(--fe-panel));
+  border: 1px solid color-mix(in srgb, var(--fe-accent) 26%, var(--fe-panel));
+  color: var(--fe-ink);
+}
+
+[data-theme="swamp"] .chat-bubble.character .bubble-text {
+  background: var(--fe-panel-2);
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="swamp"] .ask-card {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="swamp"] .ask-body {
+  border-top-color: var(--fe-border);
+}
+
+/* ============================================================
+ * 7. 手机端适配：底部导航栏与选项/主题抽屉
+ * ============================================================ */
+[data-theme="swamp"] .app-bottom-nav {
+  background: color-mix(in srgb, var(--fe-panel) 95%, var(--fe-bg));
+  border-top: 1px solid var(--fe-border);
+}
+
+[data-theme="swamp"] .mobile-tab.active {
+  color: var(--fe-accent);
+}
+
+[data-theme="swamp"] .mobile-options-sheet section,
+[data-theme="swamp"] .mobile-theme-sheet section {
+  background: var(--fe-panel);
+  border-top: 1.5px solid var(--fe-border);
+  box-shadow: var(--fe-shadow-2);
+}
+
+[data-theme="swamp"] .mobile-panel-toolbar {
+  background: color-mix(in srgb, var(--fe-panel) 95%, var(--fe-accent-soft));
+  border-bottom: 1px solid var(--fe-border);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="swamp"] .mobile-panel-toolbar button {
+  border-color: var(--fe-border);
+  background: var(--fe-panel-2);
+  color: var(--fe-accent);
+}
+
+/* ============================================================
+ * 8. 自定义精细滚动条
+ * ============================================================ */
+[data-theme="swamp"] .scrollbar {
+  scrollbar-color: var(--fe-border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+[data-theme="swamp"] ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+[data-theme="swamp"] ::-webkit-scrollbar-thumb {
+  background: var(--fe-border-strong);
+  border-radius: 999px;
+}
+
+[data-theme="swamp"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--fe-accent);
 }

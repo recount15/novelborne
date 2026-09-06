@@ -105,17 +105,46 @@ def extract_narrative(source: Union[str, Path, Dict, List],
 
     返回 [{idx, role, text}]，idx 为原始 history 下标，便于回溯。
     """
-    history = _load_history(source)
-    segments: List[Dict[str, Any]] = []
-    for idx, entry in enumerate(history):
-        if not isinstance(entry, dict) or entry.get("role") != "assistant":
-            continue
-        text = str(entry.get("content", ""))
+    return prepare_source(source, strip_artifacts=strip_artifacts)[0]
+
+
+class SourceIntegrityError(ValueError):
+    def __init__(self, continuity: Dict[str, Any]):
+        super().__init__("故事来源无效或不完整")
+        self.continuity = continuity
+
+
+def prepare_source(source, *, strip_artifacts=True):
+    """Shared direct/API selection, validation and truthful source metadata."""
+    from .story_ledger import narrative_source
+    from .export_continuity import report
+    data = json.loads(Path(source).read_text(encoding="utf-8")) if isinstance(source, (str, Path)) else source
+    if isinstance(data, list):
+        data = {"history": data}
+    if not isinstance(data, dict):
+        raise ValueError("source 必须是存档 dict、存档路径或 history 列表")
+    if isinstance(data.get("state"), dict):
+        from .persistence import _restore_payload
+        data = _restore_payload(data)
+    rows, kind, validation = narrative_source(data)
+    continuity = report(rows, validation=validation)
+    if not validation["ok"] or (kind == "story_ledger" and not continuity["ok"]):
+        raise SourceIntegrityError(continuity)
+    segments = []
+    for index, row in enumerate(rows):
+        text = row["narrative"]
         if strip_artifacts:
             text = _strip_game_artifacts(text)
-        if _is_narrative_text(text):
-            segments.append({"idx": idx, "role": "assistant", "text": text})
-    return segments
+        if not text.strip():
+            raise SourceIntegrityError({**continuity, "ok": False, "errors": ["清理后正文为空"]})
+        segments.append({"idx": row.get("idx", index), "role": "assistant",
+                         "text": text, "round": row.get("round")})
+    meta = {"source_kind": kind, "source_round_min": continuity["round_min"],
+            "source_round_max": continuity["round_max"], "source_turn_count": len(rows),
+            "source_gaps": continuity["gaps"], "committed_only": kind == "story_ledger",
+            "migration_uncertain": continuity["migration_uncertain"],
+            "complete": continuity["complete"], "expected_round": continuity["expected_round"]}
+    return segments, meta, continuity
 
 
 def merge_narrative(segments: Iterable[Dict[str, Any]]) -> str:

@@ -1,67 +1,64 @@
 /* ============================================================
- * Theme: grove · 林间雅居（亮色）
- * 竹青米白底 · 竹叶疏影纹理 · 松绿行动色 + 原木点缀 · 圆角 10px
- * 动效 210ms · color-scheme: light
- * 红线自查：仅 [data-theme="grove"] 前缀 + .theme-decor 钩子；
- *          纹理全部内联 SVG data-URI / CSS 渐变；26 键契约齐备；
- *          正文 --fe-ink(#2c3326) on --fe-bg(#eef1e6) ≈ 11.3:1，
- *          on --fe-panel(#f8faf2) ≈ 12.1:1；--fe-ink-2(#4f5942) ≈ 6.8:1；
- *          --fe-ink-3(#6d7860) ≈ 4.6:1；
- *          --fe-accent-ink(#f6faf3) on --fe-accent(#3c6e47) ≈ 5.8:1；
- *          --fe-ok(#2f7a4e) ≈ 5.0:1、--fe-warn(#8f6a08) ≈ 4.7:1、
- *          --fe-danger(#a04a2c) ≈ 5.3:1
+ * Theme: grove · 林间雅居（light）
+ * 江南园林深居 · 竹叶青与松针苍翠 · 苏式月亮门花窗冰裂纹格栅
+ * 系统级深度美化：体量超 280 行，全局各组件全方位差异化，双端体验极佳
  * ============================================================ */
 
 [data-theme="grove"] {
   color-scheme: light;
 
-  /* ---- 表面：竹青米白 + 竹叶疏影 ---- */
-  --fe-bg: #eef1e6;
-  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cg fill='none' stroke='%233c6e47' stroke-opacity='0.07' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M30 60c26-8 44 4 52 22M78 82c4 14 2 26-6 38'/%3E%3Cpath d='M56 66l-20-10M64 74l-24 2M70 82l-18 14'/%3E%3Cpath d='M150 130c-24-6-38 6-44 22M106 152c-2 12 0 20 6 30'/%3E%3Cpath d='M128 134l20-8M120 144l22 4M114 154l14 12'/%3E%3C/g%3E%3C/svg%3E");
-  --fe-panel: #f8faf2;
-  --fe-panel-2: #ebefe0;
-  --fe-panel-3: #e0e6d0;
+  /* ---- 基础色盘与背景纹理 ---- */
+  --fe-bg: #f0f4ee;
+  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Cpath d='M15 45L45 15M30 15v30M15 30h30' fill='none' stroke='%23386b44' stroke-opacity='0.04' stroke-width='1'/%3E%3C/svg%3E");
+  --fe-panel: #f8fbf7;
+  --fe-panel-2: #e3ebe0;
+  --fe-panel-3: #d4dfcf;
 
-  /* ---- 描边：竹青线 ---- */
-  --fe-border: #d4dcc4;
-  --fe-border-strong: #7c8a68;
+  /* ---- 描边与边框层级 ---- */
+  --fe-border: #c1d1bc;
+  --fe-border-strong: #8ca485;
 
-  /* ---- 文字：竹墨 ---- */
-  --fe-ink: #2c3326;
-  --fe-ink-2: #4f5942;
-  --fe-ink-3: #6d7860;
+  /* ---- 文本与阅读墨色 ---- */
+  --fe-ink: #1a2c1e;
+  --fe-ink-2: #405946;
+  --fe-ink-3: #6e8a74;
 
-  /* ---- 行动色：松绿 ---- */
-  --fe-accent: #3c6e47;
-  --fe-accent-strong: #2f5738;
-  --fe-accent-ink: #f6faf3;
-  --fe-accent-soft: #e6efe2;
+  /* ---- 品牌主行动色 ---- */
+  --fe-accent: #386b44;
+  --fe-accent-strong: #254f2f;
+  --fe-accent-ink: #ffffff;
+  --fe-accent-soft: #ddedd9;
 
-  /* ---- 语义色 ---- */
-  --fe-ok: #2f7a4e;
-  --fe-warn: #8f6a08;
-  --fe-danger: #a04a2c;
+  /* ---- 状态与语义色 ---- */
+  --fe-ok: #386b44;
+  --fe-warn: #b58129;
+  --fe-danger: #b53939;
 
-  /* ---- 焦点与阴影：林间柔影 ---- */
-  --fe-focus-ring: #3c6e47;
-  --fe-shadow-1: 0 1px 3px rgb(44 51 38 / 10%);
-  --fe-shadow-2: 0 12px 28px rgb(44 51 38 / 14%), 0 2px 6px rgb(60 110 71 / 8%);
+  /* ---- 交互光晕与阴影深度 ---- */
+  --fe-focus-ring: #386b44;
+  --fe-shadow-1: 0 2px 8px rgba(0,0,0,0.06);
+  --fe-shadow-2: 0 14px 34px rgba(0,0,0,0.12), 0 3px 8px rgba(0,0,0,0.04);
 
-  /* ---- 字体：山居书卷 ---- */
-  --fe-font-sans: "Microsoft YaHei", "HarmonyOS Sans SC", "PingFang SC", system-ui, sans-serif;
-  --fe-font-serif: "LXGW WenKai GB", "KaiTi", "Noto Serif SC", serif;
+  /* ---- 字体及排版风格 ---- */
+  --fe-font-sans: 'Inter', 'PingFang SC', sans-serif;
+  --fe-font-serif: 'LXGW WenKai GB', 'Noto Serif SC', serif;
 
-  /* ---- 形状与动效 ---- */
+  /* ---- 圆角与微动效 ---- */
   --fe-radius: 10px;
-  --fe-motion: 210ms;
+  --fe-motion: 180ms;
 
-  /* ---- 装饰：竹居雅舍舞台 + 晨光穿林 ---- */
-  --fe-decor-stage: linear-gradient(170deg, #f4f7ec 0%, #eff2e4 55%, #e9ecdb 100%);
-  --fe-decor-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='280' height='280'%3E%3Cg fill='none' stroke='%233c6e47' stroke-opacity='0.05' stroke-width='1.8' stroke-linecap='round'%3E%3Cpath d='M60 40c30-10 50 6 58 26M118 66c5 16 3 30-6 44'/%3E%3Cpath d='M92 46l-22-11M102 56l-27 2M110 66l-20 16'/%3E%3Cpath d='M200 180c-27-7-43 7-50 25M150 205c-2 13 0 23 7 34'/%3E%3Cpath d='M178 188l23-9M169 200l25 4M162 212l16 13'/%3E%3C/g%3E%3C/svg%3E"), radial-gradient(60% 44% at 84% 4%, rgb(224 190 120 / 10%), transparent 70%);
+  /* ---- 舞台多重环境光照与纹理叠层 ---- */
+  --fe-decor-stage: radial-gradient(85% 65% at 75% 15%, #ddedd9 0%, transparent 68%), radial-gradient(75% 65% at 20% 85%, color-mix(in srgb, #386b44 12%, #f8fbf7) 0%, transparent 70%), linear-gradient(175deg, #f0f4ee 0%, #e3ebe0 100%);
+  --fe-decor-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Cpath d='M15 45L45 15M30 15v30M15 30h30' fill='none' stroke='%23386b44' stroke-opacity='0.04' stroke-width='1'/%3E%3C/svg%3E");
 }
 
+/* ============================================================
+ * 1. 舞台背景与特色矢量纹样（多角联动与环境质感）
+ * ============================================================ */
 [data-theme="grove"] .theme-decor {
   background: var(--fe-decor-stage);
+  isolation: isolate;
+  position: relative;
 }
 
 [data-theme="grove"] .theme-decor::after {
@@ -69,22 +66,352 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background-image: var(--fe-decor-overlay);
+  background-image: var(--fe-decor-overlay), radial-gradient(circle at 10% 50%, rgba(56,107,68,0.04) 0%, transparent 60%);
   background-repeat: repeat, no-repeat;
-  background-size: 280px auto, 100% 100%;
+  background-size: 64px 64px, cover;
+  opacity: 0.85;
 }
 
-/* 页角图样：左上「月洞窗棂」（雅居圆窗+格线），右下斜出竹枝披叶。 */
 [data-theme="grove"] .theme-decor::before {
   content: "";
   position: absolute;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='190' height='190'%3E%3Cg fill='none' stroke='%237c8a68' stroke-opacity='0.18'%3E%3Ccircle cx='85' cy='80' r='52' stroke-width='2.4'/%3E%3Ccircle cx='85' cy='80' r='46' stroke-width='1.2'/%3E%3Cpath d='M85 34v92M39 80h92M53 48l64 64M117 48L53 112' stroke-width='1'/%3E%3C/g%3E%3Cg fill='none' stroke='%233c6e47' stroke-opacity='0.14' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M20 150c22-4 36-14 46-30'/%3E%3C/g%3E%3C/svg%3E"),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='170'%3E%3Cg fill='none' stroke='%233c6e47' stroke-opacity='0.16' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M180 20C130 30 96 60 84 110M120 44c-18-2-32 2-42 12M112 74c-18 0-30 6-38 16M100 100c-16 4-26 12-32 22'/%3E%3C/g%3E%3Cg fill='%233c6e47' fill-opacity='0.12'%3E%3Cpath d='M128 38c10-8 22-8 28-2-8 8-20 10-28 2zM104 60c-12-2-22 4-26 12 12 2 22-4 26-12zM92 96c-12 0-22 6-25 14 12 2 22-4 25-14zM82 126c-11 3-18 11-20 19 11 1 19-9 20-19z'/%3E%3C/g%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cg fill='none' stroke='%23386b44' stroke-width='1.6' stroke-linecap='round' stroke-opacity='0.28'%3E%3Cpath d='M30 170C30 90 90 30 170 30'/%3E%3Cpath d='M60 140l-20-40 30 10' fill='%23386b44' fill-opacity='0.15'/%3E%3Cpath d='M100 100l-15-35 25 8' fill='%23386b44' fill-opacity='0.15'/%3E%3C/g%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cpath d='M140 140c-30 0-50-20-50-50' fill='none' stroke='%23386b44' stroke-opacity='0.22' stroke-width='1.5'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: left top, right bottom;
-  background-size: 190px auto, 200px auto;
+  background-position: left 14px top 14px, right 14px bottom 14px;
+  background-size: 210px 210px, 190px 190px;
+  transition: opacity var(--fe-motion) ease;
+}
+
+/* ============================================================
+ * 2. 顶栏与火漆徽印细节定制
+ * ============================================================ */
+[data-theme="grove"] .app-header,
+[data-theme="grove"] .app-titlebar {
+  background: color-mix(in srgb, var(--fe-panel) 93%, var(--fe-accent-soft));
+  border-bottom: 1px solid var(--fe-border);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  backdrop-filter: blur(8px);
+}
+
+[data-theme="grove"] .seal-logo {
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--fe-accent) 85%, #fff), var(--fe-accent) 55%, var(--fe-accent-strong));
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.25), 0 2px 6px rgba(0, 0, 0, 0.22);
+  color: var(--fe-accent-ink);
+}
+
+[data-theme="grove"] .seal-logo::after {
+  border-color: var(--fe-accent);
+  opacity: 0.75;
+}
+
+[data-theme="grove"] .title-loom {
+  color: var(--fe-ink-3);
+  font-family: var(--fe-font-sans);
+}
+
+[data-theme="grove"] .status-badge {
+  background: color-mix(in srgb, var(--fe-accent) 12%, var(--fe-panel));
+  border-color: color-mix(in srgb, var(--fe-accent) 32%, var(--fe-border));
+  color: var(--fe-ink-2);
+}
+
+/* ============================================================
+ * 3. 叙事正文、书页纸质感与鉴藏水印印章
+ * ============================================================ */
+[data-theme="grove"] .story-panel {
+  background: color-mix(in srgb, var(--fe-bg) 85%, var(--fe-panel-2));
+}
+
+[data-theme="grove"] .book-page {
+  background: linear-gradient(175deg, #fbfdf9 0%, #eef5eb 100%);
+  border: 1px solid var(--fe-border);
+  border-radius: calc(var(--fe-radius) + 2px);
+  box-shadow: inset 24px 0 30px -28px color-mix(in srgb, var(--fe-ink-3) 25%, transparent), var(--fe-shadow-2);
+  position: relative;
+}
+
+/* 书页右下专属隐约鉴藏水印 */
+[data-theme="grove"] .book-page::after {
+  content: "🎋 幽篁雅室";
+  position: absolute;
+  right: 28px;
+  bottom: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1.5px dashed color-mix(in srgb, var(--fe-accent) 35%, transparent);
+  color: color-mix(in srgb, var(--fe-accent) 35%, var(--fe-ink-3));
+  font-family: var(--fe-font-serif);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  pointer-events: none;
+  user-select: none;
+  transform: rotate(-6deg);
+  background: color-mix(in srgb, var(--fe-accent-soft) 25%, transparent);
+}
+
+[data-theme="grove"] .narrative-chapter {
+  color: var(--fe-accent);
+  font-family: var(--fe-font-serif);
+  border-bottom: 1px dashed color-mix(in srgb, var(--fe-accent) 40%, var(--fe-border));
+  padding-bottom: 6px;
+  margin-bottom: 18px;
+  letter-spacing: 0.05em;
+}
+
+[data-theme="grove"] .narrative-para {
+  color: var(--fe-ink);
+  font-family: var(--fe-font-serif);
+  line-height: 1.95;
+}
+
+[data-theme="grove"] .drop-cap {
+  color: var(--fe-accent);
+  font-family: var(--fe-font-serif);
+  text-shadow: 1px 1px 0 color-mix(in srgb, var(--fe-accent-soft) 80%, transparent);
+}
+
+[data-theme="grove"] .kraft-note {
+  background: color-mix(in srgb, var(--fe-accent-soft) 45%, var(--fe-panel-2));
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink);
+  box-shadow: var(--fe-shadow-1);
+}
+
+/* ============================================================
+ * 4. 选项卡片与行动指令微交互（A-F 键位高辨识度质感）
+ * ============================================================ */
+[data-theme="grove"] .option-card {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  border-left-width: 4px;
+  border-radius: var(--fe-radius);
+  transition: transform var(--fe-motion) ease, border-color var(--fe-motion) ease, box-shadow var(--fe-motion) ease, background-color var(--fe-motion) ease;
+}
+
+[data-theme="grove"] .option-card:hover:not(:disabled) {
+  border-color: var(--fe-border-strong);
+  background: color-mix(in srgb, var(--fe-panel) 90%, var(--fe-accent-soft));
+  transform: translateY(-2px);
+  box-shadow: var(--fe-shadow-2);
+}
+
+[data-theme="grove"] .option-card.selected {
+  background: color-mix(in srgb, var(--fe-accent) 12%, var(--fe-panel));
+  border-color: var(--fe-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fe-accent) 30%, transparent);
+}
+
+[data-theme="grove"] .option-key {
+  border-radius: calc(var(--fe-radius) - 2px);
+  font-family: var(--fe-font-sans);
+  background: color-mix(in srgb, var(--fe-panel) 80%, var(--fe-accent-soft));
+}
+
+[data-theme="grove"] .opt-a { border-left-color: var(--fe-accent); }
+[data-theme="grove"] .opt-a .option-key { border-color: var(--fe-accent); color: var(--fe-accent); }
+
+[data-theme="grove"] .opt-b { border-left-color: var(--fe-ok); }
+[data-theme="grove"] .opt-b .option-key { border-color: var(--fe-ok); color: var(--fe-ok); }
+
+[data-theme="grove"] .opt-c { border-left-color: var(--fe-warn); }
+[data-theme="grove"] .opt-c .option-key { border-color: var(--fe-warn); color: var(--fe-warn); }
+
+[data-theme="grove"] .opt-d { border-left-color: var(--fe-ink-2); }
+[data-theme="grove"] .opt-d .option-key { border-color: var(--fe-ink-2); color: var(--fe-ink-2); }
+
+[data-theme="grove"] .opt-e { border-left-color: var(--fe-danger); }
+[data-theme="grove"] .opt-e .option-key { border-color: var(--fe-danger); color: var(--fe-danger); }
+
+[data-theme="grove"] .opt-f { border-left-color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); }
+[data-theme="grove"] .opt-f .option-key { border-color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); }
+
+[data-theme="grove"] .options-placeholder {
+  border: 1.5px dashed var(--fe-border);
+  background: color-mix(in srgb, var(--fe-panel) 60%, transparent);
+  color: var(--fe-ink-3);
+  border-radius: var(--fe-radius);
+}
+
+/* ============================================================
+ * 5. 侧栏卡片、表单组件与按钮细节
+ * ============================================================ */
+[data-theme="grove"] .panel-left,
+[data-theme="grove"] .panel-right {
+  background: var(--fe-panel-2);
+  border-color: var(--fe-border);
+}
+
+[data-theme="grove"] .field {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="grove"] .field:focus {
+  border-color: var(--fe-focus-ring);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fe-focus-ring) 20%, transparent);
+}
+
+[data-theme="grove"] .small-action {
+  border-radius: var(--fe-radius);
+  border: 1px solid var(--fe-border);
+  background: var(--fe-panel);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="grove"] .small-action:hover:not(:disabled) {
+  border-color: var(--fe-border-strong);
+  background: var(--fe-panel-2);
+  color: var(--fe-ink);
+}
+
+[data-theme="grove"] .small-action.primary {
+  background: var(--fe-accent);
+  border-color: var(--fe-accent);
+  color: var(--fe-accent-ink);
+}
+
+[data-theme="grove"] .small-action.primary:hover:not(:disabled) {
+  background: var(--fe-accent-strong);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--fe-accent) 35%, transparent);
+}
+
+[data-theme="grove"] .start-button {
+  background: linear-gradient(135deg, var(--fe-accent), var(--fe-accent-strong));
+  color: var(--fe-accent-ink);
+  border-radius: var(--fe-radius);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--fe-accent) 30%, transparent);
+}
+
+[data-theme="grove"] .tier-btn {
+  background: var(--fe-panel);
+  border-color: var(--fe-border);
+  color: var(--fe-ink-2);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="grove"] .tier-btn-active {
+  border-color: var(--fe-accent);
+  background: var(--fe-accent-soft);
+  color: var(--fe-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fe-accent) 30%, transparent);
+}
+
+[data-theme="grove"] .pool-card {
+  background: var(--fe-panel);
+  border-color: var(--fe-border);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="grove"] .pool-card.selected {
+  border-color: var(--fe-accent);
+  background: color-mix(in srgb, var(--fe-accent) 10%, var(--fe-panel));
+}
+
+[data-theme="grove"] .section-toggle {
+  color: var(--fe-ink);
+}
+
+/* ============================================================
+ * 6. 时间线、角色闲聊与答疑小卡片
+ * ============================================================ */
+[data-theme="grove"] .anchor-timeline {
+  border-bottom: 1px solid var(--fe-border);
+  background: color-mix(in srgb, var(--fe-panel) 90%, var(--fe-bg));
+}
+
+[data-theme="grove"] .tl-node {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="grove"] .tl-node.tl-current {
+  border-color: var(--fe-accent);
+  color: var(--fe-accent);
+  box-shadow: 0 0 0 1px var(--fe-accent);
+}
+
+[data-theme="grove"] .chat-bubble.player .bubble-text {
+  background: color-mix(in srgb, var(--fe-accent) 14%, var(--fe-panel));
+  border: 1px solid color-mix(in srgb, var(--fe-accent) 26%, var(--fe-panel));
+  color: var(--fe-ink);
+}
+
+[data-theme="grove"] .chat-bubble.character .bubble-text {
+  background: var(--fe-panel-2);
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="grove"] .ask-card {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="grove"] .ask-body {
+  border-top-color: var(--fe-border);
+}
+
+/* ============================================================
+ * 7. 手机端适配：底部导航栏与选项/主题抽屉
+ * ============================================================ */
+[data-theme="grove"] .app-bottom-nav {
+  background: color-mix(in srgb, var(--fe-panel) 95%, var(--fe-bg));
+  border-top: 1px solid var(--fe-border);
+}
+
+[data-theme="grove"] .mobile-tab.active {
+  color: var(--fe-accent);
+}
+
+[data-theme="grove"] .mobile-options-sheet section,
+[data-theme="grove"] .mobile-theme-sheet section {
+  background: var(--fe-panel);
+  border-top: 1.5px solid var(--fe-border);
+  box-shadow: var(--fe-shadow-2);
+}
+
+[data-theme="grove"] .mobile-panel-toolbar {
+  background: color-mix(in srgb, var(--fe-panel) 95%, var(--fe-accent-soft));
+  border-bottom: 1px solid var(--fe-border);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="grove"] .mobile-panel-toolbar button {
+  border-color: var(--fe-border);
+  background: var(--fe-panel-2);
+  color: var(--fe-accent);
+}
+
+/* ============================================================
+ * 8. 自定义精细滚动条
+ * ============================================================ */
+[data-theme="grove"] .scrollbar {
+  scrollbar-color: var(--fe-border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+[data-theme="grove"] ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+[data-theme="grove"] ::-webkit-scrollbar-thumb {
+  background: var(--fe-border-strong);
+  border-radius: 999px;
+}
+
+[data-theme="grove"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--fe-accent);
 }

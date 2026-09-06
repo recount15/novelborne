@@ -45,6 +45,7 @@ from core.engine.quality_gate import (
 from core.engine.distill import distill_model
 from core.prompts import render
 from core.services import options_service
+from core.services import choice_agent
 from core.services import answer_polish_service
 
 Model = Callable[[str], Any]
@@ -362,9 +363,19 @@ def run_turn(state: Mapping[str, Any], client, model: str,
     recent_digest = modular_context.build_recent_digest(snapshot)
     quest_block = quest.quest_context_block(snapshot)
     state_facts = protagonist_state.hard_facts_text(snapshot)
+    feedback = snapshot.get("sequence_feedback") or []
+    latest_feedback = feedback[-5:] if isinstance(feedback, list) else []
+    thread_map = snapshot.get("plot_thread_map") if isinstance(snapshot.get("plot_thread_map"), Mapping) else {}
+    generation_brief = snapshot.get("generation_brief") if isinstance(snapshot.get("generation_brief"), Mapping) else {}
+    improvement_block = "\n".join(part for part in (
+        "【内部剧情脉络】", str(thread_map)[:2200],
+        "【生成前工作简报】", str(generation_brief)[:1800],
+        "【上回合改进反馈】", str(latest_feedback)[:1800],
+    ) if part).strip()
     world_block = "\n".join(part for part in (
         "【作品设定与系统规则】" if str(system_prompt or "").strip() else "",
         str(system_prompt or "").strip()[:1500],
+        improvement_block,
         state_facts,
         "【近期回合摘要】" if recent_digest else "",
         recent_digest[:1100],
@@ -377,6 +388,7 @@ def run_turn(state: Mapping[str, Any], client, model: str,
         "scene_excerpt_chars": len(str(scene_excerpt or "").strip()),
         "quest_block_chars": len(quest_block),
         "state_facts_chars": len(state_facts),
+        "improvement_block_chars": len(improvement_block),
     }
 
     # —— Wave A：导演卷（1 次，失败落机械兜底蓝图）——
@@ -463,6 +475,18 @@ def run_turn(state: Mapping[str, Any], client, model: str,
         return best
 
     options_payload = _pick_options(options_candidates)
+    choice_mode = choice_agent.mode()
+    if choice_mode in ("shadow", "agent"):
+        audited = choice_agent.generate_options(snapshot, model_fn=budgeted,
+                                                prompt=blueprint_brief or message)
+        if choice_mode == "agent" and len(audited.get("options") or []) == 6:
+            options_payload = audited
+        elif choice_mode == "agent":
+            options_payload = dict(options_payload)
+            options_payload.setdefault("meta", {})["choice_agent_fallback"] = audited
+        else:
+            options_payload = dict(options_payload)
+            options_payload.setdefault("meta", {})["choice_agent_shadow"] = audited
 
     drafts = [
         str(getattr(item, "value", "") or "") if getattr(item, "ok", False) else ""

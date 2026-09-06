@@ -66,10 +66,10 @@ html {
   --fe-font-serif: var(--font-serif);
   --fe-radius: 6px;
   --fe-motion: 140ms;
-  --fe-decor-stage: transparent;
-  --fe-decor-overlay: none;
+  --fe-decor-stage: linear-gradient(175deg, #f7f2e4 0%, #f3edde 55%, #eae2cf 100%);
+  --fe-decor-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320' viewBox='0 0 320 320'%3E%3Cpath d='M40 40h240v240H40z' fill='none' stroke='%23b63a2b' stroke-opacity='0.02' stroke-width='1'/%3E%3C/svg%3E");
   color: var(--fe-ink);
-  /* 全局牛皮纸底色：暖卡其 + 四角轻微晕染 + 极淡纤维纹理，低调不抢眼 */
+  /* 全局牛皮纸底色：暖卡其 + 复古藏书票水印与羊皮纸纤维纹理 */
   background-color: var(--fe-bg);
   background-image: var(--fe-bg-image);
   font-family: var(--font-sans);

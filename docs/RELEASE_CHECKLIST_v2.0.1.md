@@ -19,7 +19,6 @@
 ## Windows 窗口版
 
 - [ ] 执行 `build\build_windows_windowed.bat`
-- [ ] `dist\FateEngineWindowed\FateEngineWindowed.exe` 存在
 - [ ] 窗口版后端健康接口可用
 - [ ] WebView2/pywebview 依赖已被收编
 
@@ -27,7 +26,6 @@
 
 - [ ] `Novelborne-v2.0.1-source.zip`
 - [ ] `Novelborne-v2.0.1-windows-web-x64.zip`
-- [ ] `Novelborne-v2.0.1-windows-windowed-x64.zip`
 - [ ] SHA256 校验文件 `SHA256SUMS.txt`
 - [ ] `RELEASE_NOTES_v2.0.1.md`
 

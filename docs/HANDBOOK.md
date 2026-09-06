@@ -18,10 +18,10 @@ cd ..
 python run_app.py
 ```
 
-默认监听 `0.0.0.0:8000`，本机浏览器打开 `127.0.0.1:8000`。多实例必须分别指定端口和运行数据目录：
+默认监听 `0.0.0.0:21560`，本机浏览器打开 `127.0.0.1:21560`。多实例必须分别指定端口和运行数据目录：
 
 ```bash
-python run_app.py --port 8010 --var var/cluster/a --no-browser
+python run_app.py --port 21561 --var var/cluster/a --no-browser
 ```
 
 ## 2. 强化模式回合链
@@ -119,7 +119,6 @@ build\build_windows_windowed.bat
 构建脚本必须检查 PyInstaller 退出码和最终 EXE 是否存在。发布整个目录：
 
 - `dist/FateEngine/`
-- `dist/FateEngineWindowed/`
 
 每个产物都要独立启动并验证 health、bootstrap、首页、LAN info、二维码和 session；窗口版还需确认 pywebview 主窗口和 Web 内容实际创建。
 

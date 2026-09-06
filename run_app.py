@@ -2,7 +2,7 @@
 """Windows/source entry: serve the Vue workbench and open it in a browser.
 
 多实例并发：同一台机器可同时运行多份本程序——
-  - 端口：--port / FATE_API_PORT（默认 8000），每实例必须不同端口；
+  - 端口：--port / FATE_API_PORT（默认 21560），每实例必须不同端口；
   - 数据目录：--var / FATE_VAR_DIR（默认项目根 var/），每实例必须不同目录，
     config / 存档 / 会话 / 上传 / 日志 / SQLite 全部随之隔离；
   - 集群实例可加 --no-browser 避免弹出浏览器窗口。
@@ -11,9 +11,9 @@
 （启动时终端打印地址与二维码；仅本机使用可 --host 127.0.0.1）。
 
 示例（开三个实例并行测试）：
-  python run_app.py --port 8000                      # 主实例（默认 var/）
-  python run_app.py --port 8010 --var var/cluster/a --no-browser
-  python run_app.py --port 8020 --var var/cluster/b --no-browser
+  python run_app.py --port 21560                    # 主实例（默认 var/）
+  python run_app.py --port 21561 --var var/cluster/a --no-browser
+  python run_app.py --port 21562 --var var/cluster/b --no-browser
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="命运引擎 API 服务")
     parser.add_argument("--host", default=None,
                         help="监听地址（默认 FATE_API_HOST 或 0.0.0.0，支持局域网/手机扫码；仅本机可 127.0.0.1）")
-    parser.add_argument("--port", type=int, default=None, help="监听端口（默认 FATE_API_PORT 或 8000）")
+    parser.add_argument("--port", type=int, default=None, help="监听端口（默认 FATE_API_PORT 或 21560；后台 API 可显式指定其他端口）")
     parser.add_argument("--var", default=None,
                         help="运行数据目录（默认 FATE_VAR_DIR 或项目根 var/）；多实例务必各用独立目录")
     parser.add_argument("--no-browser", action="store_true",
@@ -76,7 +76,9 @@ def main() -> None:
         os.environ["FATE_VAR_DIR"] = str(_default_var_dir())
 
     host = args.host or os.getenv("FATE_API_HOST", "0.0.0.0")
-    port = args.port or int(os.getenv("FATE_API_PORT", "8000"))
+    port = args.port or int(os.getenv("FATE_API_PORT", "21560"))
+    if not 1 <= port <= 65535:
+        raise SystemExit("端口必须是 1 到 65535 之间的整数")
     # server 模块在 import 时读取 FATE_API_HOST 推断局域网监听状态，先写环境再导入。
     os.environ["FATE_API_HOST"] = host
 

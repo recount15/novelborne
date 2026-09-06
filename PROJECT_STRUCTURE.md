@@ -30,7 +30,7 @@ Novelborne-2.0.0-clean-source/
 ├── README.md            # 项目说明（中文）
 ├── README.en.md         # 项目说明（英文）
 ├── run_app.py          # Gradio 启动脚本
-├── run_windowed.py     # 窗口模式启动
+├── run_app.py     # 窗口模式启动
 ├── verify_c_d_f_e.py   # 阶段验证脚本
 └── requirements.txt    # Python 依赖
 ```

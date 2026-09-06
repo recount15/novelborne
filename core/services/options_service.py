@@ -27,6 +27,7 @@ from core import engine
 from core.engine import parallel, structured, turn_grader
 from core.engine.distill import distill_model
 from core.prompts import render
+from core.services import choice_agent as _choice_agent
 
 Model = Callable[[str], Any]
 
@@ -84,6 +85,15 @@ def build_options_prompt(action: str, factors_block: str, context_tail: str,
     return rendered + variant_hint
 
 
+#: choice_agent 内部标记：解析时透传供过滤，出榜前剥离（不入前台契约）。
+_AGENT_FLAG_FIELDS = ("requires_future_knowledge", "patch_valid")
+
+
+def _strip_agent_flags(options: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [{k: v for k, v in dict(item).items() if k not in _AGENT_FLAG_FIELDS}
+            for item in options or ()]
+
+
 def parse_option_items(items: Sequence[Any]) -> List[Dict[str, str]]:
     """把 6 条原始条目拆为 {key, text, preview, factor}；键由代码分配 A–F。
 
@@ -113,8 +123,13 @@ def parse_option_items(items: Sequence[Any]) -> List[Dict[str, str]]:
         if factor not in ("金手指", "性格", "剧情"):
             factor = "金手指" if index < 4 else "性格"
         if text:
-            options.append({"key": key, "text": text[:60],
-                            "preview": preview[:60], "factor": factor})
+            entry: Dict[str, Any] = {"key": key, "text": text[:60],
+                                     "preview": preview[:60], "factor": factor}
+            if isinstance(raw, Mapping):
+                for flag in _AGENT_FLAG_FIELDS:
+                    if flag in raw:
+                        entry[flag] = raw[flag]
+            options.append(entry)
     return options
 
 
@@ -176,6 +191,48 @@ def _fallback_from_narrative(narrative: str) -> List[Dict[str, str]]:
     return []
 
 
+def _choice_candidates(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """把结构化选项条目转为 choice_agent 内部候选形状（text/action 同源）。"""
+    return [dict(item, action=str(item.get("text") or "").strip()) for item in items or ()
+            if isinstance(item, dict) and str(item.get("text") or "").strip()]
+
+
+def _apply_choice_agent(items: List[Dict[str, Any]], meta: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """专用选项通路接入点（内部代号，不出现在前台契约）。
+
+    - legacy：原样返回，不记录；
+    - shadow：仅把过滤+多样性选择结果记入 meta（不改变输出，供离线对比）；
+    - agent：应用未来知识/非法 patch 过滤与多样性保序选择，不合格条目剔除。
+    """
+    try:
+        mode = _choice_agent.mode()
+    except Exception:  # noqa: BLE001 配置异常一律回退 legacy
+        return items
+    if mode == "legacy" or not items:
+        return items
+    candidates = _choice_candidates(items)
+    kept = _choice_agent.select_diverse(_choice_agent.filter_candidates(candidates, {}))
+    shadow = {"mode": mode, "candidate_count": len(candidates),
+              "kept_keys": [str(c.get("key")) for c in kept]}
+    if mode == "agent" and len(kept) >= turn_grader.OPTION_COUNT:
+        allowed_keys = {str(c.get("key")) for c in kept}
+        shadow["applied"] = True
+        meta["choice_agent"] = shadow
+        return [item for item in items if str(item.get("key")) in allowed_keys]
+    if mode == "agent":
+        dropped = [str(c.get("key")) for c in candidates
+                   if str(c.get("key")) not in {str(k.get("key")) for k in kept}]
+        if dropped:
+            # 剔除后不足 6 条无法直接应用：记录被剔除项，交由批改重试链替换。
+            shadow["applied"] = False
+            shadow["dropped_keys"] = dropped
+            meta["choice_agent"] = shadow
+            return items
+    shadow["applied"] = False
+    meta["choice_agent"] = shadow
+    return items
+
+
 def generate_options(client, model: str, request_kwargs: dict | None = None,
                      provider: str = "deepseek", *, action: str = "",
                      factors_block: str = "", context_tail: str = "",
@@ -196,8 +253,17 @@ def generate_options(client, model: str, request_kwargs: dict | None = None,
         parallel.PRIORITY_TURN)
     data, meta = structured.structured_call(budgeted, prompt, _SPECS, attempts=attempts)
     items = parse_option_items((data or {}).get("options") or []) if data else []
+    items = _apply_choice_agent(items, meta if isinstance(meta, dict) else {})
     grade = turn_grader.grade_options(items) if items else turn_grader.GradeResult(
         errors=["结构化生成未返回任何选项"])
+    # choice_agent（agent 模式）剔除的未来知识/非法候选：不足 6 条时注入批改
+    # 错误清单，触发下方定向重试，由模型替换该候选而非带病出榜。
+    agent_dropped = (meta or {}).get("choice_agent", {}).get("dropped_keys") \
+        if isinstance(meta, dict) else None
+    if agent_dropped:
+        grade = turn_grader.GradeResult(errors=list(grade.errors) + [
+            "选项" + "、".join(agent_dropped)
+            + "依赖未发生的未来信息或非法状态变更，必须替换为当前可执行的行动"])
     warnings: List[str] = []
     if items and not grade.ok:
         # 空级批改不合格：带中文错误清单定向重试 1 次（额外恰好 1 次模型调用）。
@@ -214,6 +280,7 @@ def generate_options(client, model: str, request_kwargs: dict | None = None,
         meta["grade_retry"] = retry_meta or {}
         retry_items = parse_option_items(
             (retry_data or {}).get("options") or []) if retry_data else []
+        retry_items = _apply_choice_agent(retry_items, meta)
         retry_grade = (turn_grader.grade_options(retry_items)
                        if retry_items else turn_grader.GradeResult(errors=["重试未返回选项"]))
         if len(retry_grade.errors) < len(grade.errors):
@@ -224,12 +291,12 @@ def generate_options(client, model: str, request_kwargs: dict | None = None,
         if grade.ok:
             for item in items:
                 item["factors"] = engine.match_option_factors(item["text"], factors or [])
-            return {"options": items, "source": "model", "meta": meta}
+            return {"options": _strip_agent_flags(items), "source": "model", "meta": meta}
         sanitized = _sanitize_option_items(items)
         if len(sanitized) >= MIN_AI_OPTIONS:
             for item in sanitized:
                 item["factors"] = engine.match_option_factors(item["text"], factors or [])
-            return {"options": sanitized, "source": "model", "meta": meta,
+            return {"options": _strip_agent_flags(sanitized), "source": "model", "meta": meta,
                     "warnings": warnings or grade.errors}
     fallback = _normalize_fallback(_fallback_from_narrative(narrative), factors)
     if len(fallback) >= 6:

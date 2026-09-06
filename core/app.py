@@ -32,6 +32,11 @@ import core.engine.skill_drift
 import core.engine.break_anchor
 import core.engine.context_compressor
 import core.engine.protagonist_state
+import core.engine.story_ledger
+import core.engine.sequence_review
+from core.engine.sequence_feedback import append_feedback
+from core.engine.plot_threading import prepare as prepare_plot_threads, generation_brief
+from core.services.story_agent import StoryAgent
 from core.memory import blank_state, StateStore, render_panel
 from core.memory import action_patch, apply_turn, extract_patch
 from core.lore import LoreInjector
@@ -1900,7 +1905,7 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
            "gender_guard": {"entries": _gender_report["entries"],
                             "pending": _gender_report["pending"]},
            "faction_gap": faction_gap, "nemesis_difficulty": computed_nemesis_difficulty,
-           "ledger": ledger_module.new_ledger(), "ripples": [], "distill": {},
+           "ledger": ledger_module.new_ledger(), "story_ledger": [], "sequence_feedback": [], "plot_thread_map": {}, "chapter_arc_plan": {}, "generation_brief": {}, "repair_report": {}, "degraded": False, "task_registry": [], "task_progress_log": [], "conversation_memory": [], "conversation_commitments": [], "mechanism_windows": {}, "ripples": [], "distill": {},
            "state_memory": memory_state, "state_panel": render_panel(memory_state),
            "lore": lore_state, "lore_hits": [],
            "distill_enabled": bool(distill_enabled) if enhanced else False,
@@ -2339,6 +2344,13 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
     state["save_stage"] = "streaming"
     state["round"] = state.get("round", 0) + 1
     r = state["round"]
+    try:
+        _thread_map = prepare_plot_threads(state, user_input=message)
+        state["plot_thread_map"] = _thread_map.to_dict()
+        state["generation_brief"] = generation_brief(_thread_map)
+    except Exception as _thread_exc:
+        state["plot_thread_map"] = {"error": str(_thread_exc)}
+        state["generation_brief"] = {"type": "generation_brief", "internal": True, "degraded": True}
     # v2.0.5 S3：上回合登记的压缩在此执行（用户此刻在等待新回合生成，压缩
     # 不再额外延长上一回合的推送延迟）；结果回写 state["history"]，本回合
     # 的本地 history 随之接续，压缩失败语义不变（保留原 history）。
@@ -2480,7 +2492,8 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
 
             def _pipeline_worker():
                 try:
-                    _pipeline_box["result"] = turn_pipeline.run_turn(
+                    _runner = StoryAgent(mode="agent") if str(os.getenv("STORY_AGENT_MODE", "shadow")).strip().lower() == "agent" else turn_pipeline
+                    _pipeline_box["result"] = (_runner.run_turn if isinstance(_runner, StoryAgent) else _runner.run_turn)(
                         state, client, model, request_kwargs, provider,
                         message=message, system_prompt=turn_system, context_blocks=llm_msg,
                         active_members=state.get("active_members") or [],
@@ -2950,6 +2963,38 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
             yield _out_send(chatbot, state)
             return
         state["save_stage"] = "committed"
+        if state.get("agent_mode") or state.get("story_agent_mode"):
+            try:
+                agent_mode = str(os.getenv("STORY_AGENT_MODE", "shadow") or "shadow").strip().lower()
+                if agent_mode not in ("legacy", "shadow", "agent"):
+                    agent_mode = "shadow"
+                state["agent_meta"] = {**(state.get("agent_meta") or {}), "story_agent_shadow": StoryAgent(mode=agent_mode).prepare(state)}
+            except Exception as exc:
+                state["agent_meta"] = {**(state.get("agent_meta") or {}), "story_agent_shadow_error": str(exc)}
+        try:
+            _feedback = core.engine.sequence_review.review_turn(
+                state=state, action=message, narrative=narrative,
+                options=state.get("options") or [],
+                events=((assembled_result.agent_meta if assembled_result else {}).get("events") or []),
+                degraded=bool(state.get("degraded")), repairs=state.get("repair_report", {}).get("repairs", []))
+            state["sequence_feedback"] = append_feedback(state.get("sequence_feedback") or [], _feedback)
+        except Exception as _feedback_exc:
+            state["sequence_feedback"] = append_feedback(state.get("sequence_feedback") or [], {
+                "schema": "sequence-feedback-v1", "round": r, "turn_id": f"round-{r}",
+                "summary": "feedback review unavailable", "feedback_status": "degraded",
+                "degraded": True, "violations": [{"code": "review_error", "detail": str(_feedback_exc) }],
+                "next_turn_directives": ["保持上一回合已提交事实和顺序"]})
+        state["story_ledger"] = core.engine.story_ledger.append_turn(
+            state.get("story_ledger") or [], {
+                "turn_id": f"round-{r}", "round": r,
+                "chapter": int(state.get("current_chapter") or 1),
+                "chapter_round": int(state.get("chapter_round") or r),
+                "action": message, "narrative": narrative,
+                "options": copy.deepcopy(state.get("options") or []),
+                "events": copy.deepcopy((assembled_result.agent_meta if assembled_result else {}).get("events") or []),
+                "objective_updates": [], "state_hash_before": "", "state_hash_after": "",
+                "committed": True,
+            })
         chatbot[-1] = {"role": "assistant",
                        "content": (narrative + "\n\n" + options_block).strip() if options_block else narrative}
         # 十回合压缩可能改变 history；最终落盘和事件必须使用同一版本。

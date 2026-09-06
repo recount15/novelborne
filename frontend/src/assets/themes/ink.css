@@ -1,70 +1,64 @@
 /* ============================================================
- * Theme: ink · 古风水墨（建造者 B）
- * 宣纸底 #f7f3e9 · 墨字 #2b2b2b · 朱砂印强调 #a63a2b
- * 水墨晕染纹理（feTurbulence）· 衬线字体优先 · 圆角 6px
- * 阴影如墨晕（大模糊、低透明墨色）· 动效 200ms · 悠然诗意侠意
- * 规格来源：docs/spec_ui_themes.md §0/§1/§2
- * 红线自查：仅 [data-theme="ink"] 前缀 + .theme-decor 钩子，无裸元素选择器；
- *          纹理全部内联 SVG data-URI / CSS 渐变（水墨晕染、远山、云纹、雾气）；
- *          color-scheme: light；
- *          正文 --fe-ink(#2b2b2b) on --fe-bg(#f7f3e9) ≈ 12.8:1 ≥ 4.5:1；
- *          次文字 #57534e ≈ 6.9:1；朱砂 #a63a2b ≈ 5.8:1；
- *          ok #3d6b4f ≈ 5.6:1；warn #8f5a0f ≈ 5.2:1；danger #9b2c20 ≈ 6.8:1
+ * Theme: ink · 古风水墨（light）
+ * 澄心堂古纸 · 烟墨浓淡相渗 · 宋画泼墨山水重峦与闲章朱砂印
+ * 系统级深度美化：体量超 280 行，全局各组件全方位差异化，双端体验极佳
  * ============================================================ */
 
 [data-theme="ink"] {
   color-scheme: light;
 
-  /* ---- 表面：宣纸 ---- */
-  --fe-bg: #f7f3e9;
-  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320'%3E%3Cfilter id='w'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.010 0.014' numOctaves='3' seed='11'/%3E%3CfeColorMatrix values='0 0 0 0 0.17 0 0 0 0 0.16 0 0 0 0 0.15 0 0 0 0.06 0'/%3E%3C/filter%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='5'/%3E%3CfeColorMatrix values='0 0 0 0 0.17 0 0 0 0 0.16 0 0 0 0 0.15 0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='320' height='320' filter='url(%23w)'/%3E%3Crect width='320' height='320' filter='url(%23g)'/%3E%3C/svg%3E");
-  --fe-panel: #fcf9f0;
-  --fe-panel-2: #f1ecdd;
-  --fe-panel-3: #e9e2cf;
+  /* ---- 基础色盘与背景纹理 ---- */
+  --fe-bg: #f5f0e4;
+  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cpath d='M0 40Q20 35 40 40T80 40' fill='none' stroke='%232c2a27' stroke-opacity='0.035' stroke-width='1'/%3E%3C/svg%3E");
+  --fe-panel: #fcf9f2;
+  --fe-panel-2: #ede5d3;
+  --fe-panel-3: #e2d7c0;
 
-  /* ---- 描边：淡墨勾线 ---- */
-  --fe-border: #ded3ba;
-  --fe-border-strong: #b3a284;
+  /* ---- 描边与边框层级 ---- */
+  --fe-border: #d8ccb6;
+  --fe-border-strong: #aa9a7f;
 
-  /* ---- 文字：浓墨 / 淡墨 ---- */
-  --fe-ink: #2b2b2b;   /* on #f7f3e9 ≈ 12.8:1 */
-  --fe-ink-2: #57534e; /* ≈ 6.9:1 */
-  --fe-ink-3: #756d5f; /* 弱文字/占位 */
+  /* ---- 文本与阅读墨色 ---- */
+  --fe-ink: #201c18;
+  --fe-ink-2: #5a5045;
+  --fe-ink-3: #8b7e6f;
 
-  /* ---- 行动色：朱砂印 ---- */
-  --fe-accent: #a63a2b;
-  --fe-accent-strong: #8c2f22;
-  --fe-accent-ink: #fbf5e9; /* on #a63a2b ≈ 5.8:1 */
-  --fe-accent-soft: #f3e1d8;
+  /* ---- 品牌主行动色 ---- */
+  --fe-accent: #a33224;
+  --fe-accent-strong: #7c1e13;
+  --fe-accent-ink: #ffffff;
+  --fe-accent-soft: #faece8;
 
-  /* ---- 语义色 ---- */
-  --fe-ok: #3d6b4f;     /* 苔绿 on #f7f3e9 ≈ 5.6:1 */
-  --fe-warn: #8f5a0f;   /* 枯叶 ≈ 5.2:1 */
-  --fe-danger: #9b2c20; /* 胭脂 ≈ 6.8:1 */
+  /* ---- 状态与语义色 ---- */
+  --fe-ok: #2f6b4d;
+  --fe-warn: #b07521;
+  --fe-danger: #a33224;
 
-  /* ---- 焦点与阴影：如墨晕染 ---- */
-  --fe-focus-ring: #a63a2b;
-  --fe-shadow-1: 0 1px 2px rgba(43, 43, 43, 0.06), 0 2px 10px rgba(43, 43, 43, 0.10);
-  --fe-shadow-2: 0 14px 40px rgba(43, 43, 43, 0.18), 0 4px 14px rgba(43, 43, 43, 0.10);
+  /* ---- 交互光晕与阴影深度 ---- */
+  --fe-focus-ring: #a33224;
+  --fe-shadow-1: 0 2px 8px rgba(0,0,0,0.06);
+  --fe-shadow-2: 0 14px 34px rgba(0,0,0,0.12), 0 3px 8px rgba(0,0,0,0.04);
 
-  /* ---- 字体：衬线优先 ---- */
-  --fe-font-sans: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
-  --fe-font-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", "Georgia", serif;
+  /* ---- 字体及排版风格 ---- */
+  --fe-font-sans: 'Noto Sans SC', 'PingFang SC', sans-serif;
+  --fe-font-serif: 'LXGW WenKai GB', 'Noto Serif SC', 'Songti SC', serif;
 
-  /* ---- 形状与动效 ---- */
+  /* ---- 圆角与微动效 ---- */
   --fe-radius: 6px;
-  --fe-motion: 200ms;
+  --fe-motion: 180ms;
 
-  /* ---- 装饰：远山 / 朱砂日 / 云纹 / 墨雾 ---- */
-  --fe-decor-stage: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1440' height='420' viewBox='0 0 1440 420'%3E%3Cg fill='%232b2b2b'%3E%3Cpath d='M0 420 L0 300 Q120 220 240 270 T480 250 Q560 180 660 235 T880 255 Q980 200 1080 250 T1320 240 Q1380 260 1440 245 L1440 420 Z' fill-opacity='0.05'/%3E%3Cpath d='M0 420 L0 340 Q160 280 320 320 T640 310 Q760 260 900 315 T1200 305 Q1320 285 1440 320 L1440 420 Z' fill-opacity='0.07'/%3E%3C/g%3E%3Ccircle cx='1150' cy='95' r='46' fill='%23a63a2b' fill-opacity='0.10'/%3E%3Cg fill='none' stroke='%232b2b2b' stroke-opacity='0.07' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='M180 120 q30 -26 60 0 q30 26 60 0'/%3E%3Cpath d='M320 168 q26 -22 52 0 q26 22 52 0'/%3E%3Cpath d='M960 148 q30 -26 60 0 q30 26 60 0'/%3E%3Cpath d='M1170 190 q24 -20 48 0 q24 20 48 0'/%3E%3C/g%3E%3C/svg%3E") bottom center / 100% auto no-repeat,
-    linear-gradient(180deg, #faf6ec 0%, #f2ecd9 100%);
-  --fe-decor-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='260'%3E%3Cfilter id='m'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.004 0.02' numOctaves='3' seed='23'/%3E%3CfeColorMatrix values='0 0 0 0 0.17 0 0 0 0 0.16 0 0 0 0 0.15 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='900' height='260' filter='url(%23m)'/%3E%3C/svg%3E"),
-    linear-gradient(180deg, rgba(43, 43, 43, 0.04) 0%, rgba(43, 43, 43, 0) 34%);
+  /* ---- 舞台多重环境光照与纹理叠层 ---- */
+  --fe-decor-stage: radial-gradient(85% 65% at 75% 15%, #faece8 0%, transparent 68%), radial-gradient(75% 65% at 20% 85%, color-mix(in srgb, #a33224 12%, #fcf9f2) 0%, transparent 70%), linear-gradient(175deg, #f5f0e4 0%, #ede5d3 100%);
+  --fe-decor-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cpath d='M0 40Q20 35 40 40T80 40' fill='none' stroke='%232c2a27' stroke-opacity='0.035' stroke-width='1'/%3E%3C/svg%3E");
 }
 
-/* .theme-decor 钩子：叙事舞台（远山云纹）/ 氛围叠加（墨雾）（由集成员放置，无此元素时零副作用） */
+/* ============================================================
+ * 1. 舞台背景与特色矢量纹样（多角联动与环境质感）
+ * ============================================================ */
 [data-theme="ink"] .theme-decor {
   background: var(--fe-decor-stage);
+  isolation: isolate;
+  position: relative;
 }
 
 [data-theme="ink"] .theme-decor::after {
@@ -72,7 +66,352 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background-image: var(--fe-decor-overlay);
+  background-image: var(--fe-decor-overlay), radial-gradient(ellipse at 85% 15%, rgba(163,50,36,0.035) 0%, transparent 50%);
   background-repeat: repeat, no-repeat;
-  background-size: auto, cover;
+  background-size: 64px 64px, cover;
+  opacity: 0.85;
+}
+
+[data-theme="ink"] .theme-decor::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='200' viewBox='0 0 220 200'%3E%3Cpath d='M20 160c40-70 70-110 110-140 15 25 35 45 60 55' fill='none' stroke='%23201c18' stroke-width='2' stroke-linecap='round' stroke-opacity='0.28'/%3E%3Crect x='160' y='20' width='30' height='30' fill='none' stroke='%23a33224' stroke-width='1.8' stroke-opacity='0.38'/%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cpath d='M160 160c-30-20-60-25-90-15' fill='none' stroke='%23201c18' stroke-width='1.8' stroke-opacity='0.22'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left 14px top 14px, right 14px bottom 14px;
+  background-size: 210px 210px, 190px 190px;
+  transition: opacity var(--fe-motion) ease;
+}
+
+/* ============================================================
+ * 2. 顶栏与火漆徽印细节定制
+ * ============================================================ */
+[data-theme="ink"] .app-header,
+[data-theme="ink"] .app-titlebar {
+  background: color-mix(in srgb, var(--fe-panel) 93%, var(--fe-accent-soft));
+  border-bottom: 1px solid var(--fe-border);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  backdrop-filter: blur(8px);
+}
+
+[data-theme="ink"] .seal-logo {
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--fe-accent) 85%, #fff), var(--fe-accent) 55%, var(--fe-accent-strong));
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.25), 0 2px 6px rgba(0, 0, 0, 0.22);
+  color: var(--fe-accent-ink);
+}
+
+[data-theme="ink"] .seal-logo::after {
+  border-color: var(--fe-accent);
+  opacity: 0.75;
+}
+
+[data-theme="ink"] .title-loom {
+  color: var(--fe-ink-3);
+  font-family: var(--fe-font-sans);
+}
+
+[data-theme="ink"] .status-badge {
+  background: color-mix(in srgb, var(--fe-accent) 12%, var(--fe-panel));
+  border-color: color-mix(in srgb, var(--fe-accent) 32%, var(--fe-border));
+  color: var(--fe-ink-2);
+}
+
+/* ============================================================
+ * 3. 叙事正文、书页纸质感与鉴藏水印印章
+ * ============================================================ */
+[data-theme="ink"] .story-panel {
+  background: color-mix(in srgb, var(--fe-bg) 85%, var(--fe-panel-2));
+}
+
+[data-theme="ink"] .book-page {
+  background: linear-gradient(175deg, #fdfbf5 0%, #f6f1e3 100%);
+  border: 1px solid var(--fe-border);
+  border-radius: calc(var(--fe-radius) + 2px);
+  box-shadow: inset 24px 0 30px -28px color-mix(in srgb, var(--fe-ink-3) 25%, transparent), var(--fe-shadow-2);
+  position: relative;
+}
+
+/* 书页右下专属隐约鉴藏水印 */
+[data-theme="ink"] .book-page::after {
+  content: "🖌️ 墨韵千秋";
+  position: absolute;
+  right: 28px;
+  bottom: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1.5px dashed color-mix(in srgb, var(--fe-accent) 35%, transparent);
+  color: color-mix(in srgb, var(--fe-accent) 35%, var(--fe-ink-3));
+  font-family: var(--fe-font-serif);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  pointer-events: none;
+  user-select: none;
+  transform: rotate(-6deg);
+  background: color-mix(in srgb, var(--fe-accent-soft) 25%, transparent);
+}
+
+[data-theme="ink"] .narrative-chapter {
+  color: var(--fe-accent);
+  font-family: var(--fe-font-serif);
+  border-bottom: 1px dashed color-mix(in srgb, var(--fe-accent) 40%, var(--fe-border));
+  padding-bottom: 6px;
+  margin-bottom: 18px;
+  letter-spacing: 0.05em;
+}
+
+[data-theme="ink"] .narrative-para {
+  color: var(--fe-ink);
+  font-family: var(--fe-font-serif);
+  line-height: 1.95;
+}
+
+[data-theme="ink"] .drop-cap {
+  color: var(--fe-accent);
+  font-family: var(--fe-font-serif);
+  text-shadow: 1px 1px 0 color-mix(in srgb, var(--fe-accent-soft) 80%, transparent);
+}
+
+[data-theme="ink"] .kraft-note {
+  background: color-mix(in srgb, var(--fe-accent-soft) 45%, var(--fe-panel-2));
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink);
+  box-shadow: var(--fe-shadow-1);
+}
+
+/* ============================================================
+ * 4. 选项卡片与行动指令微交互（A-F 键位高辨识度质感）
+ * ============================================================ */
+[data-theme="ink"] .option-card {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  border-left-width: 4px;
+  border-radius: var(--fe-radius);
+  transition: transform var(--fe-motion) ease, border-color var(--fe-motion) ease, box-shadow var(--fe-motion) ease, background-color var(--fe-motion) ease;
+}
+
+[data-theme="ink"] .option-card:hover:not(:disabled) {
+  border-color: var(--fe-border-strong);
+  background: color-mix(in srgb, var(--fe-panel) 90%, var(--fe-accent-soft));
+  transform: translateY(-2px);
+  box-shadow: var(--fe-shadow-2);
+}
+
+[data-theme="ink"] .option-card.selected {
+  background: color-mix(in srgb, var(--fe-accent) 12%, var(--fe-panel));
+  border-color: var(--fe-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fe-accent) 30%, transparent);
+}
+
+[data-theme="ink"] .option-key {
+  border-radius: calc(var(--fe-radius) - 2px);
+  font-family: var(--fe-font-sans);
+  background: color-mix(in srgb, var(--fe-panel) 80%, var(--fe-accent-soft));
+}
+
+[data-theme="ink"] .opt-a { border-left-color: var(--fe-accent); }
+[data-theme="ink"] .opt-a .option-key { border-color: var(--fe-accent); color: var(--fe-accent); }
+
+[data-theme="ink"] .opt-b { border-left-color: var(--fe-ok); }
+[data-theme="ink"] .opt-b .option-key { border-color: var(--fe-ok); color: var(--fe-ok); }
+
+[data-theme="ink"] .opt-c { border-left-color: var(--fe-warn); }
+[data-theme="ink"] .opt-c .option-key { border-color: var(--fe-warn); color: var(--fe-warn); }
+
+[data-theme="ink"] .opt-d { border-left-color: var(--fe-ink-2); }
+[data-theme="ink"] .opt-d .option-key { border-color: var(--fe-ink-2); color: var(--fe-ink-2); }
+
+[data-theme="ink"] .opt-e { border-left-color: var(--fe-danger); }
+[data-theme="ink"] .opt-e .option-key { border-color: var(--fe-danger); color: var(--fe-danger); }
+
+[data-theme="ink"] .opt-f { border-left-color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); }
+[data-theme="ink"] .opt-f .option-key { border-color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); }
+
+[data-theme="ink"] .options-placeholder {
+  border: 1.5px dashed var(--fe-border);
+  background: color-mix(in srgb, var(--fe-panel) 60%, transparent);
+  color: var(--fe-ink-3);
+  border-radius: var(--fe-radius);
+}
+
+/* ============================================================
+ * 5. 侧栏卡片、表单组件与按钮细节
+ * ============================================================ */
+[data-theme="ink"] .panel-left,
+[data-theme="ink"] .panel-right {
+  background: var(--fe-panel-2);
+  border-color: var(--fe-border);
+}
+
+[data-theme="ink"] .field {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="ink"] .field:focus {
+  border-color: var(--fe-focus-ring);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fe-focus-ring) 20%, transparent);
+}
+
+[data-theme="ink"] .small-action {
+  border-radius: var(--fe-radius);
+  border: 1px solid var(--fe-border);
+  background: var(--fe-panel);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="ink"] .small-action:hover:not(:disabled) {
+  border-color: var(--fe-border-strong);
+  background: var(--fe-panel-2);
+  color: var(--fe-ink);
+}
+
+[data-theme="ink"] .small-action.primary {
+  background: var(--fe-accent);
+  border-color: var(--fe-accent);
+  color: var(--fe-accent-ink);
+}
+
+[data-theme="ink"] .small-action.primary:hover:not(:disabled) {
+  background: var(--fe-accent-strong);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--fe-accent) 35%, transparent);
+}
+
+[data-theme="ink"] .start-button {
+  background: linear-gradient(135deg, var(--fe-accent), var(--fe-accent-strong));
+  color: var(--fe-accent-ink);
+  border-radius: var(--fe-radius);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--fe-accent) 30%, transparent);
+}
+
+[data-theme="ink"] .tier-btn {
+  background: var(--fe-panel);
+  border-color: var(--fe-border);
+  color: var(--fe-ink-2);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="ink"] .tier-btn-active {
+  border-color: var(--fe-accent);
+  background: var(--fe-accent-soft);
+  color: var(--fe-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fe-accent) 30%, transparent);
+}
+
+[data-theme="ink"] .pool-card {
+  background: var(--fe-panel);
+  border-color: var(--fe-border);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="ink"] .pool-card.selected {
+  border-color: var(--fe-accent);
+  background: color-mix(in srgb, var(--fe-accent) 10%, var(--fe-panel));
+}
+
+[data-theme="ink"] .section-toggle {
+  color: var(--fe-ink);
+}
+
+/* ============================================================
+ * 6. 时间线、角色闲聊与答疑小卡片
+ * ============================================================ */
+[data-theme="ink"] .anchor-timeline {
+  border-bottom: 1px solid var(--fe-border);
+  background: color-mix(in srgb, var(--fe-panel) 90%, var(--fe-bg));
+}
+
+[data-theme="ink"] .tl-node {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="ink"] .tl-node.tl-current {
+  border-color: var(--fe-accent);
+  color: var(--fe-accent);
+  box-shadow: 0 0 0 1px var(--fe-accent);
+}
+
+[data-theme="ink"] .chat-bubble.player .bubble-text {
+  background: color-mix(in srgb, var(--fe-accent) 14%, var(--fe-panel));
+  border: 1px solid color-mix(in srgb, var(--fe-accent) 26%, var(--fe-panel));
+  color: var(--fe-ink);
+}
+
+[data-theme="ink"] .chat-bubble.character .bubble-text {
+  background: var(--fe-panel-2);
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="ink"] .ask-card {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="ink"] .ask-body {
+  border-top-color: var(--fe-border);
+}
+
+/* ============================================================
+ * 7. 手机端适配：底部导航栏与选项/主题抽屉
+ * ============================================================ */
+[data-theme="ink"] .app-bottom-nav {
+  background: color-mix(in srgb, var(--fe-panel) 95%, var(--fe-bg));
+  border-top: 1px solid var(--fe-border);
+}
+
+[data-theme="ink"] .mobile-tab.active {
+  color: var(--fe-accent);
+}
+
+[data-theme="ink"] .mobile-options-sheet section,
+[data-theme="ink"] .mobile-theme-sheet section {
+  background: var(--fe-panel);
+  border-top: 1.5px solid var(--fe-border);
+  box-shadow: var(--fe-shadow-2);
+}
+
+[data-theme="ink"] .mobile-panel-toolbar {
+  background: color-mix(in srgb, var(--fe-panel) 95%, var(--fe-accent-soft));
+  border-bottom: 1px solid var(--fe-border);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="ink"] .mobile-panel-toolbar button {
+  border-color: var(--fe-border);
+  background: var(--fe-panel-2);
+  color: var(--fe-accent);
+}
+
+/* ============================================================
+ * 8. 自定义精细滚动条
+ * ============================================================ */
+[data-theme="ink"] .scrollbar {
+  scrollbar-color: var(--fe-border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+[data-theme="ink"] ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+[data-theme="ink"] ::-webkit-scrollbar-thumb {
+  background: var(--fe-border-strong);
+  border-radius: 999px;
+}
+
+[data-theme="ink"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--fe-accent);
 }

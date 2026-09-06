@@ -47,7 +47,7 @@
 ```bash
 pip install -r requirements.txt
 cd frontend && npm install && npm run build && cd ..
-python run_app.py            # 打开 http://127.0.0.1:8000
+python run_app.py            # 打开 http://127.0.0.1:21560
 ```
 
 - 首屏配置模型连接（Key 只在内存，不落盘）→ 选模式 → 确认设定 →
@@ -120,7 +120,7 @@ assets/prompts/  提示词模板（单一来源，代码不内嵌提示词）
 ## 5. 目录结构
 
 ```
-├── run_app.py / run_windowed.py     # 服务入口 / 桌面窗口入口
+├── run_app.py / run_app.py     # 服务入口 / 桌面窗口入口
 ├── core/                            # 后端（FastAPI + 引擎 + 服务层）
 ├── frontend/                        # Vue 3 前端（构建产物入 dist/）
 ├── assets/                          # 试卷/提示词/静态数据

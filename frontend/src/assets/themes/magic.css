@@ -88,3 +88,334 @@
   background-position: left top, right bottom;
   background-size: 200px auto, 190px auto;
 }
+
+/* ============================================================
+ * 2. 顶栏与火漆徽印细节定制
+ * ============================================================ */
+[data-theme="magic"] .app-header,
+[data-theme="magic"] .app-titlebar {
+  background: color-mix(in srgb, var(--fe-panel) 93%, var(--fe-accent-soft));
+  border-bottom: 1px solid var(--fe-border);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  backdrop-filter: blur(8px);
+}
+
+[data-theme="magic"] .seal-logo {
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--fe-accent) 85%, #fff), var(--fe-accent) 55%, var(--fe-accent-strong));
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.25), 0 2px 6px rgba(0, 0, 0, 0.22);
+  color: var(--fe-accent-ink);
+}
+
+[data-theme="magic"] .seal-logo::after {
+  border-color: var(--fe-accent);
+  opacity: 0.75;
+}
+
+[data-theme="magic"] .title-loom {
+  color: var(--fe-ink-3);
+  font-family: var(--fe-font-sans);
+}
+
+[data-theme="magic"] .status-badge {
+  background: color-mix(in srgb, var(--fe-accent) 12%, var(--fe-panel));
+  border-color: color-mix(in srgb, var(--fe-accent) 32%, var(--fe-border));
+  color: var(--fe-ink-2);
+}
+
+/* ============================================================
+ * 3. 叙事正文、书页纸质感与鉴藏水印印章
+ * ============================================================ */
+[data-theme="magic"] .story-panel {
+  background: color-mix(in srgb, var(--fe-bg) 85%, var(--fe-panel-2));
+}
+
+[data-theme="magic"] .book-page {
+  background: linear-gradient(175deg, #1a162e 0%, #120f21 100%);
+  border: 1px solid var(--fe-border);
+  border-radius: calc(var(--fe-radius) + 2px);
+  box-shadow: inset 24px 0 30px -28px color-mix(in srgb, var(--fe-ink-3) 25%, transparent), var(--fe-shadow-2);
+  position: relative;
+}
+
+/* 书页右下专属隐约鉴藏水印 */
+[data-theme="magic"] .book-page::after {
+  content: "🔮 ARCANE_SIGIL";
+  position: absolute;
+  right: 28px;
+  bottom: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1.5px dashed color-mix(in srgb, var(--fe-accent) 35%, transparent);
+  color: color-mix(in srgb, var(--fe-accent) 35%, var(--fe-ink-3));
+  font-family: var(--fe-font-serif);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  pointer-events: none;
+  user-select: none;
+  transform: rotate(-6deg);
+  background: color-mix(in srgb, var(--fe-accent-soft) 25%, transparent);
+}
+
+[data-theme="magic"] .narrative-chapter {
+  color: var(--fe-accent);
+  font-family: var(--fe-font-serif);
+  border-bottom: 1px dashed color-mix(in srgb, var(--fe-accent) 40%, var(--fe-border));
+  padding-bottom: 6px;
+  margin-bottom: 18px;
+  letter-spacing: 0.05em;
+}
+
+[data-theme="magic"] .narrative-para {
+  color: var(--fe-ink);
+  font-family: var(--fe-font-serif);
+  line-height: 1.95;
+}
+
+[data-theme="magic"] .drop-cap {
+  color: var(--fe-accent);
+  font-family: var(--fe-font-serif);
+  text-shadow: 1px 1px 0 color-mix(in srgb, var(--fe-accent-soft) 80%, transparent);
+}
+
+[data-theme="magic"] .kraft-note {
+  background: color-mix(in srgb, var(--fe-accent-soft) 45%, var(--fe-panel-2));
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink);
+  box-shadow: var(--fe-shadow-1);
+}
+
+/* ============================================================
+ * 4. 选项卡片与行动指令微交互（A-F 键位高辨识度质感）
+ * ============================================================ */
+[data-theme="magic"] .option-card {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  border-left-width: 4px;
+  border-radius: var(--fe-radius);
+  transition: transform var(--fe-motion) ease, border-color var(--fe-motion) ease, box-shadow var(--fe-motion) ease, background-color var(--fe-motion) ease;
+}
+
+[data-theme="magic"] .option-card:hover:not(:disabled) {
+  border-color: var(--fe-border-strong);
+  background: color-mix(in srgb, var(--fe-panel) 90%, var(--fe-accent-soft));
+  transform: translateY(-2px);
+  box-shadow: var(--fe-shadow-2);
+}
+
+[data-theme="magic"] .option-card.selected {
+  background: color-mix(in srgb, var(--fe-accent) 12%, var(--fe-panel));
+  border-color: var(--fe-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fe-accent) 30%, transparent);
+}
+
+[data-theme="magic"] .option-key {
+  border-radius: calc(var(--fe-radius) - 2px);
+  font-family: var(--fe-font-sans);
+  background: color-mix(in srgb, var(--fe-panel) 80%, var(--fe-accent-soft));
+}
+
+[data-theme="magic"] .opt-a { border-left-color: var(--fe-accent); }
+[data-theme="magic"] .opt-a .option-key { border-color: var(--fe-accent); color: var(--fe-accent); }
+
+[data-theme="magic"] .opt-b { border-left-color: var(--fe-ok); }
+[data-theme="magic"] .opt-b .option-key { border-color: var(--fe-ok); color: var(--fe-ok); }
+
+[data-theme="magic"] .opt-c { border-left-color: var(--fe-warn); }
+[data-theme="magic"] .opt-c .option-key { border-color: var(--fe-warn); color: var(--fe-warn); }
+
+[data-theme="magic"] .opt-d { border-left-color: var(--fe-ink-2); }
+[data-theme="magic"] .opt-d .option-key { border-color: var(--fe-ink-2); color: var(--fe-ink-2); }
+
+[data-theme="magic"] .opt-e { border-left-color: var(--fe-danger); }
+[data-theme="magic"] .opt-e .option-key { border-color: var(--fe-danger); color: var(--fe-danger); }
+
+[data-theme="magic"] .opt-f { border-left-color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); }
+[data-theme="magic"] .opt-f .option-key { border-color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); }
+
+[data-theme="magic"] .options-placeholder {
+  border: 1.5px dashed var(--fe-border);
+  background: color-mix(in srgb, var(--fe-panel) 60%, transparent);
+  color: var(--fe-ink-3);
+  border-radius: var(--fe-radius);
+}
+
+/* ============================================================
+ * 5. 侧栏卡片、表单组件与按钮细节
+ * ============================================================ */
+[data-theme="magic"] .panel-left,
+[data-theme="magic"] .panel-right {
+  background: var(--fe-panel-2);
+  border-color: var(--fe-border);
+}
+
+[data-theme="magic"] .field {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="magic"] .field:focus {
+  border-color: var(--fe-focus-ring);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fe-focus-ring) 20%, transparent);
+}
+
+[data-theme="magic"] .small-action {
+  border-radius: var(--fe-radius);
+  border: 1px solid var(--fe-border);
+  background: var(--fe-panel);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="magic"] .small-action:hover:not(:disabled) {
+  border-color: var(--fe-border-strong);
+  background: var(--fe-panel-2);
+  color: var(--fe-ink);
+}
+
+[data-theme="magic"] .small-action.primary {
+  background: var(--fe-accent);
+  border-color: var(--fe-accent);
+  color: var(--fe-accent-ink);
+}
+
+[data-theme="magic"] .small-action.primary:hover:not(:disabled) {
+  background: var(--fe-accent-strong);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--fe-accent) 35%, transparent);
+}
+
+[data-theme="magic"] .start-button {
+  background: linear-gradient(135deg, var(--fe-accent), var(--fe-accent-strong));
+  color: var(--fe-accent-ink);
+  border-radius: var(--fe-radius);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--fe-accent) 30%, transparent);
+}
+
+[data-theme="magic"] .tier-btn {
+  background: var(--fe-panel);
+  border-color: var(--fe-border);
+  color: var(--fe-ink-2);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="magic"] .tier-btn-active {
+  border-color: var(--fe-accent);
+  background: var(--fe-accent-soft);
+  color: var(--fe-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fe-accent) 30%, transparent);
+}
+
+[data-theme="magic"] .pool-card {
+  background: var(--fe-panel);
+  border-color: var(--fe-border);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="magic"] .pool-card.selected {
+  border-color: var(--fe-accent);
+  background: color-mix(in srgb, var(--fe-accent) 10%, var(--fe-panel));
+}
+
+[data-theme="magic"] .section-toggle {
+  color: var(--fe-ink);
+}
+
+/* ============================================================
+ * 6. 时间线、角色闲聊与答疑小卡片
+ * ============================================================ */
+[data-theme="magic"] .anchor-timeline {
+  border-bottom: 1px solid var(--fe-border);
+  background: color-mix(in srgb, var(--fe-panel) 90%, var(--fe-bg));
+}
+
+[data-theme="magic"] .tl-node {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="magic"] .tl-node.tl-current {
+  border-color: var(--fe-accent);
+  color: var(--fe-accent);
+  box-shadow: 0 0 0 1px var(--fe-accent);
+}
+
+[data-theme="magic"] .chat-bubble.player .bubble-text {
+  background: color-mix(in srgb, var(--fe-accent) 14%, var(--fe-panel));
+  border: 1px solid color-mix(in srgb, var(--fe-accent) 26%, var(--fe-panel));
+  color: var(--fe-ink);
+}
+
+[data-theme="magic"] .chat-bubble.character .bubble-text {
+  background: var(--fe-panel-2);
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="magic"] .ask-card {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="magic"] .ask-body {
+  border-top-color: var(--fe-border);
+}
+
+/* ============================================================
+ * 7. 手机端适配：底部导航栏与选项/主题抽屉
+ * ============================================================ */
+[data-theme="magic"] .app-bottom-nav {
+  background: color-mix(in srgb, var(--fe-panel) 95%, var(--fe-bg));
+  border-top: 1px solid var(--fe-border);
+}
+
+[data-theme="magic"] .mobile-tab.active {
+  color: var(--fe-accent);
+}
+
+[data-theme="magic"] .mobile-options-sheet section,
+[data-theme="magic"] .mobile-theme-sheet section {
+  background: var(--fe-panel);
+  border-top: 1.5px solid var(--fe-border);
+  box-shadow: var(--fe-shadow-2);
+}
+
+[data-theme="magic"] .mobile-panel-toolbar {
+  background: color-mix(in srgb, var(--fe-panel) 95%, var(--fe-accent-soft));
+  border-bottom: 1px solid var(--fe-border);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="magic"] .mobile-panel-toolbar button {
+  border-color: var(--fe-border);
+  background: var(--fe-panel-2);
+  color: var(--fe-accent);
+}
+
+/* ============================================================
+ * 8. 自定义精细滚动条
+ * ============================================================ */
+[data-theme="magic"] .scrollbar {
+  scrollbar-color: var(--fe-border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+[data-theme="magic"] ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+[data-theme="magic"] ::-webkit-scrollbar-thumb {
+  background: var(--fe-border-strong);
+  border-radius: 999px;
+}
+
+[data-theme="magic"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--fe-accent);
+}

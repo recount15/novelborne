@@ -34,7 +34,7 @@ def resolve_runtime(
     config = fe.provider_config(resolved_provider, base_url)
     resolved_base_url = (base_url or config.get("base_url") or "").strip() or None
     resolved_key = (api_key or "").strip() or os.environ.get(config.get("env_key", ""), "")
-    resolved_model = (model or config.get("model") or "").strip()
+    resolved_model = (model or "").strip() or next(iter(config.get("models") or []), "")
     return ModelRuntime(
         provider=resolved_provider,
         base_url=resolved_base_url,

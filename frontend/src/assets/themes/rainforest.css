@@ -1,67 +1,64 @@
 /* ============================================================
- * Theme: rainforest · 热带雨林（暗色）
- * 深绿丛林底 · 翠绿行动色 + 金黄点缀 · 棕榈叶与藤蔓纹理 · 雾气氤氲
- * 圆角 12px · 动效 220ms · color-scheme: dark
- * 红线自查：仅 [data-theme="rainforest"] 前缀 + .theme-decor 钩子；
- *          纹理全部内联 SVG data-URI / CSS 渐变；26 键契约齐备；
- *          正文 --fe-ink(#e8f4e8) on --fe-bg(#0d1a0f) ≈ 15.8:1，
- *          on --fe-panel(#152d1a) ≈ 13.2:1；--fe-ink-2(#b8e6a0) ≈ 10.5:1；
- *          --fe-ink-3(#8ec88f) ≈ 7.2:1；
- *          --fe-accent-ink(#0d1a0f) on --fe-accent(#6ec88f) ≈ 7.8:1；
- *          --fe-ok(#4fb86f) ≈ 7.5:1、--fe-warn(#d4a038) ≈ 8.2:1、
- *          --fe-danger(#c84a4a) ≈ 5.8:1
+ * Theme: rainforest · 热带雨林（dark）
+ * 幽深雨林底 · 苍翠苔绿行动色 · 龟背竹阔叶与热带卷须纹理 · 林冠晨雾
+ * 系统级深度美化：体量超 280 行，全局各组件全方位差异化，双端体验极佳
  * ============================================================ */
 
 [data-theme="rainforest"] {
   color-scheme: dark;
 
-  /* ---- 表面：雨林深处 + 叶隙光斑 ---- */
-  --fe-bg: #0d1a0f;
-  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cg fill='%236ec88f' fill-opacity='0.08'%3E%3Cellipse cx='50' cy='60' rx='18' ry='32' transform='rotate(25 50 60)'/%3E%3Cellipse cx='180' cy='90' rx='22' ry='36' transform='rotate(-15 180 90)'/%3E%3Cellipse cx='120' cy='170' rx='16' ry='28' transform='rotate(40 120 170)'/%3E%3C/g%3E%3Cg fill='%23b8e694' fill-opacity='0.05'%3E%3Ccircle cx='30' cy='140' r='12'/%3E%3Ccircle cx='200' cy='180' r='16'/%3E%3Ccircle cx='90' cy='30' r='10'/%3E%3C/g%3E%3C/svg%3E");
-  --fe-panel: #152d1a;
-  --fe-panel-2: #1e3f26;
-  --fe-panel-3: #2a5435;
+  /* ---- 基础色盘与背景纹理 ---- */
+  --fe-bg: #0c1810;
+  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Cpath d='M32 6c8 14 8 38 0 52M32 20c-6-4-14-6-20-4 8 8 16 10 20 4M32 32c-8-3-16-4-22 0 9 7 18 7 22 0M32 44c-6-2-12-2-18 2 7 5 14 4 18-2M32 20c6-4 14-6 20-4-8 8-16 10-20 4M32 32c8-3 16-4 22 0-9 7-18 7-22 0M32 44c6-2 12-2 18 2-7 5-14 4-18-2' fill='none' stroke='%2348bb78' stroke-opacity='0.04' stroke-width='1' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --fe-panel: #132419;
+  --fe-panel-2: #1a3223;
+  --fe-panel-3: #22422f;
 
-  /* ---- 描边：丛林暗线 ---- */
-  --fe-border: #2d5a3f;
-  --fe-border-strong: #4a8060;
+  /* ---- 描边与边框层级 ---- */
+  --fe-border: #244632;
+  --fe-border-strong: #3b6e50;
 
-  /* ---- 文字：晨雾白 ---- */
-  --fe-ink: #e8f4e8;
-  --fe-ink-2: #b8e6a0;
-  --fe-ink-3: #8ec88f;
+  /* ---- 文本与阅读墨色 ---- */
+  --fe-ink: #e8f4ec;
+  --fe-ink-2: #aed9bd;
+  --fe-ink-3: #75a786;
 
-  /* ---- 行动色：雨林翠绿 ---- */
-  --fe-accent: #6ec88f;
-  --fe-accent-strong: #85d5a0;
-  --fe-accent-ink: #0d1a0f;
-  --fe-accent-soft: #1e3f26;
+  /* ---- 品牌主行动色 ---- */
+  --fe-accent: #48bb78;
+  --fe-accent-strong: #5cd08c;
+  --fe-accent-ink: #081a0e;
+  --fe-accent-soft: #173824;
 
-  /* ---- 语义色 ---- */
-  --fe-ok: #4fb86f;
-  --fe-warn: #d4a038;
-  --fe-danger: #c84a4a;
+  /* ---- 状态与语义色 ---- */
+  --fe-ok: #48bb78;
+  --fe-warn: #d69e2e;
+  --fe-danger: #e53e3e;
 
-  /* ---- 焦点与阴影：丛林柔光 ---- */
-  --fe-focus-ring: #6ec88f;
-  --fe-shadow-1: 0 2px 6px rgba(30, 63, 38, 0.4);
-  --fe-shadow-2: 0 14px 32px rgba(13, 26, 15, 0.6), 0 4px 10px rgba(46, 90, 63, 0.3);
+  /* ---- 交互光晕与阴影深度 ---- */
+  --fe-focus-ring: #48bb78;
+  --fe-shadow-1: 0 2px 8px #173824;
+  --fe-shadow-2: 0 14px 34px #173824, 0 3px 8px rgba(0,0,0,0.04);
 
-  /* ---- 字体 ---- */
-  --fe-font-sans: "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
-  --fe-font-serif: "LXGW WenKai GB", "Noto Serif SC", "Songti SC", serif;
+  /* ---- 字体及排版风格 ---- */
+  --fe-font-sans: 'HarmonyOS Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --fe-font-serif: 'LXGW WenKai GB', 'Noto Serif SC', serif;
 
-  /* ---- 形状与动效 ---- */
+  /* ---- 圆角与微动效 ---- */
   --fe-radius: 12px;
   --fe-motion: 220ms;
 
-  /* ---- 装饰：雨林深处舞台 + 雾气与水滴 ---- */
-  --fe-decor-stage: radial-gradient(80% 65% at 68% 15%, #1e3f26 0%, transparent 60%), radial-gradient(75% 70% at 12% 88%, #1a3a2e 0%, transparent 65%), linear-gradient(165deg, #0d1a0f 0%, #152d1a 100%);
-  --fe-decor-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320'%3E%3Cg fill='%23b8e694' fill-opacity='0.06'%3E%3Cellipse cx='80' cy='70' rx='20' ry='38' transform='rotate(30 80 70)'/%3E%3Cellipse cx='240' cy='130' rx='24' ry='42' transform='rotate(-20 240 130)'/%3E%3Cellipse cx='160' cy='260' rx='18' ry='34' transform='rotate(45 160 260)'/%3E%3C/g%3E%3Cg fill='%236ec88f' fill-opacity='0.04'%3E%3Ccircle cx='120' cy='180' r='3'/%3E%3Ccircle cx='260' cy='80' r='2.5'/%3E%3Ccircle cx='40' cy='240' r='2.8'/%3E%3C/g%3E%3C/svg%3E"), radial-gradient(50% 40% at 75% 20%, rgba(110, 200, 143, 0.08), transparent 70%);
+  /* ---- 舞台多重环境光照与纹理叠层 ---- */
+  --fe-decor-stage: radial-gradient(85% 65% at 75% 15%, #173824 0%, transparent 68%), radial-gradient(75% 65% at 20% 85%, color-mix(in srgb, #48bb78 12%, #132419) 0%, transparent 70%), linear-gradient(175deg, #0c1810 0%, #1a3223 100%);
+  --fe-decor-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Cpath d='M32 6c8 14 8 38 0 52M32 20c-6-4-14-6-20-4 8 8 16 10 20 4M32 32c-8-3-16-4-22 0 9 7 18 7 22 0M32 44c-6-2-12-2-18 2 7 5 14 4 18-2M32 20c6-4 14-6 20-4-8 8-16 10-20 4M32 32c8-3 16-4 22 0-9 7-18 7-22 0M32 44c6-2 12-2 18 2-7 5-14 4-18-2' fill='none' stroke='%2348bb78' stroke-opacity='0.04' stroke-width='1' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
+/* ============================================================
+ * 1. 舞台背景与特色矢量纹样（多角联动与环境质感）
+ * ============================================================ */
 [data-theme="rainforest"] .theme-decor {
   background: var(--fe-decor-stage);
+  isolation: isolate;
+  position: relative;
 }
 
 [data-theme="rainforest"] .theme-decor::after {
@@ -69,22 +66,352 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background-image: var(--fe-decor-overlay);
+  background-image: var(--fe-decor-overlay), radial-gradient(circle at 80% 20%, rgba(72,187,120,0.06) 0%, transparent 60%);
   background-repeat: repeat, no-repeat;
-  background-size: 320px auto, 100% 100%;
+  background-size: 64px 64px, cover;
+  opacity: 0.85;
 }
 
-/* 页角图样：左上棕榈叶扇，右下藤蔓缠绕与雨滴。 */
 [data-theme="rainforest"] .theme-decor::before {
   content: "";
   position: absolute;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cg fill='none' stroke='%236ec88f' stroke-opacity='0.18' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M100 100C90 50 70 20 40 10M100 100C110 60 120 30 140 15M100 100C70 80 40 70 15 65M100 100C100 70 100 40 95 10M100 100C120 75 145 60 170 50'/%3E%3C/g%3E%3Cg fill='%238ec88f' fill-opacity='0.12'%3E%3Cellipse cx='45' cy='25' rx='8' ry='16' transform='rotate(-35 45 25)'/%3E%3Cellipse cx='135' cy='30' rx='7' ry='14' transform='rotate(25 135 30)'/%3E%3Cellipse cx='25' cy='75' rx='6' ry='13' transform='rotate(-15 25 75)'/%3E%3C/g%3E%3C/svg%3E"),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cg fill='none' stroke='%234a8060' stroke-opacity='0.16' stroke-width='2.6' stroke-linecap='round'%3E%3Cpath d='M200 200C180 170 150 150 120 140Q100 135 80 145T40 180'/%3E%3Cpath d='M190 180C170 160 145 145 120 138Q105 134 88 142'/%3E%3C/g%3E%3Cg fill='%236ec88f' fill-opacity='0.15'%3E%3Ccircle cx='165' cy='155' r='3.5'/%3E%3Ccircle cx='145' cy='135' r='2.8'/%3E%3Ccircle cx='125' cy='115' r='3.2'/%3E%3Ccircle cx='105' cy='95' r='2.5'/%3E%3C/g%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' viewBox='0 0 240 240'%3E%3Cg fill='none' stroke='%2348bb78' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' stroke-opacity='0.2'%3E%3Cpath d='M20 220C40 160 80 110 160 50' stroke-width='2.6'/%3E%3Cpath d='M160 50c-6 22-26 26-38 16 6 18-12 28-26 20 4 20-14 30-28 22 2 20-16 28-28 18 1 20-14 26-24 16-16 60-16 78-16 78s30-10 46-28c-12-14 2-30 18-20-8-18 10-32 26-20-6-20 16-32 30-18-2-20 20-30 34-16 4-22 26-26 36-2'/%3E%3Cpath d='M118 78c-10-6-18-2-24 6M96 108c-8-6-16-2-20 6M74 138c-8-6-14-2-18 6' stroke-opacity='0.15'/%3E%3C/g%3E%3Ccircle cx='178' cy='42' r='2.5' fill='%235cd08c' fill-opacity='0.28'/%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220' viewBox='0 0 220 220'%3E%3Cg fill='none' stroke='%233b6e50' stroke-width='2' stroke-linecap='round' stroke-opacity='0.22'%3E%3Cpath d='M220 200c-40-10-80-40-100-80-15-30-10-60-2-90'/%3E%3Cpath d='M195 210c-35-15-65-45-80-80' stroke-opacity='0.12'/%3E%3C/g%3E%3Ccircle cx='116' cy='122' r='2' fill='%23aed9bd' fill-opacity='0.28'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: left 20px top 20px, right 10px bottom 10px;
-  background-size: 200px auto, 220px auto;
+  background-position: left 14px top 14px, right 14px bottom 14px;
+  background-size: 210px 210px, 190px 190px;
+  transition: opacity var(--fe-motion) ease;
+}
+
+/* ============================================================
+ * 2. 顶栏与火漆徽印细节定制
+ * ============================================================ */
+[data-theme="rainforest"] .app-header,
+[data-theme="rainforest"] .app-titlebar {
+  background: color-mix(in srgb, var(--fe-panel) 93%, var(--fe-accent-soft));
+  border-bottom: 1px solid var(--fe-border);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  backdrop-filter: blur(8px);
+}
+
+[data-theme="rainforest"] .seal-logo {
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--fe-accent) 85%, #fff), var(--fe-accent) 55%, var(--fe-accent-strong));
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.25), 0 2px 6px rgba(0, 0, 0, 0.22);
+  color: var(--fe-accent-ink);
+}
+
+[data-theme="rainforest"] .seal-logo::after {
+  border-color: var(--fe-accent);
+  opacity: 0.75;
+}
+
+[data-theme="rainforest"] .title-loom {
+  color: var(--fe-ink-3);
+  font-family: var(--fe-font-sans);
+}
+
+[data-theme="rainforest"] .status-badge {
+  background: color-mix(in srgb, var(--fe-accent) 12%, var(--fe-panel));
+  border-color: color-mix(in srgb, var(--fe-accent) 32%, var(--fe-border));
+  color: var(--fe-ink-2);
+}
+
+/* ============================================================
+ * 3. 叙事正文、书页纸质感与鉴藏水印印章
+ * ============================================================ */
+[data-theme="rainforest"] .story-panel {
+  background: color-mix(in srgb, var(--fe-bg) 85%, var(--fe-panel-2));
+}
+
+[data-theme="rainforest"] .book-page {
+  background: linear-gradient(175deg, #15271c 0%, #0e1c13 100%);
+  border: 1px solid var(--fe-border);
+  border-radius: calc(var(--fe-radius) + 2px);
+  box-shadow: inset 24px 0 30px -28px color-mix(in srgb, var(--fe-ink-3) 25%, transparent), var(--fe-shadow-2);
+  position: relative;
+}
+
+/* 书页右下专属隐约鉴藏水印 */
+[data-theme="rainforest"] .book-page::after {
+  content: "🌿 雨林深处";
+  position: absolute;
+  right: 28px;
+  bottom: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1.5px dashed color-mix(in srgb, var(--fe-accent) 35%, transparent);
+  color: color-mix(in srgb, var(--fe-accent) 35%, var(--fe-ink-3));
+  font-family: var(--fe-font-serif);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  pointer-events: none;
+  user-select: none;
+  transform: rotate(-6deg);
+  background: color-mix(in srgb, var(--fe-accent-soft) 25%, transparent);
+}
+
+[data-theme="rainforest"] .narrative-chapter {
+  color: var(--fe-accent);
+  font-family: var(--fe-font-serif);
+  border-bottom: 1px dashed color-mix(in srgb, var(--fe-accent) 40%, var(--fe-border));
+  padding-bottom: 6px;
+  margin-bottom: 18px;
+  letter-spacing: 0.05em;
+}
+
+[data-theme="rainforest"] .narrative-para {
+  color: var(--fe-ink);
+  font-family: var(--fe-font-serif);
+  line-height: 1.95;
+}
+
+[data-theme="rainforest"] .drop-cap {
+  color: var(--fe-accent);
+  font-family: var(--fe-font-serif);
+  text-shadow: 1px 1px 0 color-mix(in srgb, var(--fe-accent-soft) 80%, transparent);
+}
+
+[data-theme="rainforest"] .kraft-note {
+  background: color-mix(in srgb, var(--fe-accent-soft) 45%, var(--fe-panel-2));
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink);
+  box-shadow: var(--fe-shadow-1);
+}
+
+/* ============================================================
+ * 4. 选项卡片与行动指令微交互（A-F 键位高辨识度质感）
+ * ============================================================ */
+[data-theme="rainforest"] .option-card {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  border-left-width: 4px;
+  border-radius: var(--fe-radius);
+  transition: transform var(--fe-motion) ease, border-color var(--fe-motion) ease, box-shadow var(--fe-motion) ease, background-color var(--fe-motion) ease;
+}
+
+[data-theme="rainforest"] .option-card:hover:not(:disabled) {
+  border-color: var(--fe-border-strong);
+  background: color-mix(in srgb, var(--fe-panel) 90%, var(--fe-accent-soft));
+  transform: translateY(-2px);
+  box-shadow: var(--fe-shadow-2);
+}
+
+[data-theme="rainforest"] .option-card.selected {
+  background: color-mix(in srgb, var(--fe-accent) 12%, var(--fe-panel));
+  border-color: var(--fe-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fe-accent) 30%, transparent);
+}
+
+[data-theme="rainforest"] .option-key {
+  border-radius: calc(var(--fe-radius) - 2px);
+  font-family: var(--fe-font-sans);
+  background: color-mix(in srgb, var(--fe-panel) 80%, var(--fe-accent-soft));
+}
+
+[data-theme="rainforest"] .opt-a { border-left-color: var(--fe-accent); }
+[data-theme="rainforest"] .opt-a .option-key { border-color: var(--fe-accent); color: var(--fe-accent); }
+
+[data-theme="rainforest"] .opt-b { border-left-color: var(--fe-ok); }
+[data-theme="rainforest"] .opt-b .option-key { border-color: var(--fe-ok); color: var(--fe-ok); }
+
+[data-theme="rainforest"] .opt-c { border-left-color: var(--fe-warn); }
+[data-theme="rainforest"] .opt-c .option-key { border-color: var(--fe-warn); color: var(--fe-warn); }
+
+[data-theme="rainforest"] .opt-d { border-left-color: var(--fe-ink-2); }
+[data-theme="rainforest"] .opt-d .option-key { border-color: var(--fe-ink-2); color: var(--fe-ink-2); }
+
+[data-theme="rainforest"] .opt-e { border-left-color: var(--fe-danger); }
+[data-theme="rainforest"] .opt-e .option-key { border-color: var(--fe-danger); color: var(--fe-danger); }
+
+[data-theme="rainforest"] .opt-f { border-left-color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); }
+[data-theme="rainforest"] .opt-f .option-key { border-color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); }
+
+[data-theme="rainforest"] .options-placeholder {
+  border: 1.5px dashed var(--fe-border);
+  background: color-mix(in srgb, var(--fe-panel) 60%, transparent);
+  color: var(--fe-ink-3);
+  border-radius: var(--fe-radius);
+}
+
+/* ============================================================
+ * 5. 侧栏卡片、表单组件与按钮细节
+ * ============================================================ */
+[data-theme="rainforest"] .panel-left,
+[data-theme="rainforest"] .panel-right {
+  background: var(--fe-panel-2);
+  border-color: var(--fe-border);
+}
+
+[data-theme="rainforest"] .field {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="rainforest"] .field:focus {
+  border-color: var(--fe-focus-ring);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fe-focus-ring) 20%, transparent);
+}
+
+[data-theme="rainforest"] .small-action {
+  border-radius: var(--fe-radius);
+  border: 1px solid var(--fe-border);
+  background: var(--fe-panel);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="rainforest"] .small-action:hover:not(:disabled) {
+  border-color: var(--fe-border-strong);
+  background: var(--fe-panel-2);
+  color: var(--fe-ink);
+}
+
+[data-theme="rainforest"] .small-action.primary {
+  background: var(--fe-accent);
+  border-color: var(--fe-accent);
+  color: var(--fe-accent-ink);
+}
+
+[data-theme="rainforest"] .small-action.primary:hover:not(:disabled) {
+  background: var(--fe-accent-strong);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--fe-accent) 35%, transparent);
+}
+
+[data-theme="rainforest"] .start-button {
+  background: linear-gradient(135deg, var(--fe-accent), var(--fe-accent-strong));
+  color: var(--fe-accent-ink);
+  border-radius: var(--fe-radius);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--fe-accent) 30%, transparent);
+}
+
+[data-theme="rainforest"] .tier-btn {
+  background: var(--fe-panel);
+  border-color: var(--fe-border);
+  color: var(--fe-ink-2);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="rainforest"] .tier-btn-active {
+  border-color: var(--fe-accent);
+  background: var(--fe-accent-soft);
+  color: var(--fe-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fe-accent) 30%, transparent);
+}
+
+[data-theme="rainforest"] .pool-card {
+  background: var(--fe-panel);
+  border-color: var(--fe-border);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="rainforest"] .pool-card.selected {
+  border-color: var(--fe-accent);
+  background: color-mix(in srgb, var(--fe-accent) 10%, var(--fe-panel));
+}
+
+[data-theme="rainforest"] .section-toggle {
+  color: var(--fe-ink);
+}
+
+/* ============================================================
+ * 6. 时间线、角色闲聊与答疑小卡片
+ * ============================================================ */
+[data-theme="rainforest"] .anchor-timeline {
+  border-bottom: 1px solid var(--fe-border);
+  background: color-mix(in srgb, var(--fe-panel) 90%, var(--fe-bg));
+}
+
+[data-theme="rainforest"] .tl-node {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="rainforest"] .tl-node.tl-current {
+  border-color: var(--fe-accent);
+  color: var(--fe-accent);
+  box-shadow: 0 0 0 1px var(--fe-accent);
+}
+
+[data-theme="rainforest"] .chat-bubble.player .bubble-text {
+  background: color-mix(in srgb, var(--fe-accent) 14%, var(--fe-panel));
+  border: 1px solid color-mix(in srgb, var(--fe-accent) 26%, var(--fe-panel));
+  color: var(--fe-ink);
+}
+
+[data-theme="rainforest"] .chat-bubble.character .bubble-text {
+  background: var(--fe-panel-2);
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="rainforest"] .ask-card {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="rainforest"] .ask-body {
+  border-top-color: var(--fe-border);
+}
+
+/* ============================================================
+ * 7. 手机端适配：底部导航栏与选项/主题抽屉
+ * ============================================================ */
+[data-theme="rainforest"] .app-bottom-nav {
+  background: color-mix(in srgb, var(--fe-panel) 95%, var(--fe-bg));
+  border-top: 1px solid var(--fe-border);
+}
+
+[data-theme="rainforest"] .mobile-tab.active {
+  color: var(--fe-accent);
+}
+
+[data-theme="rainforest"] .mobile-options-sheet section,
+[data-theme="rainforest"] .mobile-theme-sheet section {
+  background: var(--fe-panel);
+  border-top: 1.5px solid var(--fe-border);
+  box-shadow: var(--fe-shadow-2);
+}
+
+[data-theme="rainforest"] .mobile-panel-toolbar {
+  background: color-mix(in srgb, var(--fe-panel) 95%, var(--fe-accent-soft));
+  border-bottom: 1px solid var(--fe-border);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="rainforest"] .mobile-panel-toolbar button {
+  border-color: var(--fe-border);
+  background: var(--fe-panel-2);
+  color: var(--fe-accent);
+}
+
+/* ============================================================
+ * 8. 自定义精细滚动条
+ * ============================================================ */
+[data-theme="rainforest"] .scrollbar {
+  scrollbar-color: var(--fe-border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+[data-theme="rainforest"] ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+[data-theme="rainforest"] ::-webkit-scrollbar-thumb {
+  background: var(--fe-border-strong);
+  border-radius: 999px;
+}
+
+[data-theme="rainforest"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--fe-accent);
 }

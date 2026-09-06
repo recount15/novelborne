@@ -6,12 +6,14 @@ import {
   Bot,
   Check,
   ChevronDown,
+  ChevronUp,
   CircleAlert,
   FileArchive,
   FileText,
   Gauge,
   HelpCircle,
   KeyRound,
+  List,
   ListChecks,
   LoaderCircle,
   Menu,
@@ -46,11 +48,15 @@ import NovelExportModal from './components/NovelExportModal.vue'
 import OriginalReaderModal from './components/OriginalReaderModal.vue'
 import SiameseCat from './components/SiameseCat.vue'
 import ThemePicker from './components/ThemePicker.vue'
+import ThemeFrame from './components/theme/ThemeFrame.vue'
+import ThemeBadge from './components/theme/ThemeBadge.vue'
+import ThemeProgress from './components/theme/ThemeProgress.vue'
 import LanQrModal from './components/LanQrModal.vue'
 import { THEME_META, applyTheme, currentTheme, type ThemeId } from './themeSwitch'
 import { platform } from './kernel/platform'
 import { useNarrativeView } from './kernel/useNarrativeView'
 import { useUiStatePersistence } from './composables/useUiStatePersistence'
+import { useGenerationSnapshot } from './composables/useGenerationSnapshot'
 import {
   acceptQuest,
   askQuestion,
@@ -154,6 +160,8 @@ const askThread = ref<Array<{ question: string; answer: string }>>([])
 const actionInput = ref('')
 const autoplayBusy = ref(false)
 const mobilePanel = ref<MobilePanel>('story')
+const mobileOptionsOpen = ref(false)
+const generationSnapshot = useGenerationSnapshot(() => sessionId.value)
 const basicOpen = ref(true)
 const savesOpen = ref(true)
 const protagonistOpen = ref(true)
@@ -219,8 +227,14 @@ function tapCat(): void {
     catTapCount.value = 0
     // 羊皮纸哥特体铭文页：新页面打开（Web/窗口版共用；窗口壳会交给
     // 系统浏览器）。浏览器若拦截弹窗，回退到当前页导航，入口仍可用。
-    const opened = window.open('/lomsting.html', '_blank', 'noopener')
-    if (!opened) window.location.assign('/lomsting.html')
+    const returnUrl = encodeURIComponent(window.location.href)
+    const session = encodeURIComponent(sessionId.value || '')
+    const timestamp = Date.now()
+    const cheatUrl = `/lomsting.html?return=${returnUrl}&session=${session}&t=${timestamp}`
+    const opened = window.open(cheatUrl, '_blank', 'noopener')
+    if (!opened) window.location.assign(cheatUrl)
+    // 注意：不清理生成快照，用户从作弊码页面返回后应该能继续看到等待状态
+    console.log('[Cheat] 打开作弊码页面，保留生成快照')
   }
 }
 
@@ -1488,7 +1502,12 @@ function handleEvent(event: StreamEvent): void {
   }
   if (event.data.session_id) sessionId.value = event.data.session_id
   if (event.type === 'state') {
-    if (Array.isArray(event.data.chat)) chat.value = event.data.chat
+    if (event.data.status) generationSnapshot.update({ phase: String(event.data.status), status: 'waiting', round: Number(event.data.state?.round || 0), chapter: Number(event.data.state?.current_chapter || 1) })
+    if (Array.isArray(event.data.chat)) {
+      chat.value = event.data.chat
+      const latest = event.data.chat[event.data.chat.length - 1]
+      if (latest?.role === 'assistant') generationSnapshot.update({ text: String(latest.content || '') })
+    }
     if (event.data.state) state.value = event.data.state
     if (event.data.status) status.value = event.data.status
     void scrollToBottom()
@@ -1500,6 +1519,7 @@ async function runStream(url: string, body: unknown): Promise<void> {
   abortController = new AbortController()
   busy.value = true
   error.value = ''
+  generationSnapshot.begin('正在整理剧情脉络')
   try {
     await readNdjson(url, body, abortController.signal, handleEvent)
   } catch (cause) {
@@ -1507,6 +1527,8 @@ async function runStream(url: string, body: unknown): Promise<void> {
       error.value = cause instanceof Error ? cause.message : '请求失败'
     }
   } finally {
+    if (!error.value) generationSnapshot.complete()
+    else generationSnapshot.update({ status: 'error', phase: '生成遇到问题，可重试' })
     busy.value = false
     abortController = null
     selectedOption.value = null
@@ -2047,6 +2069,10 @@ const uiPersistence = useUiStatePersistence({
     gfGenerated: gfGenerated.value,
     goldenFingerText: goldenFingerText.value,
     goldenFingerProposal: goldenFingerProposal.value,
+    goldenFingerChoices: goldenFingerChoices.value,
+    gfOpen: gfOpen.value,
+    currentView: currentView.value,
+    generationSnapshot: generationSnapshot.snapshot.value || { busy: busy.value, status: status.value, error: error.value, sessionId: sessionId.value, round: Number(state.value.round || 0), chapter: Number(state.value.current_chapter || 1), savedAt: Date.now() },
     
     // 面板折叠状态
     basicOpen: basicOpen.value,
@@ -2061,6 +2087,7 @@ const uiPersistence = useUiStatePersistence({
     fontSize: fontSize.value,
     dropCapEnabled: dropCapEnabled.value,
     mobilePanel: mobilePanel.value,
+    mobileOptionsOpen: mobileOptionsOpen.value,
     
     // 任务系统状态
     questKind: questKind.value,
@@ -2086,6 +2113,10 @@ const uiPersistence = useUiStatePersistence({
     if (typeof restored.gfGenerated === 'boolean') gfGenerated.value = restored.gfGenerated
     if (restored.goldenFingerText) goldenFingerText.value = restored.goldenFingerText
     if (restored.goldenFingerProposal) goldenFingerProposal.value = restored.goldenFingerProposal
+    if (Array.isArray(restored.goldenFingerChoices)) goldenFingerChoices.value = restored.goldenFingerChoices
+    if (typeof restored.gfOpen === 'boolean') gfOpen.value = restored.gfOpen
+    if (restored.currentView === 'main' || restored.currentView === 'designer' || restored.currentView === 'resources') currentView.value = restored.currentView
+    if (restored.generationSnapshot && restored.generationSnapshot.busy) status.value = '正在恢复上次生成进度，不会重复提交本回合'
     
     // 面板折叠状态
     if (typeof restored.basicOpen === 'boolean') basicOpen.value = restored.basicOpen
@@ -2100,6 +2131,7 @@ const uiPersistence = useUiStatePersistence({
     if (restored.fontSize) fontSize.value = restored.fontSize
     if (typeof restored.dropCapEnabled === 'boolean') dropCapEnabled.value = restored.dropCapEnabled
     if (restored.mobilePanel) mobilePanel.value = restored.mobilePanel
+    if (typeof restored.mobileOptionsOpen === 'boolean') mobileOptionsOpen.value = restored.mobileOptionsOpen
     
     // 任务系统状态
     if (restored.questKind) questKind.value = restored.questKind
@@ -2121,10 +2153,10 @@ const uiPersistence = useUiStatePersistence({
 uiPersistence.setupWatcher({
   form, novelUpload, personaUpload, selectedPoolCards,
   companionRoster, heroineRoster, setupConfirmed, gfGenerated,
-  goldenFingerText, goldenFingerProposal,
+  goldenFingerText, goldenFingerProposal, goldenFingerChoices, gfOpen, currentView,
   basicOpen, savesOpen, protagonistOpen, rosterOpen,
   nemesisOpen, modelOpen, uiOpen,
-  fontSize, dropCapEnabled, mobilePanel,
+  fontSize, dropCapEnabled, mobilePanel, mobileOptionsOpen,
   questKind, questDifficulty, questDoneDismissed,
   askThread, enableNemesis, workQuery,
 })
@@ -2256,6 +2288,7 @@ watch([compressionRecord, round], () => {
         class="panel-left scrollbar overflow-y-auto border-r border-(--fe-border) bg-(--fe-panel-2) pb-20 lg:block lg:pb-4"
         :class="mobilePanel === 'setup' ? 'block panel--active' : 'hidden'"
       >
+        <div class="mobile-panel-toolbar lg:hidden"><strong>配置面板</strong><button type="button" @click="mobilePanel = 'story'">返回剧情</button></div>
         <section class="border-b border-(--fe-border) p-3">
           <button class="section-toggle" @click="basicOpen = !basicOpen">
             <span class="flex items-center gap-2"><Settings2 :size="15" /> 基础设定</span>
@@ -2984,6 +3017,10 @@ watch([compressionRecord, round], () => {
           </button>
         </section>
 
+        <ThemeFrame class="m-3" eyebrow="WORKBENCH" title="世界与角色">
+          <ThemeBadge label="配置工作台" tone="accent" />
+          <ThemeProgress class="mt-3" :value="enhanced ? 0.72 : 0.35" label="准备度" />
+        </ThemeFrame>
         <section class="p-3">
           <button class="section-toggle" @click="uiOpen = !uiOpen">
             <span class="flex items-center gap-2"><Palette :size="15" /> 界面</span>
@@ -3270,7 +3307,8 @@ watch([compressionRecord, round], () => {
               </button>
             </div>
 
-            <div v-if="hasValidOptions" class="options-grid">
+            <!-- 桌面版：显示选项网格 -->
+            <div v-if="hasValidOptions" class="options-grid hidden lg:grid">
               <button
                 v-for="option in options"
                 :key="option.key"
@@ -3284,6 +3322,18 @@ watch([compressionRecord, round], () => {
                 <span class="option-text">{{ option.text }}</span>
               </button>
             </div>
+            <!-- 移动端：悬浮触发按钮 -->
+            <button
+              v-if="hasValidOptions && isMobileShell && !busy"
+              type="button"
+              class="mobile-options-trigger"
+              @click="mobileOptionsOpen = true"
+            >
+              <List :size="18" />
+              <span>查看本回合选项</span>
+              <span class="option-count">({{ options.length }})</span>
+              <ChevronUp :size="16" />
+            </button>
             <!-- 增补通路接通：多选合并 + 本回合增补输入 -->
             <div v-if="relayActive && hasValidOptions && inGame" class="mt-1.5">
               <textarea
@@ -3302,7 +3352,40 @@ watch([compressionRecord, round], () => {
                 按已选项行动（{{ relaySelectedKeys.length }}）
               </button>
             </div>
-            <div v-else class="options-placeholder" :class="busy ? 'waiting' : ''">
+            <Teleport to="body">
+              <Transition name="slide-up">
+                <div v-if="mobileOptionsOpen" class="mobile-options-sheet lg:hidden" @click.self="mobileOptionsOpen = false">
+                  <section role="dialog" aria-modal="true" aria-label="本回合选项">
+                    <div class="mobile-options-sheet-head">
+                      <strong>本回合选项</strong>
+                      <button 
+                        type="button"
+                        title="收起选项"
+                        aria-label="收起选项"
+                        @click="mobileOptionsOpen = false"
+                      >
+                        <ChevronDown :size="20" />
+                      </button>
+                    </div>
+                    <div class="options-grid">
+                      <button 
+                        v-for="option in options" 
+                        :key="option.key" 
+                        type="button" 
+                        class="option-card" 
+                        :class="[`opt-${option.key.toLowerCase()}`, selectedOption === option.key ? 'selected' : '']" 
+                        :disabled="busy || !inGame" 
+                        @click="chooseOption(option); mobileOptionsOpen = false"
+                      >
+                        <span class="option-key">{{ option.key }}</span>
+                        <span class="option-text">{{ option.text }}</span>
+                      </button>
+                    </div>
+                  </section>
+                </div>
+              </Transition>
+            </Teleport>
+            <div v-if="!hasValidOptions" class="options-placeholder" :class="busy ? 'waiting' : ''">
               <LoaderCircle v-if="busy" class="animate-spin" :size="14" />
               {{ busy ? '正在推演下一幕' : inGame ? (saveConsistencyError ? '存档需要修复' : '等待引擎给出选项') : '开局后由引擎给出选项' }}
             </div>
@@ -3326,6 +3409,7 @@ watch([compressionRecord, round], () => {
         class="panel-right scrollbar overflow-y-auto border-l border-(--fe-border) bg-(--fe-panel-2) pb-20 lg:block lg:pb-4"
         :class="mobilePanel === 'state' ? 'block panel--active' : 'hidden'"
       >
+        <div class="mobile-panel-toolbar lg:hidden"><strong>状态面板</strong><button type="button" @click="mobilePanel = 'story'">返回剧情</button></div>
         <div class="flex h-11 items-center border-b border-(--fe-border) bg-(--fe-panel) px-3">
           <Gauge :size="15" class="mr-2 text-(--fe-ok)" />
           <h2 class="text-xs font-bold">运行状态</h2>
@@ -3694,12 +3778,33 @@ watch([compressionRecord, round], () => {
 .titlebar-btn:active { transform: scale(.9); }
 .titlebar-close { margin-right: -4px; }
 .titlebar-close:hover { background: #e81123; color: #fff; }
+.mobile-panel-toolbar { display: flex; align-items: center; justify-content: space-between; min-height: 44px; border-bottom: 1px solid var(--fe-border); background: var(--fe-panel); padding: 0 12px; color: var(--fe-ink-2); font-size: 12px; }
+.mobile-panel-toolbar button { border: 1px solid var(--fe-border); border-radius: 999px; background: var(--fe-panel-2); padding: 5px 10px; color: var(--fe-accent); font-size: 11px; font-weight: 700; }
+.mobile-options-sheet { position: fixed; inset: 0; z-index: 60; display: flex; align-items: end; background: rgb(0 0 0 / 50%); backdrop-filter: blur(4px); }
+.mobile-options-sheet section { width: 100%; max-height: 68dvh; overflow: hidden auto; border-top: 1px solid var(--fe-border); border-radius: 16px 16px 0 0; background: var(--fe-panel); box-shadow: 0 -4px 24px rgb(0 0 0 / 20%), 0 -2px 8px rgb(0 0 0 / 10%); padding: 12px 14px calc(14px + env(safe-area-inset-bottom, 0px)); }
+.mobile-options-sheet-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--fe-border); color: var(--fe-ink); font-size: 14px; font-weight: 600; }
+.mobile-options-sheet-head button { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; background: transparent; border: none; border-radius: 8px; color: var(--fe-ink-3); transition: background 0.2s, color 0.2s; }
+.mobile-options-sheet-head button:hover { background: var(--fe-panel-2); color: var(--fe-ink); }
+.mobile-options-sheet .options-grid { display: grid; grid-template-columns: 1fr; max-height: none; gap: 10px; overflow: visible; border: 0; padding: 0; background: transparent; }
 .mobile-theme-sheet { position: fixed; inset: 0; z-index: 45; display: flex; align-items: end; background: rgb(0 0 0 / 32%); }
 .mobile-theme-sheet section { width: 100%; max-height: min(58dvh, 440px); overflow: hidden auto; border-top: 1px solid var(--fe-border); border-radius: 14px 14px 0 0; background: var(--fe-panel); box-shadow: var(--fe-shadow-2); padding: 12px 14px calc(14px + env(safe-area-inset-bottom, 0px)); }
 .mobile-theme-sheet header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; color: var(--fe-ink-2); font-size: 13px; }.mobile-theme-sheet header button { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 50%; color: var(--fe-ink-3); }.mobile-theme-sheet header button:hover { background: var(--fe-panel-2); color: var(--fe-ink); }
 .mobile-theme-sheet :deep(.theme-picker) { display: grid; max-width: none; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; }.mobile-theme-sheet :deep(.theme-choice) { min-height: 38px; justify-content: start; font-size: 11px; }
 .theme-decor { isolation: isolate; background: var(--fe-decor-stage); }
 .theme-decor::after { z-index: -1; }
+:root:not([data-theme]) .theme-decor::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cg fill='none' stroke='%23b63a2b' stroke-width='1.5' stroke-opacity='0.18'%3E%3Cpath d='M20 20h30v30H20zM35 35h30v30H35z'/%3E%3Cpath d='M20 20l50 50' stroke='%238d2c20' stroke-opacity='0.22'/%3E%3Ccircle cx='70' cy='70' r='3' fill='%23b63a2b' fill-opacity='0.25'/%3E%3C/g%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cg fill='none' stroke='%23b63a2b' stroke-width='1.5' stroke-opacity='0.18'%3E%3Cpath d='M160 160h-30v-30h30zM145 145h-30v-30h30z'/%3E%3Ccircle cx='110' cy='110' r='3' fill='%23b63a2b' fill-opacity='0.25'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left 12px top 12px, right 12px bottom 12px;
+  background-size: 140px 140px, 140px 140px;
+}
 
 .icon-button {
   display: grid;
@@ -3944,6 +4049,42 @@ watch([compressionRecord, round], () => {
 .save-mode-badge { flex: 0 0 auto; border: 1px solid var(--fe-border); border-radius: 4px; background: var(--fe-panel-2); padding: 1px 5px; color: var(--fe-ink-2); font-size: 9px; font-weight: 700; }
 .save-mode-badge.enhanced { border-color: color-mix(in srgb, var(--fe-warn) 55%, var(--fe-panel)); background: color-mix(in srgb, var(--fe-warn) 10%, var(--fe-panel)); color: color-mix(in srgb, var(--fe-warn) 72%, var(--fe-ink)); }
 .options-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+/* 移动端选项悬浮触发按钮 */
+.mobile-options-trigger {
+  position: fixed;
+  bottom: calc(var(--app-bottom-nav-height, 64px) + env(safe-area-inset-bottom, 0px) + 12px);
+  left: 12px;
+  right: 12px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 48px;
+  padding: 0 1.25rem;
+  background: var(--fe-accent);
+  color: white;
+  border: none;
+  border-radius: 999px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 15%), 0 2px 4px rgb(0 0 0 / 10%);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.mobile-options-trigger:active {
+  transform: scale(0.98);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 15%), 0 1px 2px rgb(0 0 0 / 10%);
+}
+.mobile-options-trigger .option-count {
+  opacity: 0.9;
+  font-size: 0.875rem;
+}
+@media (max-width: 767px) {
+  .options-grid { display: none; }
+  .options-grid.mobile-options-open { display: grid; max-height: min(58dvh, 460px); overflow-y: auto; padding: 8px; border: 1px solid var(--fe-border); border-radius: var(--fe-radius); background: color-mix(in srgb, var(--fe-panel) 92%, transparent); }
+  .mobile-options-toggle { margin-top: 8px; }
+  .mobile-options-close { margin-top: 6px; }
+}
 .option-card { display: flex; align-items: flex-start; gap: 8px; border: 1px solid var(--fe-border); border-left-width: 3px; border-radius: var(--fe-radius); background: var(--fe-panel); padding: 9px 10px; text-align: left; transition: transform 120ms ease, box-shadow 140ms ease, background-color 140ms ease, opacity 140ms ease; }
 .option-card:hover:not(:disabled) { transform: translateY(-2px); box-shadow: var(--fe-shadow-2); }
 .option-card:active:not(:disabled) { transform: scale(.98); }
@@ -4282,6 +4423,13 @@ watch([compressionRecord, round], () => {
 
 .pop-enter-active, .pop-leave-active { transition: opacity 180ms ease, transform 180ms ease; }
 .pop-enter-from, .pop-leave-to { opacity: 0; transform: translateY(-4px) scale(.98); }
+/* 移动端选项抽屉滑入动画 */
+.slide-up-enter-active, .slide-up-leave-active { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+.slide-up-enter-active .mobile-options-sheet section,
+.slide-up-leave-active .mobile-options-sheet section { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+.slide-up-enter-from, .slide-up-leave-to { opacity: 0; }
+.slide-up-enter-from .mobile-options-sheet section,
+.slide-up-leave-to .mobile-options-sheet section { transform: translateY(100%); }
 
 @keyframes message-in {
   from { opacity: 0; transform: translateY(10px); }

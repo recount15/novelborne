@@ -238,17 +238,24 @@ def handle_ask(state: dict[str, Any], question: str,
     kwargs = dict(model=model, messages=messages, temperature=0.2, max_tokens=800)
     # 问答不传思考参数：思考链会吃光 800 的 max_tokens 导致回答为空。
     # 问答同样纳入全局并发额度（M5 中台收口）：低并发供应商只排队不报错。
-    with engine.parallel.slot(engine.parallel.PRIORITY_TURN):
-        try:
-            response = _client().chat.completions.create(**kwargs)
-        except Exception:
-            # 兼容不接受温度或 max_tokens 的 OpenAI 兼容服务。
-            kwargs.pop("temperature", None)
-            kwargs.pop("max_tokens", None)
-            response = _client().chat.completions.create(**kwargs)
     answer = ""
-    if getattr(response, "choices", None):
-        answer = str(response.choices[0].message.content or "").strip()
+    with engine.parallel.slot(engine.parallel.PRIORITY_TURN):
+        if provider == "anthropic":
+            from core.services.native_gateway import native_complete
+            response = native_complete(_client(), provider, model, question,
+                                       system=system_prompt, max_tokens=800,
+                                       extra={"temperature": 0.2})
+            answer = response.text.strip()
+        else:
+            try:
+                response = _client().chat.completions.create(**kwargs)
+            except Exception:
+                # 兼容不接受温度或 max_tokens 的 OpenAI 兼容服务。
+                kwargs.pop("temperature", None)
+                kwargs.pop("max_tokens", None)
+                response = _client().chat.completions.create(**kwargs)
+            if getattr(response, "choices", None):
+                answer = str(response.choices[0].message.content or "").strip()
     # 防泄露：回答与请求中都不得出现 API Key 或整段系统提示。
     if api_key and api_key in answer:
         answer = answer.replace(api_key, "***")

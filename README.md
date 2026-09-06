@@ -98,7 +98,7 @@ cd ..
 python run_app.py
 ```
 
-浏览器访问：<http://127.0.0.1:8000>
+浏览器访问：<http://127.0.0.1:21560>
 
 首次运行后，在页面中配置 OpenAI 兼容服务的 API Key、模型、模式、原著和角色。API Key 只在当前页面和服务端进程内存中使用，不写入存档、日志、数据库或发布包。
 
@@ -121,8 +121,8 @@ python run_app.py
 示例：
 
 ```bash
-python run_app.py --host 0.0.0.0 --port 8000
-python run_app.py --host 127.0.0.1 --port 8000  # 仅本机
+python run_app.py --host 0.0.0.0 --port 21560
+python run_app.py --host 127.0.0.1 --port 21560  # 仅本机
 ```
 
 二维码中的 `session` 参数使用服务端原始会话 ID，扫码后会恢复同一局面，而不是创建新会话。
@@ -140,7 +140,7 @@ build\build_windows_windowed.bat
 产物：
 
 - `dist\FateEngine\FateEngine.exe`：Web 版；
-- `dist\FateEngineWindowed\FateEngineWindowed.exe`：窗口版。
+- `dist\网页版构建\网页版构建.exe`：窗口版。
 
 发布时必须分发整个目录，不能只复制 EXE。运行数据由程序在 EXE 同级 `var/` 自动创建。
 

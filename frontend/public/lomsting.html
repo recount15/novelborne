@@ -49,6 +49,16 @@
     transform: rotate(-0.5deg);
     opacity: 0.8;
   }
+  .return-button { position: fixed; left: calc(18px + env(safe-area-inset-left, 0px)); top: calc(16px + env(safe-area-inset-top, 0px)); z-index: 2; display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgb(36 26 12 / 45%); border-radius: 999px; background: rgb(240 220 173 / 82%); padding: 9px 15px; color: #241a0c; font: 700 13px/1.2 system-ui, sans-serif; cursor: pointer; box-shadow: 0 2px 8px rgb(36 26 12 / 25%); transition: all 0.2s; }
+  .return-button:hover { background: #f4dfb0; transform: translateX(-2px); }
+  .return-button:active { transform: translateX(-2px) scale(0.98); }
+  .return-button svg { width: 18px; height: 18px; flex-shrink: 0; }
+  .return-button--close { background: rgb(220 38 38 / 20%); border-color: rgb(220 38 38 / 40%); color: #7f1d1d; }
+  .return-button--close:hover { background: rgb(220 38 38 / 30%); }
+  @media (max-width: 640px) {
+    .return-button { padding: 8px 12px; font-size: 12px; }
+    .return-button svg { width: 16px; height: 16px; }
+  }
   .signature {
     margin-top: 3.6vh;
     font-family: 'UnifrakturMaguntia', serif;
@@ -59,6 +69,12 @@
 </style>
 </head>
 <body oncontextmenu="return false" oncopy="return false">
+  <button id="returnBtn" class="return-button" type="button" onclick="returnToGame()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M19 12H5M12 19l-7-7 7-7"/>
+    </svg>
+    <span id="returnText">返回游戏</span>
+  </button>
   <!-- 轻微磨损滤镜：噪声 alpha 阶跃（保留区全不透明、约 12% 像素被完全挖掉），
        岁月斑驳由"缺墨"承担，不再整体稀释墨色 -->
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -83,4 +99,75 @@
     <div class="signature">Bestowed by Lomsting</div>
   </div>
 </body>
+<script>
+  function returnToGame() {
+    // 检测是否为新窗口（通过 window.opener）
+    if (window.opener && !window.opener.closed) {
+      // 新窗口场景：直接关闭本窗口
+      window.close()
+      return
+    }
+    
+    // 策略 1: 浏览器历史记录
+    if (window.history.length > 1) {
+      console.log('[Return] 使用 history.back()')
+      window.history.back()
+      return
+    }
+    
+    // 策略 2: URL 参数中的 returnUrl
+    const params = new URLSearchParams(window.location.search)
+    const returnUrl = params.get('return') || params.get('returnUrl')
+    
+    if (returnUrl) {
+      console.log('[Return] 使用 URL 参数 returnUrl:', returnUrl)
+      try {
+        const decoded = decodeURIComponent(returnUrl)
+        window.location.href = decoded
+        return
+      } catch (err) {
+        console.error('[Return] returnUrl 解析失败:', err)
+      }
+    }
+    
+    // 策略 3: 回到默认首页
+    console.log('[Return] 使用默认首页')
+    window.location.href = '/'
+  }
+  
+  // 页面加载时检测窗口类型并调整按钮文案
+  window.addEventListener('DOMContentLoaded', () => {
+    const returnBtn = document.getElementById('returnBtn')
+    const returnText = document.getElementById('returnText')
+    
+    if (window.opener && !window.opener.closed) {
+      // 新窗口场景
+      returnBtn.classList.add('return-button--close')
+      returnText.textContent = '关闭并返回'
+      console.log('[Return] 检测到新窗口环境')
+    } else {
+      console.log('[Return] 检测到同标签页环境')
+    }
+    
+    // 从 URL 参数读取会话信息（用于日志）
+    const params = new URLSearchParams(window.location.search)
+    const sessionId = params.get('session') || params.get('sessionId')
+    const timestamp = params.get('t')
+    
+    if (sessionId) {
+      console.log('[Cheat Page] 会话 ID:', sessionId)
+      if (timestamp) {
+        console.log('[Cheat Page] 打开时间:', new Date(parseInt(timestamp)).toLocaleString())
+      }
+    }
+  })
+  
+  // 支持 Escape 键返回
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      returnToGame()
+    }
+  })
+
+</script>
 </html>

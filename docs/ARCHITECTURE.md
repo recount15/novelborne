@@ -5,7 +5,7 @@
 ## v2.0.1 当前数据流
 
 ```text
-run_app.py / run_windowed.py
+run_app.py / run_app.py
   → core.server              FastAPI、LAN/QR、会话和静态托管
     → core.app               开局与回合事务状态机
       → core.services        开局、回合、选项、角色、铁律和润色中台

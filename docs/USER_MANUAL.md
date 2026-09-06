@@ -22,10 +22,10 @@ cd frontend && npm install && npm run build && cd ..
 
 # 3. 启动
 python run_app.py                # 默认 0.0.0.0:8000（局域网可访问）
-python run_app.py --host 127.0.0.1 --port 8000   # 仅本机
+python run_app.py --host 127.0.0.1 --port 21560   # 仅本机
 ```
 
-浏览器打开 `http://127.0.0.1:8000`。
+浏览器打开 `http://127.0.0.1:21560`。
 
 ### 方式二：发行包
 

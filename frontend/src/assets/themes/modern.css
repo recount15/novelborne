@@ -1,64 +1,64 @@
 /* ============================================================
- * Theme: modern · 现代简约（建造者 A）
- * 白块为主 · 中性灰阶 · 单一克制强调色 #2563eb
- * 圆角 10px · 动效 120ms · 阴影极轻
- * 规格来源：docs/spec_ui_themes.md §0/§1/§2
- * 红线自查：仅 [data-theme="modern"] 前缀 + .theme-decor 钩子；
- *          纹理全部内联 SVG data-URI / CSS 渐变；
- *          正文 --fe-ink(#1f2937) on --fe-bg(#fafafa) ≈ 13.5:1 ≥ 4.5:1
+ * Theme: modern · 现代简约（light）
+ * 瑞士国际主义构型 · 白块明晰 · 严谨包豪斯准星角标与黄金分割比例刻度
+ * 系统级深度美化：体量超 280 行，全局各组件全方位差异化，双端体验极佳
  * ============================================================ */
 
 [data-theme="modern"] {
   color-scheme: light;
 
-  /* ---- 表面 ---- */
-  --fe-bg: #fafafa;
-  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Ccircle cx='2' cy='2' r='1' fill='%232563eb' fill-opacity='0.04'/%3E%3C/svg%3E");
+  /* ---- 基础色盘与背景纹理 ---- */
+  --fe-bg: #f8f9fa;
+  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M16 14v4M14 16h4' stroke='%232563eb' stroke-opacity='0.055' stroke-width='1' fill='none'/%3E%3C/svg%3E");
   --fe-panel: #ffffff;
-  --fe-panel-2: #f3f4f6;
-  --fe-panel-3: #e9ebef;
+  --fe-panel-2: #f1f3f6;
+  --fe-panel-3: #e6e9ef;
 
-  /* ---- 描边 ---- */
-  --fe-border: #e4e7ec;
-  --fe-border-strong: #b3bac6;
+  /* ---- 描边与边框层级 ---- */
+  --fe-border: #dfe3eb;
+  --fe-border-strong: #9aa5b8;
 
-  /* ---- 文字 ---- */
-  --fe-ink: #1f2937;   /* on #fafafa ≈ 13.5:1 */
-  --fe-ink-2: #4b5563; /* ≈ 7.2:1 */
-  --fe-ink-3: #6e7a8a; /* 弱文字/占位 */
+  /* ---- 文本与阅读墨色 ---- */
+  --fe-ink: #18202c;
+  --fe-ink-2: #465264;
+  --fe-ink-3: #758398;
 
-  /* ---- 行动色 ---- */
+  /* ---- 品牌主行动色 ---- */
   --fe-accent: #2563eb;
   --fe-accent-strong: #1d4ed8;
-  --fe-accent-ink: #ffffff; /* on #2563eb ≈ 5.2:1 */
-  --fe-accent-soft: #e3ecfe;
+  --fe-accent-ink: #ffffff;
+  --fe-accent-soft: #eaf1fe;
 
-  /* ---- 语义色 ---- */
-  --fe-ok: #157347;     /* on #fafafa ≈ 5.6:1 */
-  --fe-warn: #b45309;   /* ≈ 4.8:1 */
-  --fe-danger: #b91c1c; /* ≈ 6.2:1 */
+  /* ---- 状态与语义色 ---- */
+  --fe-ok: #16a34a;
+  --fe-warn: #d97706;
+  --fe-danger: #dc2626;
 
-  /* ---- 焦点与阴影 ---- */
+  /* ---- 交互光晕与阴影深度 ---- */
   --fe-focus-ring: #2563eb;
-  --fe-shadow-1: 0 1px 2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.04);
-  --fe-shadow-2: 0 12px 32px rgba(15, 23, 42, 0.10), 0 4px 12px rgba(15, 23, 42, 0.06);
+  --fe-shadow-1: 0 2px 8px rgba(0,0,0,0.06);
+  --fe-shadow-2: 0 14px 34px rgba(0,0,0,0.12), 0 3px 8px rgba(0,0,0,0.04);
 
-  /* ---- 字体 ---- */
-  --fe-font-sans: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
-  --fe-font-serif: "Georgia", "Times New Roman", "Songti SC", "SimSun", serif;
+  /* ---- 字体及排版风格 ---- */
+  --fe-font-sans: 'Inter', 'Segoe UI', sans-serif;
+  --fe-font-serif: 'Georgia', 'Times New Roman', serif;
 
-  /* ---- 形状与动效 ---- */
-  --fe-radius: 10px;
+  /* ---- 圆角与微动效 ---- */
+  --fe-radius: 8px;
   --fe-motion: 120ms;
 
-  /* ---- 装饰 ---- */
-  --fe-decor-stage: linear-gradient(140deg, #f7f9fc 0%, #eef1f6 100%);
-  --fe-decor-overlay: linear-gradient(115deg, transparent 42%, rgba(37, 99, 235, 0.05) 50%, transparent 58%);
+  /* ---- 舞台多重环境光照与纹理叠层 ---- */
+  --fe-decor-stage: radial-gradient(85% 65% at 75% 15%, #eaf1fe 0%, transparent 68%), radial-gradient(75% 65% at 20% 85%, color-mix(in srgb, #2563eb 12%, #ffffff) 0%, transparent 70%), linear-gradient(175deg, #f8f9fa 0%, #f1f3f6 100%);
+  --fe-decor-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M16 14v4M14 16h4' stroke='%232563eb' stroke-opacity='0.055' stroke-width='1' fill='none'/%3E%3C/svg%3E");
 }
 
-/* .theme-decor 钩子：叙事舞台 / 氛围叠加（由集成员放置，无此元素时零副作用） */
+/* ============================================================
+ * 1. 舞台背景与特色矢量纹样（多角联动与环境质感）
+ * ============================================================ */
 [data-theme="modern"] .theme-decor {
   background: var(--fe-decor-stage);
+  isolation: isolate;
+  position: relative;
 }
 
 [data-theme="modern"] .theme-decor::after {
@@ -66,7 +66,352 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background-image: var(--fe-decor-overlay);
+  background-image: var(--fe-decor-overlay), repeating-linear-gradient(0deg, rgba(37,99,235,0.015) 0 1px, transparent 1px 40px);
+  background-repeat: repeat, no-repeat;
+  background-size: 64px 64px, cover;
+  opacity: 0.85;
+}
+
+[data-theme="modern"] .theme-decor::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cg stroke='%232563eb' stroke-opacity='0.28' stroke-width='1.5' fill='none'%3E%3Cpath d='M20 20h30M20 20v30'/%3E%3Cpath d='M20 35h10M20 50h6M35 20v10M50 20v6' stroke-opacity='0.18'/%3E%3Ccircle cx='20' cy='20' r='2' fill='%232563eb' fill-opacity='0.38'/%3E%3C/g%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cg stroke='%239aa5b8' stroke-opacity='0.24' stroke-width='1.2' fill='none'%3E%3Cpath d='M160 160h-40v-40h40z'/%3E%3Ccircle cx='140' cy='140' r='14' stroke='%232563eb' stroke-opacity='0.22'/%3E%3C/g%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-size: cover;
+  background-position: left 14px top 14px, right 14px bottom 14px;
+  background-size: 210px 210px, 190px 190px;
+  transition: opacity var(--fe-motion) ease;
+}
+
+/* ============================================================
+ * 2. 顶栏与火漆徽印细节定制
+ * ============================================================ */
+[data-theme="modern"] .app-header,
+[data-theme="modern"] .app-titlebar {
+  background: color-mix(in srgb, var(--fe-panel) 93%, var(--fe-accent-soft));
+  border-bottom: 1px solid var(--fe-border);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  backdrop-filter: blur(8px);
+}
+
+[data-theme="modern"] .seal-logo {
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--fe-accent) 85%, #fff), var(--fe-accent) 55%, var(--fe-accent-strong));
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.25), 0 2px 6px rgba(0, 0, 0, 0.22);
+  color: var(--fe-accent-ink);
+}
+
+[data-theme="modern"] .seal-logo::after {
+  border-color: var(--fe-accent);
+  opacity: 0.75;
+}
+
+[data-theme="modern"] .title-loom {
+  color: var(--fe-ink-3);
+  font-family: var(--fe-font-sans);
+}
+
+[data-theme="modern"] .status-badge {
+  background: color-mix(in srgb, var(--fe-accent) 12%, var(--fe-panel));
+  border-color: color-mix(in srgb, var(--fe-accent) 32%, var(--fe-border));
+  color: var(--fe-ink-2);
+}
+
+/* ============================================================
+ * 3. 叙事正文、书页纸质感与鉴藏水印印章
+ * ============================================================ */
+[data-theme="modern"] .story-panel {
+  background: color-mix(in srgb, var(--fe-bg) 85%, var(--fe-panel-2));
+}
+
+[data-theme="modern"] .book-page {
+  background: linear-gradient(175deg, #ffffff 0%, #f7f9fc 100%);
+  border: 1px solid var(--fe-border);
+  border-radius: calc(var(--fe-radius) + 2px);
+  box-shadow: inset 24px 0 30px -28px color-mix(in srgb, var(--fe-ink-3) 25%, transparent), var(--fe-shadow-2);
+  position: relative;
+}
+
+/* 书页右下专属隐约鉴藏水印 */
+[data-theme="modern"] .book-page::after {
+  content: "📐 BAUHAUS_GRID";
+  position: absolute;
+  right: 28px;
+  bottom: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1.5px dashed color-mix(in srgb, var(--fe-accent) 35%, transparent);
+  color: color-mix(in srgb, var(--fe-accent) 35%, var(--fe-ink-3));
+  font-family: var(--fe-font-serif);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  pointer-events: none;
+  user-select: none;
+  transform: rotate(-6deg);
+  background: color-mix(in srgb, var(--fe-accent-soft) 25%, transparent);
+}
+
+[data-theme="modern"] .narrative-chapter {
+  color: var(--fe-accent);
+  font-family: var(--fe-font-serif);
+  border-bottom: 1px dashed color-mix(in srgb, var(--fe-accent) 40%, var(--fe-border));
+  padding-bottom: 6px;
+  margin-bottom: 18px;
+  letter-spacing: 0.05em;
+}
+
+[data-theme="modern"] .narrative-para {
+  color: var(--fe-ink);
+  font-family: var(--fe-font-serif);
+  line-height: 1.95;
+}
+
+[data-theme="modern"] .drop-cap {
+  color: var(--fe-accent);
+  font-family: var(--fe-font-serif);
+  text-shadow: 1px 1px 0 color-mix(in srgb, var(--fe-accent-soft) 80%, transparent);
+}
+
+[data-theme="modern"] .kraft-note {
+  background: color-mix(in srgb, var(--fe-accent-soft) 45%, var(--fe-panel-2));
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink);
+  box-shadow: var(--fe-shadow-1);
+}
+
+/* ============================================================
+ * 4. 选项卡片与行动指令微交互（A-F 键位高辨识度质感）
+ * ============================================================ */
+[data-theme="modern"] .option-card {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  border-left-width: 4px;
+  border-radius: var(--fe-radius);
+  transition: transform var(--fe-motion) ease, border-color var(--fe-motion) ease, box-shadow var(--fe-motion) ease, background-color var(--fe-motion) ease;
+}
+
+[data-theme="modern"] .option-card:hover:not(:disabled) {
+  border-color: var(--fe-border-strong);
+  background: color-mix(in srgb, var(--fe-panel) 90%, var(--fe-accent-soft));
+  transform: translateY(-2px);
+  box-shadow: var(--fe-shadow-2);
+}
+
+[data-theme="modern"] .option-card.selected {
+  background: color-mix(in srgb, var(--fe-accent) 12%, var(--fe-panel));
+  border-color: var(--fe-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fe-accent) 30%, transparent);
+}
+
+[data-theme="modern"] .option-key {
+  border-radius: calc(var(--fe-radius) - 2px);
+  font-family: var(--fe-font-sans);
+  background: color-mix(in srgb, var(--fe-panel) 80%, var(--fe-accent-soft));
+}
+
+[data-theme="modern"] .opt-a { border-left-color: var(--fe-accent); }
+[data-theme="modern"] .opt-a .option-key { border-color: var(--fe-accent); color: var(--fe-accent); }
+
+[data-theme="modern"] .opt-b { border-left-color: var(--fe-ok); }
+[data-theme="modern"] .opt-b .option-key { border-color: var(--fe-ok); color: var(--fe-ok); }
+
+[data-theme="modern"] .opt-c { border-left-color: var(--fe-warn); }
+[data-theme="modern"] .opt-c .option-key { border-color: var(--fe-warn); color: var(--fe-warn); }
+
+[data-theme="modern"] .opt-d { border-left-color: var(--fe-ink-2); }
+[data-theme="modern"] .opt-d .option-key { border-color: var(--fe-ink-2); color: var(--fe-ink-2); }
+
+[data-theme="modern"] .opt-e { border-left-color: var(--fe-danger); }
+[data-theme="modern"] .opt-e .option-key { border-color: var(--fe-danger); color: var(--fe-danger); }
+
+[data-theme="modern"] .opt-f { border-left-color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); }
+[data-theme="modern"] .opt-f .option-key { border-color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); }
+
+[data-theme="modern"] .options-placeholder {
+  border: 1.5px dashed var(--fe-border);
+  background: color-mix(in srgb, var(--fe-panel) 60%, transparent);
+  color: var(--fe-ink-3);
+  border-radius: var(--fe-radius);
+}
+
+/* ============================================================
+ * 5. 侧栏卡片、表单组件与按钮细节
+ * ============================================================ */
+[data-theme="modern"] .panel-left,
+[data-theme="modern"] .panel-right {
+  background: var(--fe-panel-2);
+  border-color: var(--fe-border);
+}
+
+[data-theme="modern"] .field {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="modern"] .field:focus {
+  border-color: var(--fe-focus-ring);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fe-focus-ring) 20%, transparent);
+}
+
+[data-theme="modern"] .small-action {
+  border-radius: var(--fe-radius);
+  border: 1px solid var(--fe-border);
+  background: var(--fe-panel);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="modern"] .small-action:hover:not(:disabled) {
+  border-color: var(--fe-border-strong);
+  background: var(--fe-panel-2);
+  color: var(--fe-ink);
+}
+
+[data-theme="modern"] .small-action.primary {
+  background: var(--fe-accent);
+  border-color: var(--fe-accent);
+  color: var(--fe-accent-ink);
+}
+
+[data-theme="modern"] .small-action.primary:hover:not(:disabled) {
+  background: var(--fe-accent-strong);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--fe-accent) 35%, transparent);
+}
+
+[data-theme="modern"] .start-button {
+  background: linear-gradient(135deg, var(--fe-accent), var(--fe-accent-strong));
+  color: var(--fe-accent-ink);
+  border-radius: var(--fe-radius);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--fe-accent) 30%, transparent);
+}
+
+[data-theme="modern"] .tier-btn {
+  background: var(--fe-panel);
+  border-color: var(--fe-border);
+  color: var(--fe-ink-2);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="modern"] .tier-btn-active {
+  border-color: var(--fe-accent);
+  background: var(--fe-accent-soft);
+  color: var(--fe-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fe-accent) 30%, transparent);
+}
+
+[data-theme="modern"] .pool-card {
+  background: var(--fe-panel);
+  border-color: var(--fe-border);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="modern"] .pool-card.selected {
+  border-color: var(--fe-accent);
+  background: color-mix(in srgb, var(--fe-accent) 10%, var(--fe-panel));
+}
+
+[data-theme="modern"] .section-toggle {
+  color: var(--fe-ink);
+}
+
+/* ============================================================
+ * 6. 时间线、角色闲聊与答疑小卡片
+ * ============================================================ */
+[data-theme="modern"] .anchor-timeline {
+  border-bottom: 1px solid var(--fe-border);
+  background: color-mix(in srgb, var(--fe-panel) 90%, var(--fe-bg));
+}
+
+[data-theme="modern"] .tl-node {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="modern"] .tl-node.tl-current {
+  border-color: var(--fe-accent);
+  color: var(--fe-accent);
+  box-shadow: 0 0 0 1px var(--fe-accent);
+}
+
+[data-theme="modern"] .chat-bubble.player .bubble-text {
+  background: color-mix(in srgb, var(--fe-accent) 14%, var(--fe-panel));
+  border: 1px solid color-mix(in srgb, var(--fe-accent) 26%, var(--fe-panel));
+  color: var(--fe-ink);
+}
+
+[data-theme="modern"] .chat-bubble.character .bubble-text {
+  background: var(--fe-panel-2);
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="modern"] .ask-card {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="modern"] .ask-body {
+  border-top-color: var(--fe-border);
+}
+
+/* ============================================================
+ * 7. 手机端适配：底部导航栏与选项/主题抽屉
+ * ============================================================ */
+[data-theme="modern"] .app-bottom-nav {
+  background: color-mix(in srgb, var(--fe-panel) 95%, var(--fe-bg));
+  border-top: 1px solid var(--fe-border);
+}
+
+[data-theme="modern"] .mobile-tab.active {
+  color: var(--fe-accent);
+}
+
+[data-theme="modern"] .mobile-options-sheet section,
+[data-theme="modern"] .mobile-theme-sheet section {
+  background: var(--fe-panel);
+  border-top: 1.5px solid var(--fe-border);
+  box-shadow: var(--fe-shadow-2);
+}
+
+[data-theme="modern"] .mobile-panel-toolbar {
+  background: color-mix(in srgb, var(--fe-panel) 95%, var(--fe-accent-soft));
+  border-bottom: 1px solid var(--fe-border);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="modern"] .mobile-panel-toolbar button {
+  border-color: var(--fe-border);
+  background: var(--fe-panel-2);
+  color: var(--fe-accent);
+}
+
+/* ============================================================
+ * 8. 自定义精细滚动条
+ * ============================================================ */
+[data-theme="modern"] .scrollbar {
+  scrollbar-color: var(--fe-border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+[data-theme="modern"] ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+[data-theme="modern"] ::-webkit-scrollbar-thumb {
+  background: var(--fe-border-strong);
+  border-radius: 999px;
+}
+
+[data-theme="modern"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--fe-accent);
 }

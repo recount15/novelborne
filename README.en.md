@@ -43,7 +43,7 @@ cd ..
 python run_app.py
 ```
 
-Open <http://127.0.0.1:8000>, configure an OpenAI-compatible provider and API key, then choose a mode and start a session.
+Open <http://127.0.0.1:21560>, configure an OpenAI-compatible provider and API key, then choose a mode and start a session.
 
 API keys are held in process memory only. They are not written to state, saves, logs, databases, or release packages.
 
@@ -52,8 +52,8 @@ API keys are held in process memory only. They are not written to state, saves, 
 The source launcher listens on `0.0.0.0` by default. On the same Wi-Fi network, click the phone icon in the top bar to view available adapter addresses and generate a session-preserving QR code.
 
 ```bash
-python run_app.py --host 0.0.0.0 --port 8000
-python run_app.py --host 127.0.0.1 --port 8000  # local-only
+python run_app.py --host 0.0.0.0 --port 21560
+python run_app.py --host 127.0.0.1 --port 21560  # local-only
 ```
 
 If a phone cannot connect:
@@ -77,7 +77,7 @@ build\build_windows_windowed.bat
 Distribute the complete output directories:
 
 - `dist\FateEngine\` — browser/Web build;
-- `dist\FateEngineWindowed\` — desktop window build.
+- `dist\网页版构建\` — desktop window build.
 
 Do not distribute only the executable. Runtime data is created in an adjacent `var/` directory.
 

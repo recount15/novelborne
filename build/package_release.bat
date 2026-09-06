@@ -53,7 +53,7 @@ echo Novelborne v2.1.1 - Quick Start
 echo ================================
 echo.
 echo 1. Double-click FateEngine.exe to start
-echo 2. Browser will open automatically to http://127.0.0.1:8000
+echo 2. Browser will open automatically to http://127.0.0.1:21560
 echo 3. If browser doesn't open, manually open the URL above
 echo.
 echo Troubleshooting:

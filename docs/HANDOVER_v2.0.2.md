@@ -8,7 +8,6 @@
 
 - 产品：大模型驱动的互动小说世界模拟器。玩家以穿越者身份进入原著世界；程序负责世界规则、锚点、涟漪、任务、收束力和持久化。README 定位：「不是聊天壳，而是结构化出卷 → 并行填空 → 空级批改 → 错题重填 → 代码组装 → 全局润色 → 机制结算」的叙事运行时。分强化模式（上传完整 TXT）与普通模式，6 档剧情丰度。
 - 技术栈：FastAPI + uvicorn（`core/`，分层 api 路由 / services 业务 / engine 引擎 / prompts）；Vue 3 + TS + Vite + Tailwind 4（`frontend/`，lucide 图标 + 霞鹜文楷字体，capacitor 支持 Android）；SQLite（`var/db/fate_engine.db`，WAL 模式）。
-- 入口：`run_app.py`（web 版，默认 8000，数据目录仓库 `var/`，`--var/--port/--no-browser` 可调）；`run_windowed.py`（pywebview 无边框窗口版，含 DWM 圆角/图标/首帧重绘）；打包用 `build/*.spec`（PyInstaller）。
 - 运行现状：8000 端口服务运行中（`python -X utf8 run_app.py`，PID 3816），使用仓库 `var/`（db-wal 活跃）。
 - 测试：`tests/` 28 个文件、341 个用例可正常收集（`pytest tests/ --collect-only -q` 0.66s）；**没有存读档端点/persistence 的任何测试**——补测试是修复计划一部分。
 - 发布状态：`C:\Novelborne\release-v2.0.1\` 完整（源码 + web 版 + 窗口版 zip/7z + SHA256SUMS）；**`release-v2.0.2\` 为空目录，尚未产出**。`dist/` 下两个 exe 为 09-01 12:19/12:24 构建。
@@ -33,7 +32,6 @@
 1. 确认前档（开局 `st0`，`app.py` L1792-1795：`gf_confirmed=False, opening_confirmed=False`）读入后：后端 `on_send` 被 `app.py` L2061-2085 强化门禁拦截推不动剧情；前端 `openingStep`（App.vue L416-423，只读顶层键）若判 null，输入框 `:disabled="openingInputDisabled"` 恒禁用、选项区又为空（options 未生成）→ 界面无任何交互入口。
 2. 回合中间档：`app.py` L2575 回合中段 `save_state` 发生在 `_finalize_options` **之前**，与 L2651 回合末同名自动档覆盖——进程在两次落盘间中断则磁盘上是"无 options 中间档"，读档后无按钮可点 + 输入框禁用 → 死界面。
 
-**Bug 7（第 3 点）窗口版打不开**：`dist/FateEngineWindowed/FateEngineWindowed.exe` 实测启动 12 秒内退出（退出码 -1）。且 dist exe（12:24 构建）**不含 09-01 13:20 之后的所有源码修复**（`opening_distill.py` 13:20、`server.py` 13:30、`opening_service.py` 13:31、`App.vue` 13:46、`OriginalReaderModal.vue` 15:56 均晚于打包，mtime 倒挂）——用户在打包版上复现的任何 bug 都可能与源码已修状态不一致。本轮未修。
 
 ## 三、修复计划（用户已明确要求，待执行）
 
@@ -73,9 +71,7 @@
 ## 六、其他待办与风险
 
 - `release-v2.0.2\` 为空，修复完成后需重新产出（源码 + web + 窗口版 zip/7z，含 SHA256SUMS），并按红线做隐私清理后上传 GitHub + Gitee。
-- 窗口版 exe 启动失败待排查（`build/build_windows_windowed.bat` / `FateEngineWindowed.spec`；先看 `--restore-private` 参数路径、`_ensure_stdio` 与 pywebview 初始化）。
 - 版本号不一致：`frontend/package.json` 仍为 2.0.1，需与 v2.0.2 对齐。
-- `publish-v2.0.1\Novelborne-v2.0.1\run_windowed.py`（10,796 B）落后于仓库根版本（11,375 B，09-01 02:09 修改）。
 - 仓库根 0 字节 `conftest_dummy`（09-01 16:12）疑似调试遗留，可清理。
 - `var/uploads` 下 44 个测试目录（`progress-test-1`、`test123`、`verify-open-progress` 等）；`C:\Novelborne\var\` 下 4 个调试脚本（`verify_bookmark_fix.py`、`parallel_diagnostics.py`、`test_bookmark_jump.html`、`bookmark_fix_verification.md`）——发布前需清理，且 `C:\Novelborne\var` 不是运行时数据目录（真正数据在仓库 `var/`）。
 

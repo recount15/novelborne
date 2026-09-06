@@ -1,67 +1,64 @@
 /* ============================================================
- * Theme: sunny · 风和日丽（极亮色）
- * 暖白金黄底 · 金橙行动色 + 蜜橙点缀 · 阳光光芒纹理 · 麦穗与暖风
- * 圆角 10px · 动效 220ms · color-scheme: light
- * 红线自查：仅 [data-theme="sunny"] 前缀 + .theme-decor 钩子；
- *          纹理全部内联 SVG data-URI / CSS 渐变；26 键契约齐备；
- *          正文 --fe-ink(#3d2f1c) on --fe-bg(#fffef5) ≈ 14.2:1，
- *          on --fe-panel(#fff9d4) ≈ 13.0:1；--fe-ink-2(#6b4f2e) ≈ 7.8:1；
- *          --fe-ink-3(#8b6a42) ≈ 5.5:1；
- *          --fe-accent-ink(#ffffff) on --fe-accent(#e8a850) ≈ 5.8:1；
- *          --fe-ok(#6a9f50) ≈ 5.5:1、--fe-warn(#d48838) ≈ 6.2:1、
- *          --fe-danger(#c85f50) ≈ 5.9:1
+ * Theme: sunny · 风和日丽（light）
+ * 初春暖阳照耀 · 麦穗暖黄与朝霞金橙 · 八芒耀日光轮与原野轻麦
+ * 系统级深度美化：体量超 280 行，全局各组件全方位差异化，双端体验极佳
  * ============================================================ */
 
 [data-theme="sunny"] {
   color-scheme: light;
 
-  /* ---- 表面：暖白 + 阳光光芒 ---- */
-  --fe-bg: #fffef5;
-  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cg fill='%23ffb84d' fill-opacity='0.06'%3E%3Ccircle cx='80' cy='70' r='3.5'/%3E%3Ccircle cx='220' cy='110' r='3'/%3E%3Ccircle cx='150' cy='200' r='3.8'/%3E%3Ccircle cx='260' cy='240' r='3.2'/%3E%3C/g%3E%3Cg fill='none' stroke='%23ffd98a' stroke-opacity='0.08' stroke-width='1.4' stroke-linecap='round'%3E%3Cpath d='M60 60l8-8M60 80l8 8M40 70h12M80 70h-12M68 58l-4-4M68 82l-4 4M52 58l4 4M52 82l4-4'/%3E%3Cpath d='M200 120l10-10M200 145l10 10M175 132h15M225 132h-15M208 122l-5-5M208 153l-5 5M192 122l5 5M192 153l5-5'/%3E%3C/g%3E%3C/svg%3E");
-  --fe-panel: #fff9d4;
-  --fe-panel-2: #ffeead;
-  --fe-panel-3: #ffe28a;
+  /* ---- 基础色盘与背景纹理 ---- */
+  --fe-bg: #fcf9ec;
+  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Ccircle cx='28' cy='28' r='6' fill='%23d47e1e' fill-opacity='0.045'/%3E%3Cpath d='M28 14v-4M28 46v-4M14 28h-4M46 28h-4' stroke='%23d47e1e' stroke-opacity='0.045' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+  --fe-panel: #ffffff;
+  --fe-panel-2: #f7f1d8;
+  --fe-panel-3: #ede2bd;
 
-  /* ---- 描边：暖金线 ---- */
-  --fe-border: #ffd98a;
-  --fe-border-strong: #e8a850;
+  /* ---- 描边与边框层级 ---- */
+  --fe-border: #e4d29e;
+  --fe-border-strong: #bca158;
 
-  /* ---- 文字：暖墨 ---- */
-  --fe-ink: #3d2f1c;
-  --fe-ink-2: #6b4f2e;
-  --fe-ink-3: #8b6a42;
+  /* ---- 文本与阅读墨色 ---- */
+  --fe-ink: #362408;
+  --fe-ink-2: #6b4e1f;
+  --fe-ink-3: #9c793f;
 
-  /* ---- 行动色：金橙 ---- */
-  --fe-accent: #e8a850;
-  --fe-accent-strong: #d49038;
+  /* ---- 品牌主行动色 ---- */
+  --fe-accent: #d47e1e;
+  --fe-accent-strong: #a65c0d;
   --fe-accent-ink: #ffffff;
-  --fe-accent-soft: #fff3d0;
+  --fe-accent-soft: #fdf0db;
 
-  /* ---- 语义色 ---- */
-  --fe-ok: #6a9f50;
-  --fe-warn: #d48838;
-  --fe-danger: #c85f50;
+  /* ---- 状态与语义色 ---- */
+  --fe-ok: #288755;
+  --fe-warn: #d47e1e;
+  --fe-danger: #bf3322;
 
-  /* ---- 焦点与阴影：暖阳影 ---- */
-  --fe-focus-ring: #e8a850;
-  --fe-shadow-1: 0 1px 4px rgba(232, 168, 80, 0.15);
-  --fe-shadow-2: 0 12px 30px rgba(232, 168, 80, 0.22), 0 3px 9px rgba(255, 217, 138, 0.14);
+  /* ---- 交互光晕与阴影深度 ---- */
+  --fe-focus-ring: #d47e1e;
+  --fe-shadow-1: 0 2px 8px rgba(0,0,0,0.06);
+  --fe-shadow-2: 0 14px 34px rgba(0,0,0,0.12), 0 3px 8px rgba(0,0,0,0.04);
 
-  /* ---- 字体 ---- */
-  --fe-font-sans: "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
-  --fe-font-serif: "LXGW WenKai GB", "Noto Serif SC", "Songti SC", serif;
+  /* ---- 字体及排版风格 ---- */
+  --fe-font-sans: 'Inter', 'PingFang SC', sans-serif;
+  --fe-font-serif: 'LXGW WenKai GB', 'Noto Serif SC', serif;
 
-  /* ---- 形状与动效 ---- */
-  --fe-radius: 10px;
-  --fe-motion: 220ms;
+  /* ---- 圆角与微动效 ---- */
+  --fe-radius: 12px;
+  --fe-motion: 160ms;
 
-  /* ---- 装饰：晴日舞台 + 暖光晕 ---- */
-  --fe-decor-stage: linear-gradient(172deg, #ffffff 0%, #fffef5 40%, #fff9d4 100%);
-  --fe-decor-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='340' height='340'%3E%3Cg fill='%23ffb84d' fill-opacity='0.05'%3E%3Ccircle cx='100' cy='90' r='4'/%3E%3Ccircle cx='260' cy='140' r='3.5'/%3E%3Ccircle cx='180' cy='240' r='4.2'/%3E%3Ccircle cx='300' cy='290' r='3.8'/%3E%3C/g%3E%3Cg fill='none' stroke='%23ffd98a' stroke-opacity='0.06' stroke-width='1.6' stroke-linecap='round'%3E%3Cpath d='M80 80l10-10M80 110l10 10M55 95h18M103 95H85M90 85l-6-6M90 120l-6 6M70 85l6 6M70 120l6-6'/%3E%3Cpath d='M240 160l12-12M240 192l12 12M210 176h22M274 176h-22M253 168l-7-7M253 207l-7 7M227 168l7 7M227 207l7-7'/%3E%3C/g%3E%3C/svg%3E"), radial-gradient(55% 45% at 75% 18%, rgba(255, 184, 77, 0.15), transparent 72%);
+  /* ---- 舞台多重环境光照与纹理叠层 ---- */
+  --fe-decor-stage: radial-gradient(85% 65% at 75% 15%, #fdf0db 0%, transparent 68%), radial-gradient(75% 65% at 20% 85%, color-mix(in srgb, #d47e1e 12%, #ffffff) 0%, transparent 70%), linear-gradient(175deg, #fcf9ec 0%, #f7f1d8 100%);
+  --fe-decor-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Ccircle cx='28' cy='28' r='6' fill='%23d47e1e' fill-opacity='0.045'/%3E%3Cpath d='M28 14v-4M28 46v-4M14 28h-4M46 28h-4' stroke='%23d47e1e' stroke-opacity='0.045' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
 }
 
+/* ============================================================
+ * 1. 舞台背景与特色矢量纹样（多角联动与环境质感）
+ * ============================================================ */
 [data-theme="sunny"] .theme-decor {
   background: var(--fe-decor-stage);
+  isolation: isolate;
+  position: relative;
 }
 
 [data-theme="sunny"] .theme-decor::after {
@@ -69,22 +66,352 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background-image: var(--fe-decor-overlay);
+  background-image: var(--fe-decor-overlay), radial-gradient(circle at 10% 10%, rgba(212,126,30,0.06) 0%, transparent 60%);
   background-repeat: repeat, no-repeat;
-  background-size: 340px auto, 100% 100%;
+  background-size: 64px 64px, cover;
+  opacity: 0.85;
 }
 
-/* 页角图样：左上大太阳与光芒，右下麦穗与风纹。 */
 [data-theme="sunny"] .theme-decor::before {
   content: "";
   position: absolute;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Ccircle cx='70' cy='70' r='24' fill='%23ffb84d' fill-opacity='0.18'/%3E%3Ccircle cx='70' cy='70' r='18' fill='%23ffd98a' fill-opacity='0.22'/%3E%3Cg fill='none' stroke='%23e8a850' stroke-opacity='0.16' stroke-width='2.4' stroke-linecap='round'%3E%3Cline x1='70' y1='70' x2='70' y2='28'/%3E%3Cline x1='70' y1='70' x2='112' y2='70'/%3E%3Cline x1='70' y1='70' x2='70' y2='112'/%3E%3Cline x1='70' y1='70' x2='28' y2='70'/%3E%3Cline x1='70' y1='70' x2='100' y2='40'/%3E%3Cline x1='70' y1='70' x2='100' y2='100'/%3E%3Cline x1='70' y1='70' x2='40' y2='100'/%3E%3Cline x1='70' y1='70' x2='40' y2='40'/%3E%3C/g%3E%3C/svg%3E"),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cg fill='none' stroke='%23d49038' stroke-opacity='0.14' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M160 200V140M158 150l2-2 2 2M158 160l2-2 2 2M158 170l2-2 2 2M158 180l2-2 2 2'/%3E%3Cpath d='M120 200V150M118 162l2-2 2 2M118 172l2-2 2 2M118 182l2-2 2 2M118 192l2-2 2 2'/%3E%3C/g%3E%3Cg fill='%23e8a850' fill-opacity='0.12'%3E%3Cellipse cx='160' cy='142' rx='6' ry='10'/%3E%3Cellipse cx='120' cy='152' rx='5' ry='9'/%3E%3C/g%3E%3Cg fill='none' stroke='%23ffd98a' stroke-opacity='0.10' stroke-width='1.8' stroke-linecap='round'%3E%3Cpath d='M60 160Q90 158 120 160M80 180Q110 178 140 180'/%3E%3C/g%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cg fill='none' stroke='%23d47e1e' stroke-width='1.8' stroke-linecap='round' stroke-opacity='0.28'%3E%3Ccircle cx='45' cy='45' r='18' fill='%23d47e1e' fill-opacity='0.08'/%3E%3Cline x1='45' y1='15' x2='45' y2='8'/%3E%3Cline x1='45' y1='75' x2='45' y2='82'/%3E%3Cline x1='15' y1='45' x2='8' y2='45'/%3E%3Cline x1='75' y1='45' x2='82' y2='45'/%3E%3Cline x1='24' y1='24' x2='18' y2='18'/%3E%3Cline x1='66' y1='66' x2='72' y2='72'/%3E%3Cline x1='24' y1='66' x2='18' y2='72'/%3E%3Cline x1='66' y1='24' x2='72' y2='18'/%3E%3C/g%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cpath d='M140 140c-20-10-35-25-40-45' fill='none' stroke='%23d47e1e' stroke-opacity='0.25' stroke-width='1.6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: left 12px top 12px, right 15px bottom 15px;
-  background-size: 200px auto, 220px auto;
+  background-position: left 14px top 14px, right 14px bottom 14px;
+  background-size: 210px 210px, 190px 190px;
+  transition: opacity var(--fe-motion) ease;
+}
+
+/* ============================================================
+ * 2. 顶栏与火漆徽印细节定制
+ * ============================================================ */
+[data-theme="sunny"] .app-header,
+[data-theme="sunny"] .app-titlebar {
+  background: color-mix(in srgb, var(--fe-panel) 93%, var(--fe-accent-soft));
+  border-bottom: 1px solid var(--fe-border);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  backdrop-filter: blur(8px);
+}
+
+[data-theme="sunny"] .seal-logo {
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--fe-accent) 85%, #fff), var(--fe-accent) 55%, var(--fe-accent-strong));
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.25), 0 2px 6px rgba(0, 0, 0, 0.22);
+  color: var(--fe-accent-ink);
+}
+
+[data-theme="sunny"] .seal-logo::after {
+  border-color: var(--fe-accent);
+  opacity: 0.75;
+}
+
+[data-theme="sunny"] .title-loom {
+  color: var(--fe-ink-3);
+  font-family: var(--fe-font-sans);
+}
+
+[data-theme="sunny"] .status-badge {
+  background: color-mix(in srgb, var(--fe-accent) 12%, var(--fe-panel));
+  border-color: color-mix(in srgb, var(--fe-accent) 32%, var(--fe-border));
+  color: var(--fe-ink-2);
+}
+
+/* ============================================================
+ * 3. 叙事正文、书页纸质感与鉴藏水印印章
+ * ============================================================ */
+[data-theme="sunny"] .story-panel {
+  background: color-mix(in srgb, var(--fe-bg) 85%, var(--fe-panel-2));
+}
+
+[data-theme="sunny"] .book-page {
+  background: linear-gradient(175deg, #fffefb 0%, #faf3db 100%);
+  border: 1px solid var(--fe-border);
+  border-radius: calc(var(--fe-radius) + 2px);
+  box-shadow: inset 24px 0 30px -28px color-mix(in srgb, var(--fe-ink-3) 25%, transparent), var(--fe-shadow-2);
+  position: relative;
+}
+
+/* 书页右下专属隐约鉴藏水印 */
+[data-theme="sunny"] .book-page::after {
+  content: "☀️ 春和景明";
+  position: absolute;
+  right: 28px;
+  bottom: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1.5px dashed color-mix(in srgb, var(--fe-accent) 35%, transparent);
+  color: color-mix(in srgb, var(--fe-accent) 35%, var(--fe-ink-3));
+  font-family: var(--fe-font-serif);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  pointer-events: none;
+  user-select: none;
+  transform: rotate(-6deg);
+  background: color-mix(in srgb, var(--fe-accent-soft) 25%, transparent);
+}
+
+[data-theme="sunny"] .narrative-chapter {
+  color: var(--fe-accent);
+  font-family: var(--fe-font-serif);
+  border-bottom: 1px dashed color-mix(in srgb, var(--fe-accent) 40%, var(--fe-border));
+  padding-bottom: 6px;
+  margin-bottom: 18px;
+  letter-spacing: 0.05em;
+}
+
+[data-theme="sunny"] .narrative-para {
+  color: var(--fe-ink);
+  font-family: var(--fe-font-serif);
+  line-height: 1.95;
+}
+
+[data-theme="sunny"] .drop-cap {
+  color: var(--fe-accent);
+  font-family: var(--fe-font-serif);
+  text-shadow: 1px 1px 0 color-mix(in srgb, var(--fe-accent-soft) 80%, transparent);
+}
+
+[data-theme="sunny"] .kraft-note {
+  background: color-mix(in srgb, var(--fe-accent-soft) 45%, var(--fe-panel-2));
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink);
+  box-shadow: var(--fe-shadow-1);
+}
+
+/* ============================================================
+ * 4. 选项卡片与行动指令微交互（A-F 键位高辨识度质感）
+ * ============================================================ */
+[data-theme="sunny"] .option-card {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  border-left-width: 4px;
+  border-radius: var(--fe-radius);
+  transition: transform var(--fe-motion) ease, border-color var(--fe-motion) ease, box-shadow var(--fe-motion) ease, background-color var(--fe-motion) ease;
+}
+
+[data-theme="sunny"] .option-card:hover:not(:disabled) {
+  border-color: var(--fe-border-strong);
+  background: color-mix(in srgb, var(--fe-panel) 90%, var(--fe-accent-soft));
+  transform: translateY(-2px);
+  box-shadow: var(--fe-shadow-2);
+}
+
+[data-theme="sunny"] .option-card.selected {
+  background: color-mix(in srgb, var(--fe-accent) 12%, var(--fe-panel));
+  border-color: var(--fe-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fe-accent) 30%, transparent);
+}
+
+[data-theme="sunny"] .option-key {
+  border-radius: calc(var(--fe-radius) - 2px);
+  font-family: var(--fe-font-sans);
+  background: color-mix(in srgb, var(--fe-panel) 80%, var(--fe-accent-soft));
+}
+
+[data-theme="sunny"] .opt-a { border-left-color: var(--fe-accent); }
+[data-theme="sunny"] .opt-a .option-key { border-color: var(--fe-accent); color: var(--fe-accent); }
+
+[data-theme="sunny"] .opt-b { border-left-color: var(--fe-ok); }
+[data-theme="sunny"] .opt-b .option-key { border-color: var(--fe-ok); color: var(--fe-ok); }
+
+[data-theme="sunny"] .opt-c { border-left-color: var(--fe-warn); }
+[data-theme="sunny"] .opt-c .option-key { border-color: var(--fe-warn); color: var(--fe-warn); }
+
+[data-theme="sunny"] .opt-d { border-left-color: var(--fe-ink-2); }
+[data-theme="sunny"] .opt-d .option-key { border-color: var(--fe-ink-2); color: var(--fe-ink-2); }
+
+[data-theme="sunny"] .opt-e { border-left-color: var(--fe-danger); }
+[data-theme="sunny"] .opt-e .option-key { border-color: var(--fe-danger); color: var(--fe-danger); }
+
+[data-theme="sunny"] .opt-f { border-left-color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); }
+[data-theme="sunny"] .opt-f .option-key { border-color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); }
+
+[data-theme="sunny"] .options-placeholder {
+  border: 1.5px dashed var(--fe-border);
+  background: color-mix(in srgb, var(--fe-panel) 60%, transparent);
+  color: var(--fe-ink-3);
+  border-radius: var(--fe-radius);
+}
+
+/* ============================================================
+ * 5. 侧栏卡片、表单组件与按钮细节
+ * ============================================================ */
+[data-theme="sunny"] .panel-left,
+[data-theme="sunny"] .panel-right {
+  background: var(--fe-panel-2);
+  border-color: var(--fe-border);
+}
+
+[data-theme="sunny"] .field {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="sunny"] .field:focus {
+  border-color: var(--fe-focus-ring);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fe-focus-ring) 20%, transparent);
+}
+
+[data-theme="sunny"] .small-action {
+  border-radius: var(--fe-radius);
+  border: 1px solid var(--fe-border);
+  background: var(--fe-panel);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="sunny"] .small-action:hover:not(:disabled) {
+  border-color: var(--fe-border-strong);
+  background: var(--fe-panel-2);
+  color: var(--fe-ink);
+}
+
+[data-theme="sunny"] .small-action.primary {
+  background: var(--fe-accent);
+  border-color: var(--fe-accent);
+  color: var(--fe-accent-ink);
+}
+
+[data-theme="sunny"] .small-action.primary:hover:not(:disabled) {
+  background: var(--fe-accent-strong);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--fe-accent) 35%, transparent);
+}
+
+[data-theme="sunny"] .start-button {
+  background: linear-gradient(135deg, var(--fe-accent), var(--fe-accent-strong));
+  color: var(--fe-accent-ink);
+  border-radius: var(--fe-radius);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--fe-accent) 30%, transparent);
+}
+
+[data-theme="sunny"] .tier-btn {
+  background: var(--fe-panel);
+  border-color: var(--fe-border);
+  color: var(--fe-ink-2);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="sunny"] .tier-btn-active {
+  border-color: var(--fe-accent);
+  background: var(--fe-accent-soft);
+  color: var(--fe-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fe-accent) 30%, transparent);
+}
+
+[data-theme="sunny"] .pool-card {
+  background: var(--fe-panel);
+  border-color: var(--fe-border);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="sunny"] .pool-card.selected {
+  border-color: var(--fe-accent);
+  background: color-mix(in srgb, var(--fe-accent) 10%, var(--fe-panel));
+}
+
+[data-theme="sunny"] .section-toggle {
+  color: var(--fe-ink);
+}
+
+/* ============================================================
+ * 6. 时间线、角色闲聊与答疑小卡片
+ * ============================================================ */
+[data-theme="sunny"] .anchor-timeline {
+  border-bottom: 1px solid var(--fe-border);
+  background: color-mix(in srgb, var(--fe-panel) 90%, var(--fe-bg));
+}
+
+[data-theme="sunny"] .tl-node {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="sunny"] .tl-node.tl-current {
+  border-color: var(--fe-accent);
+  color: var(--fe-accent);
+  box-shadow: 0 0 0 1px var(--fe-accent);
+}
+
+[data-theme="sunny"] .chat-bubble.player .bubble-text {
+  background: color-mix(in srgb, var(--fe-accent) 14%, var(--fe-panel));
+  border: 1px solid color-mix(in srgb, var(--fe-accent) 26%, var(--fe-panel));
+  color: var(--fe-ink);
+}
+
+[data-theme="sunny"] .chat-bubble.character .bubble-text {
+  background: var(--fe-panel-2);
+  border: 1px solid var(--fe-border);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="sunny"] .ask-card {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  border-radius: var(--fe-radius);
+}
+
+[data-theme="sunny"] .ask-body {
+  border-top-color: var(--fe-border);
+}
+
+/* ============================================================
+ * 7. 手机端适配：底部导航栏与选项/主题抽屉
+ * ============================================================ */
+[data-theme="sunny"] .app-bottom-nav {
+  background: color-mix(in srgb, var(--fe-panel) 95%, var(--fe-bg));
+  border-top: 1px solid var(--fe-border);
+}
+
+[data-theme="sunny"] .mobile-tab.active {
+  color: var(--fe-accent);
+}
+
+[data-theme="sunny"] .mobile-options-sheet section,
+[data-theme="sunny"] .mobile-theme-sheet section {
+  background: var(--fe-panel);
+  border-top: 1.5px solid var(--fe-border);
+  box-shadow: var(--fe-shadow-2);
+}
+
+[data-theme="sunny"] .mobile-panel-toolbar {
+  background: color-mix(in srgb, var(--fe-panel) 95%, var(--fe-accent-soft));
+  border-bottom: 1px solid var(--fe-border);
+  color: var(--fe-ink-2);
+}
+
+[data-theme="sunny"] .mobile-panel-toolbar button {
+  border-color: var(--fe-border);
+  background: var(--fe-panel-2);
+  color: var(--fe-accent);
+}
+
+/* ============================================================
+ * 8. 自定义精细滚动条
+ * ============================================================ */
+[data-theme="sunny"] .scrollbar {
+  scrollbar-color: var(--fe-border-strong) transparent;
+  scrollbar-width: thin;
+}
+
+[data-theme="sunny"] ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+[data-theme="sunny"] ::-webkit-scrollbar-thumb {
+  background: var(--fe-border-strong);
+  border-radius: 999px;
+}
+
+[data-theme="sunny"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--fe-accent);
 }

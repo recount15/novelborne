@@ -1,8 +1,8 @@
 # Novelborne API 调用文档
 
-> 版本：v2.1.0 ｜ 适用：Novelborne 本地服务（默认 `http://127.0.0.1:8000`）
+> 版本：v2.1.0 ｜ 适用：Novelborne 本地服务（默认 `http://127.0.0.1:21560`）
 > 所有接口均为 HTTP JSON API；生成类接口为 **NDJSON 流式**（见 §2 协议约定）。
-> 交互式文档（Swagger UI）：服务启动后访问 `http://127.0.0.1:8000/docs`。
+> 交互式文档（Swagger UI）：服务启动后访问 `http://127.0.0.1:21560/docs`。
 
 ---
 
@@ -25,7 +25,7 @@
 ### 1.1 基础地址
 
 ```
-BASE = http://127.0.0.1:8000     # 默认；可用 FATE_API_HOST / FATE_API_PORT 或启动参数覆盖
+BASE = http://127.0.0.1:21560     # 默认；可用 FATE_API_HOST / FATE_API_PORT 或启动参数覆盖
 ```
 
 ### 1.2 认证
@@ -431,7 +431,7 @@ history/state_memory/quest/convergence——不推进剧情、不消耗回合、
 ```python
 import json, requests
 
-BASE = "http://127.0.0.1:8000"
+BASE = "http://127.0.0.1:21560"
 SID  = "my_session_1"
 KEY  = "sk-..."          # 只放环境变量，别写进代码
 
