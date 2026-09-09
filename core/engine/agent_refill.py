@@ -167,8 +167,6 @@ def run_refill_loop(contracts: Sequence[Any], answers: Sequence[Any], *,
             for position, contract in enumerate(contract_list)
         ]
     else:
-        parent_context = contextvars.copy_context()
-
         def _slot_job(position: int, contract: Any):
             def _run():
                 return _refill_slot(
@@ -177,14 +175,13 @@ def run_refill_loop(contracts: Sequence[Any], answers: Sequence[Any], *,
                     model=model, attempts=attempts,
                     fallback_factory=fallback_factory,
                 )
-            # 在调用方 context 快照里执行：Token 累加器等 contextvar 可见。
-            return parent_context.run(_run)
+            # 每槽一份独立快照（D07）：共享同一 Context 并发 run 会
+            # RuntimeError 且被 run_parallel 吞错，作业静默失败。
+            # 快照在调用方线程（本函数于 jobs 构建期执行）创建。
+            return parallel.with_context_snapshot(_run)
 
-        jobs = [
-            (lambda position=position, contract=contract:
-             _slot_job(position, contract))
-            for position, contract in enumerate(contract_list)
-        ]
+        jobs = [_slot_job(position, contract)
+                for position, contract in enumerate(contract_list)]
         results = parallel.run_parallel(jobs, parallel.PRIORITY_TURN)
         records = [
             (item.value if getattr(item, "ok", False) else _refill_slot(

@@ -191,5 +191,147 @@ class TestActivateRelay(unittest.TestCase):
         self.assertIn("蒸馏", state.get("distill_status", ""))
 
 
+class TestWishTypedTransaction(unittest.TestCase):
+    """P4：愿望 → 类型化角色状态事务（与次数原子提交）。"""
+
+    def test_wish_writes_typed_character_state_and_effects(self):
+        state = base_state()
+        cheat_code.arm(state)
+        result = ds.grant_wish(state, "让苏叶成为旧部统领的遗孤",
+                               model_fn=lambda p: register_json())
+        self.assertEqual(result["characters_touched"], ["苏叶"])
+        char_state = state["character_states"]["苏叶"]
+        rows = [row for row in char_state["assertions"] if row["key"] == "wish_character"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["value"], "苏叶其实是旧部统领的遗孤")
+        self.assertEqual(rows[0]["confidence"], 1.0)
+        self.assertEqual(rows[0]["provenance"][0]["kind"], "wish")
+        effects = state["wish_effects"]
+        self.assertEqual(len(effects), 1)
+        self.assertEqual(effects[0]["characters_touched"], ["苏叶"])
+        self.assertEqual(effects[0]["scope"], "character")
+        self.assertEqual(effects[0]["directive_id"], result["row"]["id"])
+
+    def test_duplicate_wish_rejected_without_charge(self):
+        state = base_state()
+        cheat_code.arm(state)
+        first = ds.grant_wish(state, "让苏叶成为旧部统领的遗孤",
+                              model_fn=lambda p: register_json())
+        with self.assertRaises(ds.DirectiveClientError):
+            ds.grant_wish(state, "让苏叶成为旧部统领的遗孤",
+                          model_fn=lambda p: register_json(fact_norm="让苏叶成为旧部统领的遗孤"))
+        self.assertEqual(first["remaining"], cheat_code.remaining_wishes(state),
+                         "重复愿望不得扣次数")
+        self.assertEqual(len(directives.active_directives(state)), 1)
+        self.assertEqual(len(state["wish_effects"]), 1)
+
+    def test_effects_failure_rolls_back_ledger_and_does_not_charge(self):
+        from unittest import mock
+        from core.services import character_state_service
+        state = base_state()
+        cheat_code.arm(state)
+        before = cheat_code.remaining_wishes(state)
+        with mock.patch.object(character_state_service, "add_evidence",
+                               side_effect=ValueError("boom")):
+            with self.assertRaises(ds.DirectiveClientError):
+                ds.grant_wish(state, "让苏叶成为旧部统领的遗孤",
+                              model_fn=lambda p: register_json())
+        self.assertEqual(cheat_code.remaining_wishes(state), before,
+                         "状态兑现失败不得扣次数")
+        self.assertEqual(directives.directives(state), [], "账本行须回滚")
+        self.assertNotIn("wish_effects", state)
+        self.assertNotIn("wish_facts", state)
+
+    def test_partial_effects_failure_rolls_back_all_domains(self):
+        """D10：多角色兑现中途失败——首个角色已写入的 character_states 也必须回滚。"""
+        from unittest import mock
+        from core.services import character_state_service
+        state = base_state()
+        cheat_code.arm(state)
+        before = cheat_code.remaining_wishes(state)
+        real_add = character_state_service.add_evidence
+        calls = {"count": 0}
+
+        def flaky(current, **kwargs):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                return real_add(current, **kwargs)
+            raise ValueError("第二个角色兑现失败")
+
+        payload = register_json(affected=["苏叶", "周桐"])
+        with mock.patch.object(character_state_service, "add_evidence",
+                               side_effect=flaky):
+            with self.assertRaises(ds.DirectiveClientError):
+                ds.grant_wish(state, "苏叶与周桐身世揭晓",
+                              model_fn=lambda p: payload)
+        self.assertEqual(cheat_code.remaining_wishes(state), before,
+                         "中途失败不得扣次数")
+        self.assertEqual(directives.directives(state), [], "账本行须回滚")
+        self.assertFalse(state.get("character_states"),
+                         "首角色已写入的状态断言必须整体回滚")
+        self.assertNotIn("wish_effects", state)
+        self.assertNotIn("wish_facts", state)
+
+    def test_relay_partial_failure_rolls_back_all_domains(self):
+        """D10：增补通路同样受完整回滚保护（character_states/wish_effects）。"""
+        from unittest import mock
+        from core.services import character_state_service
+        state = base_state()
+        real_add = character_state_service.add_evidence
+        calls = {"count": 0}
+
+        def flaky(current, **kwargs):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                return real_add(current, **kwargs)
+            raise TypeError("第二角色类型错误")
+
+        payload = register_json(fact_norm="苏叶与周桐身世揭晓",
+                                affected=["苏叶", "周桐"])
+        with mock.patch.object(character_state_service, "add_evidence",
+                               side_effect=flaky):
+            with self.assertRaises(ds.DirectiveClientError):
+                ds.append_relay_fact(state, "苏叶与周桐身世揭晓",
+                                     model_fn=lambda p: payload)
+        self.assertEqual(directives.directives(state), [])
+        self.assertFalse(state.get("character_states"))
+        self.assertNotIn("wish_effects", state)
+
+
+class TestAskPersistTrace(unittest.TestCase):
+    """D10：ask 链路落盘失败不得静默——响应必须携带错误痕迹。"""
+
+    def test_wish_persist_failure_surfaces_in_response(self):
+        from unittest import mock
+        from core.engine import persistence
+        from core.services import ask_service
+        state = base_state()
+        cheat_code.arm(state)
+        with mock.patch.object(ds, "distill_model",
+                               return_value=register_json()), \
+                mock.patch.object(persistence, "save_state",
+                                  side_effect=OSError("disk full")):
+            response = ask_service.handle_ask(
+                state, "让苏叶成为旧部统领的遗孤",
+                api_key="占位Key", session_id="占位会话")
+        self.assertTrue(response.get("wish_granted"), "愿望本身仍应生效")
+        self.assertIn("persist_error", response,
+                      "落盘失败必须出现在响应字段中，不得静默吞掉")
+        self.assertIn("disk full", str(response["persist_error"]))
+        self.assertIn("落盘失败", response["answer"],
+                      "答复文案必须可见落盘警告")
+
+    def test_relay_also_applies_typed_effects(self):
+        state = base_state()
+        result = ds.append_relay_fact(state, "北墙从此坚不可摧",
+                                      model_fn=lambda p: register_json(
+                                          fact_norm="北墙从此坚不可摧",
+                                          scope="location", affected=["北墙"]))
+        self.assertEqual(result["characters_touched"], [], "北墙不在名册，只落账")
+        effects = state["wish_effects"]
+        self.assertEqual(effects[0]["kind"], "relay")
+        self.assertEqual(effects[0]["scope"], "location")
+
+
 if __name__ == "__main__":
     unittest.main()

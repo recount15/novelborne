@@ -5,7 +5,7 @@
   "label": "标准",
   "target_chars": 950,
   "tolerance": 0.2,
-  "basic_mode": false,
+  "basic_mode": true,
   "agent_required": false,
   "agent_recommended": false,
   "slots": [

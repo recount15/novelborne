@@ -9,8 +9,9 @@ gf_deep / ripple_echo / world_reaction / subplot 四个扩展槽。本模块只�
 ``engine.tropes.data_dir`` 的 frozen 感知写法（PyInstaller 打包后取捆绑目录）。
 
 关键约定：
-- 档位门禁（§0 第 4/9 条）：普通模式只允许 1–2 档；强化模式全 6 档；
-  6 档（史诗卷）必须开启类 agent 批改重填（``validate_selection`` 硬校验）。
+- 档位门禁（§0 第 4/9 条，2026-09 放宽）：普通模式允许 1–4 档（至「丰厚」）；
+  强化模式全 6 档；6 档（史诗卷）必须开启类 agent 批改重填（``validate_selection``
+  硬校验）——为保证质量，5/6 档的限制保留不放宽。
 - 阶段三态：setup 铺垫卷 / climax 收束卷（预算尾声，最后一段必含收束槽
   anchor_climax）/ free 自由卷（全局碎锚或 relay 激活，锚点槽降级为
   anchor_free 且 notes 注明「仅供参考，不强制收束」）。
@@ -42,7 +43,7 @@ FAMILY_LABELS: dict[str, str] = {"small": "小卷族", "large": "大卷族"}
 TIER_LABELS: dict[int, str] = {1: "轻盈", 2: "简明", 3: "标准", 4: "丰厚", 5: "鸿篇", 6: "史诗"}
 TIER_TARGET_CHARS: dict[int, int] = {1: 400, 2: 650, 3: 950, 4: 1350, 5: 1850, 6: 2400}
 EXPECTED_SEGMENT_COUNTS: dict[int, int] = {1: 1, 2: 2, 3: 3, 4: 3, 5: 4, 6: 5}
-BASIC_MODE_MAX_TIER = 2        # 普通模式可用的最高档（basic_mode 只在 1–2 档为 true）
+BASIC_MODE_MAX_TIER = 4        # 普通模式可用的最高档（basic_mode 只在 1–4 档为 true；5/6 档保留质量门禁）
 AGENT_REQUIRED_TIER = 6        # 必须开启类 agent 批改重填的档位
 AGENT_RECOMMENDED_TIER = 5     # 建议开启类 agent 的档位
 WINDOW_SUM_SLACK = 0.05        # 段窗口求和校验在 tolerance 之外的额外松弛（覆盖取整误差）
@@ -509,19 +510,21 @@ def get_paper(tier: int, stage: str = "setup") -> Paper:
 
 
 def available_tiers(mode: str = "", agent_enabled: bool = False) -> list[int]:
-    """当前模式可选档位列表：普通模式只 1–2 档；强化模式（前缀匹配「强化」）全 6 档。
+    """当前模式可选档位列表：普通模式 1–``BASIC_MODE_MAX_TIER`` 档；强化模式（前缀匹配「强化」）全 6 档。
 
     ``agent_enabled`` 不影响本列表（6 档始终展示供选择）；「史诗卷必须开类
     agent」的硬校验在 :func:`validate_selection` 中执行。
     """
-    return [1, 2] if not _is_enhanced(mode) else list(TIER_TARGET_CHARS)
+    if not _is_enhanced(mode):
+        return list(range(1, BASIC_MODE_MAX_TIER + 1))
+    return list(TIER_TARGET_CHARS)
 
 
 def validate_selection(tier: int, mode: str = "", agent_enabled: bool = False) -> tuple[bool, str]:
     """校验一次档位选择是否可用，返回 ``(ok, 中文原因)``。
 
     - 档位非法 → 拒绝；
-    - 普通模式选 >2 档 → 拒绝（普通模式轻量，只允许 1–2 档小卷）；
+    - 普通模式选 >``BASIC_MODE_MAX_TIER`` 档 → 拒绝（保证质量：鸿篇/史诗仍需强化模式）；
     - 选 6 档未开类 agent → 拒绝（「史诗卷需开启类 agent 批改重填」）。
     """
     try:
@@ -529,8 +532,9 @@ def validate_selection(tier: int, mode: str = "", agent_enabled: bool = False) -
     except ValueError as exc:
         return False, str(exc)
     if not _is_enhanced(mode) and level > BASIC_MODE_MAX_TIER:
+        allowed = "/".join(TIER_LABELS[t] for t in range(1, BASIC_MODE_MAX_TIER + 1))
         return False, (
-            f"普通模式仅可用 1–{BASIC_MODE_MAX_TIER} 档（轻盈/简明），"
+            f"普通模式仅可用 1–{BASIC_MODE_MAX_TIER} 档（{allowed}），"
             f"第 {level} 档「{TIER_LABELS[level]}」需切换强化模式")
     if level == AGENT_REQUIRED_TIER and not agent_enabled:
         return False, "史诗丰度需开启类 agent 批改重填"
@@ -541,7 +545,8 @@ def map_legacy_richness(value: Any) -> int:
     """旧故事丰富度（300–1000，``participation.RICHNESS_*``）就近映射到双族六档。
 
     映射区间（旧刻度 300–1000 全覆盖，只落小卷族 1–3 档——旧上限 1000 与
-    小卷 L3 目标 ~950 字相当，4–6 档是强化模式的新容量，无旧值对应）：
+    小卷 L3 目标 ~950 字相当；4 档（丰厚）虽已开放普通模式，但旧刻度无对应
+    值，5–6 档仍是强化模式的新容量，均无旧值对应）：
 
     - ``<=500``  → 1 档（轻盈，~400 字；旧「轻盈」450 亦落此档）
     - ``<=675``  → 2 档（简明，~650 字；断点取 675 保证旧默认 700 落到新默认 3 档）

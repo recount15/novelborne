@@ -5,7 +5,7 @@
   "label": "丰厚",
   "target_chars": 1350,
   "tolerance": 0.2,
-  "basic_mode": false,
+  "basic_mode": true,
   "agent_required": false,
   "agent_recommended": false,
   "slots": [

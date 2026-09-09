@@ -9,9 +9,12 @@ API key 从环境变量 NOVELBORNE_API_KEY 读取，绝不写死。
     export NOVELBORNE_BASE_URL=https://your-endpoint.example/v1   # 自定义服务商
     python examples/api_walkthrough.py
 """
+import ipaddress
 import json
 import os
+import socket
 import sys
+from urllib.parse import urlsplit
 
 import requests
 
@@ -21,10 +24,37 @@ BASE_URL = os.environ.get("NOVELBORNE_BASE_URL", "")
 SID = "api_walkthrough_demo"
 
 
+def checked_base(base: str, *, allow_public: bool = False) -> str:
+    """出站前校验 base URL：仅 http/https、无 userinfo、拒绝云元数据地址；
+    回环/内网/链路本地始终允许，公网地址仅当 allow_public=True 且 https 时允许。"""
+    cleaned = str(base or "").strip().rstrip("/")
+    parts = urlsplit(cleaned)
+    if parts.scheme not in ("http", "https"):
+        raise ValueError("仅支持 http/https 地址")
+    host = parts.hostname
+    if not host or parts.username or parts.password:
+        raise ValueError("地址缺少主机名或携带了用户名密码")
+    port = parts.port or (443 if parts.scheme == "https" else 80)
+    infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+    for info in infos:
+        address = ipaddress.ip_address(info[4][0])
+        if address == ipaddress.ip_address("169.254.169.254"):
+            raise ValueError("拒绝访问云元数据地址")
+        if address.is_loopback or address.is_private or address.is_link_local:
+            continue
+        if not allow_public:
+            raise ValueError("该出口仅允许本机/内网地址")
+        if parts.scheme != "https":
+            raise ValueError("公网地址必须使用 https")
+    return cleaned
+
+
 def stream(url: str, body: dict):
     """读取 NDJSON 流，返回 (最后 state, 错误, 草稿字数)。"""
     last, err, draft_chars, first_delta = None, None, 0, None
-    with requests.post(url, json=body, stream=True, timeout=1800) as r:
+    parts = urlsplit(str(url))
+    base = checked_base(parts.scheme + "://" + parts.netloc, allow_public=False)
+    with requests.post(base + parts.path, json=body, stream=True, timeout=1800) as r:
         r.raise_for_status()
         for raw in r.iter_lines():
             if not raw:

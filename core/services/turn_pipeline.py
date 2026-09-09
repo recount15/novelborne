@@ -310,7 +310,9 @@ def run_turn(state: Mapping[str, Any], client, model: str,
              scene_excerpt: str = "",
              tier: Optional[int] = None,
              attempts: int = 2,
-             on_draft: Optional[Any] = None) -> TurnResult | str:
+             on_draft: Optional[Any] = None,
+             cluster_source_reader=None, cluster_budget=None,
+             cancel=None) -> TurnResult | str:
     """跑完一回合试卷管线；返回 :class:`TurnResult` 或 :data:`LEGACY` 信号。
 
     - ``tier`` 缺省取 ``state["paper_tier"]``，再退回按 story_richness 映射；
@@ -323,6 +325,12 @@ def run_turn(state: Mapping[str, Any], client, model: str,
     
     v2.0.4: 初始化回合级 Token 累加器（阶段 E）。
     """
+    from core.services.generation_skills import selected_strategy, validate_turn_output
+    if selected_strategy(state) == "agent_cluster":
+        return _run_agent_cluster(state, client, model, request_kwargs, provider,
+                                  message=message, model_fn=model_fn,
+                                  source_reader=cluster_source_reader,
+                                  budget=cluster_budget, cancel=cancel)
     # v2.0.4 Token 计量：初始化回合级累加器
     from core.engine import token_accounting
     token_accounting.init_turn_usage()
@@ -427,7 +435,8 @@ def run_turn(state: Mapping[str, Any], client, model: str,
             factors_block=factors_block, context_tail=context_blocks,
             scene=str(scene_excerpt or ""), narrative="", factors=factors or [],
             model_fn=budgeted, attempts=attempts,
-            blueprint_brief=blueprint_brief, variant=variant)
+            blueprint_brief=blueprint_brief, variant=variant,
+            state=snapshot)
 
     jobs = list(segment_jobs) + [lambda: _options_job(0), lambda: _options_job(1)]
     assert len(jobs) <= parallel.HARD_LIMIT, "Wave B 作业数不得超过并发硬上限"
@@ -438,9 +447,11 @@ def run_turn(state: Mapping[str, Any], client, model: str,
     if on_draft is not None:
         _draft_seen: list[bool] = [False] * segment_count
         _draft_buf: list[str] = [""] * segment_count
+        results = [None] * len(jobs)
         for index, item in parallel.iter_parallel_completed(
-                list(segment_jobs), parallel.PRIORITY_TURN):
-            if getattr(item, "ok", False) and str(getattr(item, "value", "") or "").strip():
+                jobs, parallel.PRIORITY_TURN):
+            results[index] = item
+            if index < segment_count and getattr(item, "ok", False) and str(getattr(item, "value", "") or "").strip():
                 _draft_seen[index] = True
                 _draft_buf[index] = str(item.value)
                 try:
@@ -448,9 +459,6 @@ def run_turn(state: Mapping[str, Any], client, model: str,
                         text for seen, text in zip(_draft_seen, _draft_buf) if seen))
                 except Exception:  # noqa: BLE001 推流失败绝不影响回合
                     pass
-        results = parallel.run_parallel(
-            list(segment_jobs) + [lambda: _options_job(0), lambda: _options_job(1)],
-            parallel.PRIORITY_TURN)
     else:
         results = parallel.run_parallel(jobs, parallel.PRIORITY_TURN)
     segment_results = results[:segment_count]
@@ -617,6 +625,8 @@ def run_turn(state: Mapping[str, Any], client, model: str,
         "director": plan_meta.get("meta") or {},
         "usage": usage_breakdown,  # v2.0.4 Token 分项
     }
+    validate_turn_output(narrative, options, allow_empty_options=True)
+    agent_meta.update(requested_strategy="simple", effective_strategy="simple")
     return TurnResult(
         narrative=narrative,
         options=options,
@@ -628,6 +638,49 @@ def run_turn(state: Mapping[str, Any], client, model: str,
         paper_key=paper.key,
         options_source=options_source,
     )
+
+
+def _run_agent_cluster(state, client, model, request_kwargs, provider, *,
+                       message, model_fn, source_reader, budget, cancel):
+    from core.services.generation_skills import (
+        build_turn_snapshot, model_callbacks, validate_turn_output, GateError)
+    from core.services.agent_cluster_service import AgentClusterService, ClusterError
+    try:
+        snapshot = build_turn_snapshot(state, message, source_reader=source_reader)
+        callbacks = model_callbacks(client, model, provider, model_fn=model_fn,
+                                    request_kwargs=request_kwargs)
+        # Probe the live host state/source once before dispatch and once after all
+        # jobs. Re-reading an entire inventory at every scheduler poll is wasteful.
+        def current_hash():
+            return build_turn_snapshot(state, message, source_reader=source_reader).snapshot_hash
+        if current_hash() != snapshot.snapshot_hash:
+            raise ClusterError("stale_snapshot")
+        candidate = AgentClusterService(callbacks).generate(snapshot, budget=budget, cancel=cancel)
+        if current_hash() != snapshot.snapshot_hash:
+            raise ClusterError("stale_snapshot")
+        if cancel is not None and cancel.is_set():
+            raise ClusterError("cancelled")
+        options = [dict(option, key=option["label"], action=option["text"], preview="", factor="")
+                   for option in candidate.options]
+        validate_turn_output(candidate.narrative, options)
+        meta = {"requested_strategy": "agent_cluster", "effective_strategy": "agent_cluster",
+                "status": candidate.status, "generation_id": candidate.generation_id,
+                "snapshot_hash": candidate.snapshot_hash, "candidate_hash": candidate.candidate_hash,
+                "checks_digest": candidate.checks_digest, "base_revision": candidate.base_revision,
+                "format_gate": {"valid": True}, "degraded_reasons": ["Scoped source and player-state projection; unverified character semantics excluded."],
+                "jobs": [{"skill_id": layer.skill_id, "job_id": layer.job_id, "status": layer.status,
+                          "input_artifact_ids": list(layer.input_artifact_ids)} for layer in candidate.layers]}
+        return TurnResult(narrative=candidate.narrative, options=options,
+                          log_line=candidate.narrative[:240],
+                          scene_validation={"status": "validated_candidate"},
+                          agent_meta=meta, paper_key="agent_cluster",
+                          options_source="agent_cluster")
+    except ClusterError:
+        raise
+    except GateError as exc:
+        raise ClusterError(exc.code) from None
+    except Exception as exc:
+        raise ClusterError(getattr(exc, "code", "cluster_adapter_failed")) from None
 
 
 def _run_quality_gate(snapshot: Mapping[str, Any], model: Model, *, narrative: str,

@@ -31,6 +31,10 @@ import type {
   UserBookDetail,
   UserBookChapter,
   UserBookChapterInsight,
+  PreparationPackage,
+  LocatorCandidate,
+  LocateSelectResult,
+  PlayableBook,
 } from './types'
 
 function apiFetch(input: string, init?: RequestInit): Promise<Response> {
@@ -223,6 +227,170 @@ export async function fetchUserBookChapterInsight(bookId: string, chapterIndex: 
   return await response.json() as UserBookChapterInsight
 }
 
+export interface PrepareBookParams {
+  openingChapters?: number
+  mode?: 'window' | 'fullbook'
+  apiKey?: string
+  provider?: string
+  baseUrl?: string
+  model?: string
+}
+
+/** 原著准备（可恢复长任务）：fullbook 需要模型连接参数，服务端强制校验。 */
+export async function prepareBook(bookId: string, params: PrepareBookParams = {}): Promise<PreparationPackage> {
+  const response = await apiFetch(`/api/books/${encodeURIComponent(bookId)}/prepare`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      opening_chapters: params.openingChapters ?? 3,
+      mode: params.mode ?? 'window',
+      api_key: params.apiKey ?? '',
+      provider: params.provider ?? 'deepseek',
+      base_url: params.baseUrl,
+      model: params.model,
+    }),
+  })
+  if (!response.ok) throw await responseError(response)
+  return await response.json() as PreparationPackage
+}
+
+/** 准备状态只读复验（不触发模型、不改书）。 */
+export async function fetchBookPreparation(bookId: string, mode: 'window' | 'fullbook' = 'window', targetChapter = 1): Promise<PreparationPackage> {
+  const query = new URLSearchParams({ mode, target_chapter: String(targetChapter) })
+  const response = await apiFetch(`/api/books/${encodeURIComponent(bookId)}/preparation?${query.toString()}`)
+  if (!response.ok) throw await responseError(response)
+  return await response.json() as PreparationPackage
+}
+
+export interface LocateSceneParams {
+  query: string
+  limit?: number
+  semantic?: boolean
+  apiKey?: string
+  provider?: string
+  baseUrl?: string
+  model?: string
+}
+
+/** 证据定位：semantic=true 走模型语义候选（需 API Key），否则精确/关键词。 */
+export async function locateBookScene(bookId: string, params: LocateSceneParams): Promise<LocatorCandidate[]> {
+  // 服务端契约为 snake_case（api_key/base_url）；凭据仅在语义定位时随请求发送。
+  const body: Record<string, unknown> = {
+    query: params.query,
+    limit: params.limit,
+    semantic: params.semantic,
+  }
+  if (params.semantic) {
+    body.api_key = params.apiKey || ''
+    body.provider = params.provider || 'deepseek'
+    body.base_url = params.baseUrl || null
+    body.model = params.model || null
+  }
+  const response = await apiFetch(`/api/books/${encodeURIComponent(bookId)}/locate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) throw await responseError(response)
+  const payload = await response.json() as { candidates?: LocatorCandidate[] }
+  if (!payload || !Array.isArray(payload.candidates)) {
+    throw new Error('定位响应缺少 candidates 字段（服务端契约变更？）')
+  }
+  return payload.candidates
+}
+
+export interface SelectSceneParams {
+  /** 必须回传 locate 返回的完整候选对象；坐标子集会被服务端拒绝。 */
+  candidate: LocatorCandidate
+  timepoint: 'before' | 'during' | 'after'
+  /** 时点角色状态投影需要模型调用；未传凭据时置 false 只确认位置。 */
+  projectFacts?: boolean
+  apiKey?: string
+  provider?: string
+  baseUrl?: string
+  model?: string
+}
+
+/** 确认开局位置与时点；有凭据时同时返回时点角色状态投影。 */
+export async function selectBookScene(bookId: string, params: SelectSceneParams): Promise<LocateSelectResult> {
+  const projectFacts = params.projectFacts !== false && !!params.apiKey
+  const response = await apiFetch(`/api/books/${encodeURIComponent(bookId)}/locate/select`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      candidate: params.candidate,
+      timepoint: params.timepoint,
+      project_facts: projectFacts,
+      ...(projectFacts ? {
+        api_key: params.apiKey,
+        provider: params.provider,
+        base_url: params.baseUrl,
+        model: params.model,
+      } : {}),
+    }),
+  })
+  if (!response.ok) throw await responseError(response)
+  const result = await response.json() as LocateSelectResult
+  // 关键字段缺失显式报错，不静默 undefined（D09）
+  for (const key of ['id', 'timepoint', 'evidence', 'knowledge_cutoff'] as const) {
+    if (result?.[key] === undefined) {
+      throw new Error(`开局位置确认响应缺少关键字段 ${key}（服务端契约变更？）`)
+    }
+  }
+  return result
+}
+
+/** 已玩作品库：只返回已成功提交开局且准备在当前源上复验通过的书。 */
+export async function listPlayableBooks(): Promise<PlayableBook[]> {
+  const response = await apiFetch('/api/library/playable')
+  if (!response.ok) throw await responseError(response)
+  const body = await response.json() as { books: PlayableBook[] }
+  return body.books || []
+}
+
+
+export interface BookSearchHit {
+  hit_id: string
+  chapter_no: number
+  start: number
+  end: number
+  excerpt: string
+  excerpt_start: number
+  match_type: string
+  score: number
+}
+
+export interface BookSearchResult {
+  book_id: string
+  source_hash: string
+  index_version: string
+  query: string
+  mode: 'exact' | 'fuzzy'
+  page: number
+  page_size: number
+  total_hits: number
+  has_more: boolean
+  hits: BookSearchHit[]
+  warnings?: string[]
+}
+
+export async function searchBookOccurrences(bookId: string, params: {
+  query: string; mode: 'exact' | 'fuzzy'; page: number; pageSize: number;
+  ignorePunctuation?: boolean
+}): Promise<BookSearchResult> {
+  const query = new URLSearchParams({
+    q: params.query, mode: params.mode, page: String(params.page),
+    page_size: String(params.pageSize), ignore_punctuation: String(params.ignorePunctuation ?? false),
+  })
+  const response = await apiFetch(`/api/books/${encodeURIComponent(bookId)}/search/occurrences?${query}`)
+  if (!response.ok) throw await responseError(response)
+  const result = await response.json() as BookSearchResult
+  if (!Array.isArray(result.hits) || !Number.isInteger(result.total_hits)) {
+    throw new Error('全书搜索响应缺少有效命中列表或总数')
+  }
+  return result
+}
+
 export function askQuestion(sessionId: string, question: string): Promise<{ answer: string }> {
   return postJson(`/api/sessions/${encodeURIComponent(sessionId)}/ask`, { question })
 }
@@ -309,12 +477,31 @@ export function generateCharacterDesign(payload: DesignerGeneratePayload): Promi
 }
 
 export interface DesignerSavePayload {
-  filename: string
-  persona_markdown: string
+  filename?: string
+  persona_markdown?: string
+  card: Record<string, unknown>
 }
 
-export function saveCharacterDesign(payload: DesignerSavePayload): Promise<CharacterDesignerSaveResult> {
-  return postJson('/api/character-designer/save', payload)
+export interface DesignerDatabaseSaveResult {
+  saved: boolean
+  character_id: string
+  revision: number
+  card: Record<string, unknown>
+  label?: string
+  message?: string
+}
+
+export function saveCharacterDesign(payload: DesignerSavePayload): Promise<DesignerDatabaseSaveResult> {
+  return postJson('/api/character-library', {
+    ...payload.card,
+    ...(payload.persona_markdown ? { persona_markdown: payload.persona_markdown } : {}),
+  })
+}
+
+export async function loadCharacterDesign(id: string): Promise<DesignerDatabaseSaveResult> {
+  const response = await apiFetch(`/api/character-library/${encodeURIComponent(id)}`)
+  if (!response.ok) throw new Error(await response.text())
+  return response.json()
 }
 
 // ---------------------------------------------------------------------------

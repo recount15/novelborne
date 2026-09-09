@@ -11,11 +11,29 @@ class StoryAgentIntegrationTests(unittest.TestCase):
   t=TurnTransaction({'round':1})
   with self.assertRaises(ValueError): t.advance('COMMITTED')
  def test_agent_mode_delegates_active_path(self):
+  """Active selection reaches the pipeline explicitly and returns its candidate."""
   state={'round':1}
-  result=turn_pipeline.LEGACY
+  result=turn_pipeline.TurnResult(
+   narrative='正文', options=[{'key':key,'text':f'行动{key}'} for key in 'ABCDEF'],
+   agent_meta={'status':'validated_candidate','effective_strategy':'agent_cluster'})
   with patch.object(turn_pipeline,'run_turn',return_value=result) as run:
    self.assertIs(StoryAgent(mode='agent').run_turn(state), result)
   run.assert_called_once()
+  candidate=run.call_args.args[0]
+  self.assertIsNot(candidate,state)
+  self.assertEqual(candidate['generation_strategy'],'agent_cluster')
+  self.assertEqual(result.agent_meta['status'],'validated_candidate')
+  self.assertEqual(state,{'round':1})
+ def test_explicit_agent_rejects_legacy_without_fallback(self):
+  from core.services.generation_skills import GateError
+  state={'round':1}
+  with patch.object(turn_pipeline,'run_turn',return_value=turn_pipeline.LEGACY) as run:
+   with self.assertRaises(GateError) as caught:
+    StoryAgent(mode='agent').run_turn(state)
+  self.assertEqual(caught.exception.code,'explicit_agent_legacy_rejected')
+  run.assert_called_once()
+  self.assertEqual(run.call_args.args[0]['generation_strategy'],'agent_cluster')
+  self.assertEqual(state,{'round':1})
  def test_shadow_mode_does_not_mutate(self):
   state={'round':1}
   with self.assertRaises(RuntimeError): StoryAgent(mode='shadow').run_turn(state)

@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import contextlib
+import contextvars
 import functools
 import os
 import threading
@@ -333,6 +334,19 @@ def _pool() -> ThreadPoolExecutor:
             _executor = ThreadPoolExecutor(
                 max_workers=HARD_LIMIT, thread_name_prefix="api-parallel")
         return _executor
+
+
+def with_context_snapshot(job: Callable[[], Any]) -> Callable[[], Any]:
+    """给单个并发作业一份独立的 contextvars 快照（D07）。
+
+    快照必须在调用方线程创建（工作线程的当前上下文是空副本，取不到
+    回合级 Token 累加器等 contextvar）。同一 Context 对象并发 ``run``
+    会抛 ``RuntimeError: cannot enter context``，被 run_parallel 吞进
+    JobResult.error 后作业静默失败——因此每个作业各持一份快照；
+    contextvar 指向的可变对象（如 usage dict）仍共享，计量不丢不重。
+    """
+    ctx = contextvars.copy_context()
+    return lambda: ctx.run(job)
 
 
 def run_parallel(jobs: Sequence[Callable[[], Any]],

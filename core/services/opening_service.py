@@ -264,7 +264,8 @@ def run_for_state(state: dict,
                   *,
                   chapters_ahead: int = 3,
                   library_path: Optional[str | Path] = None,
-                  save_characters_fn: Optional[Callable] = None) -> dict:
+                  save_characters_fn: Optional[Callable] = None,
+                  mode: Optional[str] = None, target_chapter: int = 1) -> dict:
     """开局蒸馏流水线对外门面：解析参数 → 开局优先级包装 → 流水线 → 回写 state。
 
     ``state`` 必须来自已持有会话锁的会话；``client`` 为 OpenAI 兼容客户端，
@@ -290,8 +291,25 @@ def run_for_state(state: dict,
     def _progress(event: dict) -> None:
         _write_progress(state, event, book_dir)
 
+    from core.services.book_prepare_service import normalize_mode, prepare_book, verify_preparation
+    try:
+        selected_mode = normalize_mode(mode or state.get('preparation_mode') or 'window')
+        if selected_mode == 'fullbook':
+            preparation = verify_preparation(book_dir, mode=selected_mode, target_chapter=target_chapter)
+            if not preparation['ready']:
+                preparation = prepare_book(book_dir, mode=selected_mode, model=budgeted,
+                                           model_version=model, target_chapter=target_chapter,
+                                           opening_chapters=chapters_ahead)
+            if not preparation['ready']:
+                raise ValueError('全书逐块证据和实体准备未完成：%s' % preparation['errors'])
+            state['preparation'] = preparation
+        pipeline_options = {} if selected_mode == 'window' and target_chapter == 1 else {
+            'mode': selected_mode, 'target_chapter': target_chapter}
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        raise OpeningClientError(str(exc)) from exc
     report = engine.opening_distill.run_opening_pipeline(
         book_dir, work_title, budgeted,
+        **pipeline_options,
         chapters_ahead=chapters_ahead,
         progress=_progress,
         library_path=library_path,
@@ -307,4 +325,10 @@ def run_for_state(state: dict,
         detail = "；".join(report.get("errors") or []) or "未知错误"
         raise OpeningUpstreamError("开局蒸馏全线失败：%s" % detail[:300])
     _apply_to_state(state, report)
-    return _summary(report)
+    if report.get('preparation'):
+        state['preparation'] = report['preparation']
+        state['preparation_mode'] = selected_mode
+        state['book_entities'] = report.get('entities') or []
+    return {**_summary(report), **({'preparation': report['preparation'],
+                                  'entities': report.get('entities') or []}
+                                 if report.get('preparation') else {})}

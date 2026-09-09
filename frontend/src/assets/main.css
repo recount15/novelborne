@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./themes/classic.css";
 @import "./themes/modern.css";
 @import "./themes/ink.css";
 @import "./themes/calm.css";
@@ -40,39 +41,11 @@
 }
 
 html {
-  color-scheme: light;
-  /* classic 主题默认契约：保留牛皮纸视觉，并与可切换主题共享语义变量。 */
-  --fe-bg: #f3edde;
-  --fe-bg-image: repeating-linear-gradient(0deg, rgb(122 98 56 / 1.8%) 0 1px, transparent 1px 3px), repeating-linear-gradient(90deg, rgb(122 98 56 / 1.4%) 0 1px, transparent 1px 4px);
-  --fe-panel: #fdfaf2;
-  --fe-panel-2: #efe8d8;
-  --fe-panel-3: #ece4d0;
-  --fe-border: #ddd2bc;
-  --fe-border-strong: #c2b6a0;
-  --fe-ink: #2c2925;
-  --fe-ink-2: #6f6758;
-  --fe-ink-3: #7f7460;
-  --fe-accent: #b63a2b;
-  --fe-accent-strong: #8d2c20;
-  --fe-accent-ink: #ffffff;
-  --fe-accent-soft: #faece8;
-  --fe-ok: #137c6c;
-  --fe-warn: #a87516;
-  --fe-danger: #8d2c20;
-  --fe-focus-ring: #b63a2b;
-  --fe-shadow-1: 0 1px 3px rgb(36 35 33 / 10%);
-  --fe-shadow-2: 0 8px 24px rgb(36 35 33 / 12%);
-  --fe-font-sans: var(--font-sans);
-  --fe-font-serif: var(--font-serif);
-  --fe-radius: 6px;
-  --fe-motion: 140ms;
-  --fe-decor-stage: linear-gradient(175deg, #f7f2e4 0%, #f3edde 55%, #eae2cf 100%);
-  --fe-decor-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320' viewBox='0 0 320 320'%3E%3Cpath d='M40 40h240v240H40z' fill='none' stroke='%23b63a2b' stroke-opacity='0.02' stroke-width='1'/%3E%3C/svg%3E");
   color: var(--fe-ink);
-  /* 全局牛皮纸底色：暖卡其 + 复古藏书票水印与羊皮纸纤维纹理 */
+  /* Texture-free base; broad atmosphere belongs to the stage only. */
   background-color: var(--fe-bg);
   background-image: var(--fe-bg-image);
-  font-family: var(--font-sans);
+  font-family: var(--fe-font-sans);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   /* 低分屏中文渲染精细化：抗锯齿 + 亚像素，楷体笔画不再发虚 */
@@ -134,20 +107,27 @@ textarea { resize: none; }
   min-width: 0;
   border: 1px solid var(--fe-border);
   border-radius: var(--fe-radius);
-  /* 输入框纸面：米白 + 隐约纤维，与全局牛皮纸呼应 */
-  background:
-    repeating-linear-gradient(0deg, rgb(120 96 54 / 1.6%) 0 1px, transparent 1px 3px),
-    var(--fe-panel);
+  background: var(--fe-panel);
+  min-height: var(--fe-touch-target, 44px);
+  padding: 8px 12px;
   color: var(--fe-ink);
   outline: none;
   font-size: 14px;
-  transition: border-color 140ms ease, box-shadow 140ms ease;
+  transition: border-color var(--fe-motion) ease, box-shadow var(--fe-motion) ease;
 }
 .field:hover:not(:disabled):not(:focus) { border-color: var(--fe-border-strong); }
-.field:focus { border-color: var(--fe-focus-ring); box-shadow: 0 0 0 2px color-mix(in srgb, var(--fe-focus-ring) 16%, transparent); }
+.field:focus { border-color: var(--fe-focus-ring); outline: 2px solid var(--fe-focus-ring); outline-offset: 2px; }
+.field::placeholder { color: var(--fe-ink-3); opacity: 1; }
 .field:disabled { background: var(--fe-panel-3); color: var(--fe-ink-3); }
-.label { display: block; margin-bottom: 5px; color: var(--fe-ink-2); font-size: 12px; font-weight: 650; }
-.scrollbar { scrollbar-color: #c8bda6 transparent; scrollbar-width: thin; }
+/* Keyboard focus is a meaningful boundary, independent of hover. */
+button:focus-visible, a:focus-visible, summary:focus-visible, label:focus-visible,
+input[type='checkbox']:focus-visible, input[type='radio']:focus-visible,
+input[type='file']:focus-visible, input[type='range']:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--fe-focus-ring);
+  outline-offset: 2px;
+}
+.label { display: block; margin-bottom: 8px; color: var(--fe-ink-2); font-size: 13px; font-weight: 600; }
+.scrollbar { scrollbar-color: var(--fe-border-strong) transparent; scrollbar-width: thin; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -162,5 +142,302 @@ textarea { resize: none; }
   body { overflow: hidden; }
 }
 
-/* 全局细节：标题衬线字、面板火漆色点缀 */
-h1, h2, h3 { font-family: var(--font-serif); }
+/* Heading hierarchy is typography, not an ornamental separator. */
+h1, h2, h3 { font-family: var(--fe-font-serif); overflow-wrap: anywhere; }
+
+
+/* Clean content defaults. Theme motifs live on stage and page edges, never
+   in input or paragraph backgrounds. Explicit theme selectors may refine these. */
+html .app-root .book-page::after,
+html .app-root .narrative-chapter::after,
+html .app-root .seal-logo::after { content: none; display: none; }
+html .app-root .book-page { background-color: var(--fe-panel); color: var(--fe-ink); }
+html .app-root .kraft-note { background: var(--fe-panel-2); border: 0; box-shadow: none; color: var(--fe-ink); }
+html .app-root .seal-logo { background-color: var(--fe-accent); color: var(--fe-accent-ink); animation: none; }
+html .app-root .option-card:hover:not(:disabled) { transform: none; box-shadow: none; background: var(--fe-panel-2); border-color: var(--fe-border-strong); }
+html .app-root .option-card.selected { background: var(--fe-accent-soft); border-color: var(--fe-accent); box-shadow: inset 0 0 0 1px var(--fe-accent); }
+html .app-root .option-key { color: var(--fe-ink-2); border-color: var(--fe-border); background: var(--fe-panel); }
+html .app-root .option-card.selected .option-key { color: var(--fe-accent); border-color: var(--fe-accent); }
+
+@media (pointer: coarse) {
+  button, summary, select, input:not([type='checkbox']):not([type='radio']):not([type='range']) { min-height: var(--fe-touch-target, 44px); }
+  button { min-width: var(--fe-touch-target, 44px); }
+  input, select, textarea { font-size: 16px; }
+}
+@media (forced-colors: active) {
+  .field { border-color: ButtonText; }
+  html .app-root .option-card.selected { outline: 2px solid Highlight; }
+}
+
+/* One owner per decoration: the stage never repeats its motif on nested frames.
+   Specificity intentionally exceeds scoped App and legacy theme stage rules.
+   Token consumers are listed here rather than copied into 28 theme files. */
+html:root:is([data-theme], :not([data-theme])) .app-root .story-panel.theme-decor {
+  position: relative;
+  isolation: isolate;
+  background: var(--fe-bg);
+}
+html:root:is([data-theme], :not([data-theme])) .app-root .story-panel.theme-decor::before {
+  content: "";
+  display: block;
+  position: absolute;
+  inset: 12px 12px auto auto;
+  width: min(22%, 240px);
+  aspect-ratio: 1;
+  height: auto;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--fe-signature-pigment, var(--fe-ink));
+  mask: var(--fe-signature-art) center / contain no-repeat;
+  opacity: var(--fe-signature-opacity);
+}
+html .app-root.theme-decor::before,
+html .app-root.theme-decor::after,
+html .app-root .theme-decor:not(.story-panel)::before,
+html .app-root .theme-decor::after {
+  content: none;
+}
+
+/* Reserve a separate block for each emblem: never an absolute watermark over
+   headings, body copy or evidence. Same paths retain identity in grayscale. */
+html:root:is([data-theme], :not([data-theme])) :is(.library-intro, .dossier-identity, .designer-header, .reader-page-title, .reader-chat > header, .preparation-job > header)::before {
+  content: "";
+  display: block;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  margin-block-end: 8px;
+  pointer-events: none;
+  background: var(--fe-ink);
+  mask: var(--fe-signature-small) center / contain no-repeat;
+  opacity: .12;
+}
+html:root:is([data-theme], :not([data-theme])) .reader-page-title::before {
+  margin-inline: auto;
+  background: var(--reader-paper-ink);
+}
+html:root:is([data-theme], :not([data-theme])) :is(.seal-logo, .titlebar-logo, .dossier-monogram, .step-dot, .option-key, .choice-key) {
+  border-radius: var(--fe-signature-radius);
+}
+html:root:is([data-theme], :not([data-theme])) :is(.story-prologue, .library-book-page, .pool-preview-card, .character-item, .dossier-section, .corpus-card, .question-card, .richness-card) {
+  border-inline-start: 3px var(--fe-signature-edge) var(--fe-border-strong);
+  border-radius: var(--fe-signature-radius);
+  background-color: var(--fe-panel);
+}
+html:root:is([data-theme], :not([data-theme])) .library-book-page {
+  background-image: none;
+  box-shadow: inset 5px 0 var(--fe-panel-2), var(--fe-shadow-1);
+}
+html:root:is([data-theme], :not([data-theme])) .library-book-page::after {
+  content: "";
+  display: block;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  align-self: flex-end;
+  background: var(--fe-signature-pigment, var(--fe-ink));
+  mask: var(--fe-signature-small) center / contain no-repeat;
+  opacity: .12;
+  pointer-events: none;
+}
+html:root:is([data-theme], :not([data-theme])) .dossier-section {
+  padding-inline-start: 12px;
+}
+html:root:is([data-theme], :not([data-theme])) :is(.book-page, .reader-paper) {
+  background-image: none;
+  border-inline-start: 3px var(--fe-signature-edge) var(--fe-border);
+}
+html:root:is([data-theme], :not([data-theme])) .app-root .book-page {
+  background-color: var(--fe-panel);
+  border-radius: var(--fe-signature-radius);
+}
+html:root:is([data-theme], :not([data-theme])) :is(.narrative-chapter, .result-heading, .dossier-section h3) {
+  letter-spacing: .035em;
+  text-wrap: balance;
+}
+html:root:is([data-theme], :not([data-theme])) section[aria-label="开局证据定位"] blockquote {
+  border-inline-start: 3px var(--fe-signature-edge) var(--fe-border-strong);
+  padding-inline-start: 12px;
+  background: var(--fe-panel);
+  color: var(--fe-ink-2);
+}
+html:root:is([data-theme], :not([data-theme])) :is(.work-picker-panel, .reader-drawer, .reader-settings, .reader-start-dialog, .dossier-surface) {
+  background: var(--fe-panel);
+  border-color: var(--fe-border-strong);
+  box-shadow: var(--fe-shadow-2);
+}
+html:root:is([data-theme], :not([data-theme])) :is(.work-option, .reader-book, .reader-chapter, .choice-card, .member-card) {
+  border-radius: var(--fe-signature-radius);
+  overflow-wrap: anywhere;
+}
+html:root:is([data-theme], :not([data-theme])) :is(.library-eyebrow, .dossier-eyebrow, .prologue-kicker, .bubble-label) {
+  letter-spacing: .08em;
+  color: var(--fe-ink-2);
+  font-weight: 600;
+}
+html:root:is([data-theme], :not([data-theme])) :is(.pool-preview-fields dt, .dossier-section dt, .dossier-identity dt) {
+  color: var(--fe-ink-3);
+  font-size: .85em;
+}
+html:root:is([data-theme], :not([data-theme])) :is(.pool-preview-fields dd, .dossier-section dd, .dossier-identity dd) {
+  color: var(--fe-ink);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+html:root:is([data-theme], :not([data-theme])) :is(.library-book-number, .library-status, .dossier-count, .preparation-job > p, .reader-progress) {
+  font-variant-numeric: tabular-nums;
+}
+html:root:is([data-theme], :not([data-theme])) :is(.library-meta code, .identifier) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+html:root:is([data-theme], :not([data-theme])) .reader-chat {
+  border: 1px solid var(--fe-border-strong);
+  border-radius: var(--fe-signature-radius);
+  background: var(--fe-panel);
+}
+html:root:is([data-theme], :not([data-theme])) .reader-chat > header {
+  flex-wrap: wrap;
+  border-block-end: 1px var(--fe-signature-edge) var(--fe-border);
+  padding-block-end: 12px;
+}
+html:root:is([data-theme], :not([data-theme])) :is(.reader-chat .messages > article, .chat-bubble .bubble-text) {
+  background-image: none;
+  border-radius: var(--fe-signature-radius);
+  border-inline-start: 2px var(--fe-signature-edge) var(--fe-border-strong);
+  overflow-wrap: anywhere;
+}
+html:root:is([data-theme], :not([data-theme])) .reader-chat .messages > article {
+  background-color: var(--fe-panel-2);
+}
+html:root:is([data-theme], :not([data-theme])) .reader-chat .messages > article.user {
+  border-inline-start-color: var(--fe-accent);
+  background-color: var(--fe-accent-soft);
+}
+html:root:is([data-theme], :not([data-theme])) .preparation-job {
+  border: 1px solid var(--fe-border-strong);
+  border-block-start: 3px var(--fe-signature-edge) var(--fe-border-strong);
+  border-radius: var(--fe-signature-radius);
+  background: var(--fe-panel);
+}
+html:root:is([data-theme], :not([data-theme])) .preparation-job > header {
+  align-items: center;
+  justify-content: flex-start;
+}
+html:root:is([data-theme], :not([data-theme])) .preparation-job > header span {
+  margin-inline-start: auto;
+  color: var(--fe-ink-2);
+}
+html:root:is([data-theme], :not([data-theme])) .preparation-job progress {
+  accent-color: var(--fe-accent);
+  border-radius: var(--fe-signature-radius);
+  outline: 1px solid var(--fe-border-strong);
+  outline-offset: 2px;
+}
+html:root:is([data-theme], :not([data-theme])) .preparation-job footer {
+  border-block-start: 1px solid var(--fe-border);
+  padding-block-start: 12px;
+}
+html:root:is([data-theme], :not([data-theme])) :is(.reader-chat, .preparation-job) details {
+  background: var(--fe-panel-2);
+  border-radius: 4px;
+  padding: 8px 12px;
+}
+html:root:is([data-theme], :not([data-theme])) :is(.reader-chat, .preparation-job) summary {
+  color: var(--fe-ink-2);
+  cursor: pointer;
+  min-height: 44px;
+  align-content: center;
+}
+html:root:is([data-theme], :not([data-theme])) :is(.library-empty, .dossier-empty, .character-empty, .empty-state) {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+/* Functional state never depends on the low-opacity signature. */
+html:root:is([data-theme], :not([data-theme])) :is(.work-option.active, .reader-book.active, .reader-chapter.active, .choice-card.selected, .library-filters button[aria-pressed="true"], .dossier-character-list button[aria-current="true"]) {
+  outline: 2px solid var(--fe-accent);
+  outline-offset: -2px;
+  background: var(--fe-accent-soft);
+  color: var(--fe-ink);
+}
+html:root:is([data-theme], :not([data-theme])) :is(.reader-chat, .preparation-job, .library-scene, .character-dossier) button {
+  min-height: 44px;
+}
+html:root:is([data-theme], :not([data-theme])) :is(.narrative-body, .narrative-para, .ask-card, .field, input, textarea, select, .job-error, .error-banner, .reader-error, .library-error, .dossier-error, .reader-chat .notice) {
+  background-image: none;
+  background-color: var(--fe-panel);
+}
+html:root:is([data-theme], :not([data-theme])) :is(.job-error, .error-banner, .reader-error, .library-error, .dossier-error, [aria-invalid="true"]) {
+  border-color: var(--fe-danger);
+}
+html:root:is([data-theme], :not([data-theme])) :is(.preparation-job:has(.job-error), .reader-chat:has([role="alert"])) > header::before {
+  content: none;
+}
+/* Reader tone remains the reader's choice, including its inline width/size. */
+html:root:is([data-theme], :not([data-theme])) .reader-shell .reader-paper {
+  background-color: var(--reader-stage-bg, var(--fe-panel));
+  color: var(--reader-paper-ink);
+}
+html:root:is([data-theme], :not([data-theme])) .reader-shell .reader-text {
+  background: var(--reader-stage-bg, var(--fe-panel));
+  color: var(--reader-paper-ink);
+}
+@media (max-width: 1023px) {
+  html:root:is([data-theme], :not([data-theme])) .app-root .story-panel.theme-decor::before {
+    width: min(22%, 160px);
+    opacity: calc(var(--fe-signature-opacity) * .75);
+  }
+}
+@media (max-width: 767px) {
+  html:root:is([data-theme], :not([data-theme])) .app-root .story-panel.theme-decor::before {
+    width: min(22%, 96px);
+    mask-image: var(--fe-signature-small);
+    opacity: calc(var(--fe-signature-opacity) * .5);
+  }
+  html:root:is([data-theme], :not([data-theme])) :is(.library-intro, .dossier-identity, .designer-header, .reader-page-title, .reader-chat > header, .preparation-job > header)::before {
+    width: 28px;
+    height: 28px;
+    flex-basis: 28px;
+    margin-block-end: 4px;
+  }
+  html:root:is([data-theme], :not([data-theme])) .reader-chat .messages > article.user {
+    margin-inline-start: 12px;
+  }
+}
+/* Platform shells retain the compact motif even when landscape is >767px. */
+html:root:is([data-theme], :not([data-theme])) .app-root:is(.app-root--mobile-web, .app-root--android) .story-panel.theme-decor::before {
+  width: min(22%, 96px);
+  mask-image: var(--fe-signature-small);
+  opacity: calc(var(--fe-signature-opacity) * .5);
+}
+@media (max-width: 359px), (max-height: 450px) {
+  html:root:is([data-theme], :not([data-theme])) .app-root .story-panel.theme-decor::before,
+  html:root:is([data-theme], :not([data-theme])) :is(.library-intro, .dossier-identity, .designer-header, .reader-page-title, .reader-chat > header, .preparation-job > header)::before {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html:root:is([data-theme], :not([data-theme])) :is(.reader-paper, .choice-card, .option-card, .library-book) {
+    animation: none;
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  html:root:is([data-theme], :not([data-theme])) .library-book-page::after,
+  html:root:is([data-theme], :not([data-theme])) .app-root .story-panel.theme-decor::before,
+  html:root:is([data-theme], :not([data-theme])) :is(.library-intro, .dossier-identity, .designer-header, .reader-page-title, .reader-chat > header, .preparation-job > header)::before {
+    display: none;
+  }
+  html:root:is([data-theme], :not([data-theme])) :is(.reader-shell .reader-paper, .reader-shell .reader-text, .library-book-page, .reader-chat, .preparation-job, .app-root .book-page) {
+    background: Canvas;
+    color: CanvasText;
+    box-shadow: none;
+    border-color: CanvasText;
+  }
+  html:root:is([data-theme], :not([data-theme])) :is(.work-option.active, .reader-book.active, .reader-chapter.active, .choice-card.selected, .library-filters button[aria-pressed="true"], .dossier-character-list button[aria-current="true"]) {
+    outline-color: Highlight;
+    background: Canvas;
+    color: CanvasText;
+  }
+}

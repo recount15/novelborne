@@ -178,6 +178,14 @@ def gate(value: Optional[Mapping[str, Any]], event: str) -> dict[str, Any]:
         return _result(state, True)
     if not state["gf_confirmed"]:
         return _result(state, False, "gf_required")
+    if event in {EVENT_CONFIRM_OPENING, EVENT_START} and state.get('preparation_mode') == 'fullbook':
+        preparation = state.get('preparation') or {}
+        coverage = preparation.get('coverage') or {}
+        if (preparation.get('mode') != 'fullbook' or preparation.get('ready') is not True
+                or coverage.get('complete') is not True or not preparation.get('entities')
+                or not coverage.get('expected_blocks')
+                or coverage.get('verified_blocks') != coverage.get('expected_blocks')):
+            return _result(state, False, 'fullbook_preparation_required')
     if event == EVENT_CONFIRM_OPENING:
         return _result(state, True)
     if not state["opening_confirmed"]:

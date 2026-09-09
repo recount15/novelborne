@@ -95,33 +95,34 @@ class PaperLibraryTestCase(unittest.TestCase):
 
     def test_mode_flags_by_tier(self):
         for paper in self.library.values():
-            self.assertEqual(paper.basic_mode, paper.tier <= 2)
+            self.assertEqual(paper.basic_mode, paper.tier <= papers.BASIC_MODE_MAX_TIER)
             self.assertEqual(paper.agent_required, paper.tier == 6)
             self.assertEqual(paper.agent_recommended, paper.tier == 5)
 
 
 class TierGateTestCase(unittest.TestCase):
-    """档位门禁：普通限 1–2、6 档强制 agent、5 档 recommended。"""
+    """档位门禁：普通限 1–BASIC_MODE_MAX_TIER（现为 4，至「丰厚」）、6 档强制 agent、5 档 recommended。"""
 
-    def test_normal_mode_limited_to_tiers_1_2(self):
-        self.assertEqual(papers.available_tiers("普通", agent_enabled=False), [1, 2])
-        self.assertEqual(papers.available_tiers("普通", agent_enabled=True), [1, 2])
-        self.assertEqual(papers.available_tiers("", agent_enabled=False), [1, 2])
+    def test_normal_mode_limited_to_basic_tiers(self):
+        expected = list(range(1, papers.BASIC_MODE_MAX_TIER + 1))
+        self.assertEqual(papers.available_tiers("普通", agent_enabled=False), expected)
+        self.assertEqual(papers.available_tiers("普通", agent_enabled=True), expected)
+        self.assertEqual(papers.available_tiers("", agent_enabled=False), expected)
 
     def test_enhanced_mode_all_six_tiers(self):
         full = [1, 2, 3, 4, 5, 6]
         self.assertEqual(papers.available_tiers("强化", agent_enabled=False), full)
         self.assertEqual(papers.available_tiers("强化模式", agent_enabled=True), full)
 
-    def test_normal_mode_rejects_tier_3_and_above(self):
-        for tier in (3, 4, 5, 6):
+    def test_normal_mode_rejects_tier_above_cap(self):
+        for tier in range(papers.BASIC_MODE_MAX_TIER + 1, 7):
             ok, reason = papers.validate_selection(tier, "普通", agent_enabled=True)
             self.assertFalse(ok, tier)
             self.assertIn("普通模式", reason)
             self.assertIn("强化", reason)
 
-    def test_normal_mode_accepts_tiers_1_2(self):
-        for tier in (1, 2):
+    def test_normal_mode_accepts_tiers_up_to_cap(self):
+        for tier in range(1, papers.BASIC_MODE_MAX_TIER + 1):
             ok, reason = papers.validate_selection(tier, "普通", agent_enabled=False)
             self.assertTrue(ok, tier)
             self.assertEqual(reason, "")
@@ -410,10 +411,11 @@ class StrictValidationTestCase(unittest.TestCase):
         message = self._load_invalid(mutate)
         self.assertIn("factor_split 合计必须为 6", message)
 
-    def test_basic_mode_flag_on_tier_3_rejected(self):
+    def test_basic_mode_flag_above_cap_rejected(self):
+        # 第 5 档已超过普通模式上限（BASIC_MODE_MAX_TIER=4），basic_mode 必须 false。
         def mutate(record):
             record["basic_mode"] = True
-        message = self._load_invalid(mutate, tier=3, stage="setup")
+        message = self._load_invalid(mutate, tier=5, stage="setup")
         self.assertIn("basic_mode", message)
 
     def test_agent_required_flag_on_tier_5_rejected(self):

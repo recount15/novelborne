@@ -43,19 +43,28 @@ import {
   BookUser,
   X,
 } from 'lucide-vue-next'
+import GenerationStatePanel from './components/GenerationStatePanel.vue'
+import PreparationPanel from './components/PreparationPanel.vue'
+import { useSceneChat } from './composables/useSceneChat'
+import { projectStreamEvent } from './composables/streamState'
 import CharacterDesigner from './views/CharacterDesigner.vue'
 import NovelExportModal from './components/NovelExportModal.vue'
 import OriginalReaderModal from './components/OriginalReaderModal.vue'
+import LibraryScene from './components/LibraryScene.vue'
+import CharacterDossier from './components/CharacterDossier.vue'
 import SiameseCat from './components/SiameseCat.vue'
 import ThemePicker from './components/ThemePicker.vue'
-import ThemeFrame from './components/theme/ThemeFrame.vue'
-import ThemeBadge from './components/theme/ThemeBadge.vue'
-import ThemeProgress from './components/theme/ThemeProgress.vue'
+import PreparationJobPanel from './components/PreparationJobPanel.vue'
+import ReaderChatPanel from './components/ReaderChatPanel.vue'
+import { createPreparationJob, getPreparationJob, requestId, v3Request, type PreparationJob } from './v3Api'
 import LanQrModal from './components/LanQrModal.vue'
+import CopilotPanel from './components/CopilotPanel.vue'
+import ModelConfigModal from './components/ModelConfigModal.vue'
 import { THEME_META, applyTheme, currentTheme, type ThemeId } from './themeSwitch'
 import { platform } from './kernel/platform'
 import { useNarrativeView } from './kernel/useNarrativeView'
 import { useUiStatePersistence } from './composables/useUiStatePersistence'
+import { useCharacterPools } from './composables/useCharacterPools'
 import { useGenerationSnapshot } from './composables/useGenerationSnapshot'
 import {
   acceptQuest,
@@ -66,28 +75,27 @@ import {
   breakAnchorOffer,
   confirmGoldenFinger,
   declineQuest,
-  fetchCharacterPool,
+  fetchBookPreparation,
   fetchDistillProgress,
   fetchLanInfo,
   fetchModels,
   fetchSessionState,
   getBootstrap,
-  getChatRoster,
   listSaves,
+  listPlayableBooks,
   loadAnySave,
   loadSession,
+  locateBookScene,
   offerQuest,
   proposeGoldenFinger,
   readNdjson,
   recommendGoldenFingers,
   saveSession,
-  sendChatMessage,
+  selectBookScene,
   testModelConnection,
   uploadNemesis,
   uploadSkill,
   uploadTxt,
-  type ChatReply,
-  type ChatRosterEntry,
   type LanInfo,
   type PoolCardEntry,
 } from './api'
@@ -99,8 +107,13 @@ import type {
   DistillProgress,
   GameOption,
   GoldenFingerProposal,
+  LocatorCandidate,
+  LocateSelectResult,
   OpeningDistill,
+  PlayableBook,
+  PreparationPackage,
   QuestEstimate,
+  WishEffectRow,
   QuestKind,
   RelayState,
   RosterEntry,
@@ -145,8 +158,189 @@ function winControl(action: 'minimize' | 'toggle' | 'close'): void {
 }
 const novelUpload = ref<UploadInfo | null>(null)
 const personaUpload = ref<UploadInfo | null>(null)
+// —— P5：原著准备与证据定位——服务端权威，前端只发起、展示与确认选择。
+const prepPackage = ref<PreparationPackage | null>(null)
+const prepCandidates = ref<LocatorCandidate[]>([])
+const prepSelectedId = ref('')
+// 已确认的开局位置与时点（select 路由完整投影；知识截止供开局初始化使用）
+const prepSelection = ref<LocateSelectResult | null>(null)
+const prepTimepoint = ref<'before' | 'during' | 'after'>('before')
+const prepBusy = ref(false)
+/** 当前进行中的准备动作（prepare/locate/select），仅用于按钮各自显示加载文案 */
+const prepStage = ref<'' | 'prepare' | 'locate' | 'select'>('')
+const prepError = ref('')
+const prepMode = computed<'window' | 'fullbook'>(() =>
+  String(form.value.mode || '').startsWith('强化') ? 'fullbook' : 'window')
+const playableBooks = ref<PlayableBook[]>([])
+const currentBookId = computed(() => novelUpload.value
+  ? String(novelUpload.value.book_id || '').trim()
+  : form.value.book_id)
+const preparationJob = ref<PreparationJob | null>(null)
+const preparationJobBook = ref('')
+const preparationJobLabel = ref('原著准备')
+// Only task identity is persisted. Credentials, model configuration and snapshots never enter this key.
+const preparationTaskStorageKey = 'novelborne.v3.preparation-task'
+watch(() => preparationJob.value?.job_id, (jobId) => {
+  if (!jobId) return
+  try { localStorage.setItem(preparationTaskStorageKey, JSON.stringify({ job_id: jobId, book_id: preparationJobBook.value })) } catch { /* Storage is optional. */ }
+})
+onMounted(async () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(preparationTaskStorageKey) || 'null') as { job_id?: unknown; book_id?: unknown } | null
+    if (!saved || typeof saved.job_id !== 'string' || typeof saved.book_id !== 'string') return
+    const job = await getPreparationJob(saved.job_id)
+    if (preparationJob.value) return
+    preparationJobBook.value = saved.book_id
+    preparationJobLabel.value = '恢复的原著准备任务'
+    preparationJob.value = job
+  } catch (cause) { prepError.value = `上次准备任务恢复失败：${cause instanceof Error ? cause.message : '无法连接服务'}` }
+})
+const jobSubmitting = ref(false)
+const startWorkflowBusy = ref(false)
+let startWorkflowCancelled = false
+let appDisposed = false
+let preparationRequest: { book: string; target: number; model: string; provider: string; baseUrl: string; mode: 'window' | 'fullbook'; key: string } | null = null
+onBeforeUnmount(() => { appDisposed = true; startWorkflowCancelled = true })
+function cancelPendingStart(): void {
+  startWorkflowCancelled = true
+}
+async function awaitFullbookPreparation(book: string, target: number, sourceHash?: string): Promise<string> {
+  const credentials = { ...modelCredentials.value }
+  const snapshot = preparationJob.value ? await getPreparationJob(preparationJob.value.job_id) : null
+  const metadata = snapshot as (PreparationJob & { book_id?: string; configuration?: { mode?: string; target_chapter?: number; model_version?: string } }) | null
+  const reusableSnapshot = metadata?.book_id === book && metadata.configuration?.mode === 'fullbook' && metadata.configuration.target_chapter === target && metadata.configuration.model_version === credentials.model && !['FAILED', 'CANCELLED', 'INTERRUPTED', 'CANCEL_REQUESTED'].includes(metadata.status)
+  const existing = preparationRequest
+  const compatible = existing && existing.book === book && existing.mode === 'fullbook' && existing.target === target && existing.model === credentials.model && existing.provider === credentials.provider && existing.baseUrl === credentials.base_url
+  if (jobActive.value && !compatible && !reusableSnapshot) throw new Error('另一个不兼容的准备任务仍在运行；请先取消或等待完成，再开局')
+  const request = compatible ? existing : { book, target, model: credentials.model, provider: credentials.provider, baseUrl: credentials.base_url, mode: 'fullbook' as const, key: requestId() }
+  // Reusing the idempotency key asks the server to revalidate the source/configuration,
+  // including for a READY standalone job, rather than trusting a cached frontend snapshot.
+  let job = reusableSnapshot && !compatible ? metadata! : await createPreparationJob(book, { ...credentials, mode: 'fullbook', target_chapter: target, idempotency_key: request.key })
+  if (!reusableSnapshot || compatible) preparationRequest = request
+  preparationJobBook.value = book
+  preparationJobLabel.value = '强化开局 · 等待完整人物准备'
+  preparationJob.value = job
+  const initialSource = job.source_hash
+  if (sourceHash && initialSource !== sourceHash) throw new Error('原著来源已变化，请重新从阅读器选择章节')
+  while (true) {
+    if (startWorkflowCancelled || appDisposed) throw new Error('已停止等待开局；准备任务仍可在任务面板取消或恢复')
+    if (job.source_hash !== initialSource) throw new Error('准备任务来源发生变化，请重新核验')
+    if (job.status === 'READY') {
+      if (job.gap_report?.card_publication !== 'complete' || job.gap_report?.readiness_scope !== 'published_rich_cards') throw new Error('任务仅有原著证据，尚未完成完整人物卡发布，不能强化开局')
+      return job.job_id
+    }
+    if (['FAILED', 'CANCELLED', 'INTERRUPTED', 'CANCEL_REQUESTED'].includes(job.status)) throw new Error(job.error?.message || `准备任务 ${job.status}，未创建游戏会话`)
+    await new Promise(resolve => setTimeout(resolve, 1400))
+    if (startWorkflowCancelled || appDisposed) continue
+    job = await getPreparationJob(job.job_id)
+    if (!preparationJob.value || job.sequence >= preparationJob.value.sequence) preparationJob.value = job
+  }
+}
+const modelCredentials = computed(() => ({ provider: form.value.provider, base_url: form.value.base_url, api_key: form.value.api_key, model: form.value.model }))
+const jobActive = computed(() => !!preparationJob.value && !['READY', 'FAILED', 'CANCELLED', 'INTERRUPTED'].includes(preparationJob.value.status))
+async function submitPreparation(mode: 'window' | 'fullbook', standalone = false): Promise<void> {
+  if (jobSubmitting.value || jobActive.value || startWorkflowBusy.value) return
+  if (!currentBookId.value) { prepError.value = '请先选择作品或上传原著；上传接口必须返回稳定 book_id'; return }
+  jobSubmitting.value = true; prepError.value = ''
+  try {
+    const book = currentBookId.value
+    const target = selectedPrepCandidate.value?.chapter_no ?? 1
+    const key = requestId()
+    const credentials = { ...modelCredentials.value }
+    const job = await createPreparationJob(book, { ...credentials, mode, target_chapter: target, idempotency_key: key })
+    preparationRequest = { book, target, model: credentials.model, provider: credentials.provider, baseUrl: credentials.base_url, mode, key }
+    preparationJobBook.value = book
+    preparationJobLabel.value = standalone ? '仅全书准备 · 不开局' : `${mode === 'fullbook' ? '全书' : '开局窗口'}准备`
+    preparationJob.value = job
+    if (job.status === 'READY' && book === currentBookId.value) await refreshPreparation()
+  } catch (cause) { prepError.value = cause instanceof Error ? cause.message : '准备任务提交失败' }
+  finally { jobSubmitting.value = false }
+}
+function onPreparationReady(): void {
+  if (preparationJobBook.value === currentBookId.value) void refreshPreparation()
+}
+const selectedPrepCandidate = computed(() =>
+  prepCandidates.value.find(item => item.id === prepSelectedId.value) || null)
+function resetPreparation(): void {
+  prepPackage.value = null
+  prepCandidates.value = []
+  prepSelectedId.value = ''
+  prepSelection.value = null
+  prepTimepoint.value = 'before'
+  prepError.value = ''
+  prepStage.value = ''
+}
+watch(() => novelUpload.value?.upload_id, resetPreparation)
+async function runPrepare(): Promise<void> {
+  await submitPreparation(prepMode.value)
+}
+async function refreshPreparation(): Promise<void> {
+  if (!currentBookId.value) return
+  try {
+    prepPackage.value = await fetchBookPreparation(
+      currentBookId.value, prepMode.value, selectedPrepCandidate.value?.chapter_no ?? 1)
+  } catch { /* 只读复验失败保持现状 */ }
+}
+async function runLocate(): Promise<void> {
+  if (!currentBookId.value || prepBusy.value) return
+  const query = String(form.value.fragment || '').trim() || String(form.value.timepoint || '').trim()
+  if (!query) {
+    prepError.value = '请先在「指定片段」或「切入时间点」填写要定位的情节描述'
+    return
+  }
+  prepBusy.value = true
+  prepStage.value = 'locate'
+  prepError.value = ''
+  try {
+    prepCandidates.value = await locateBookScene(currentBookId.value, {
+      query,
+      limit: 5,
+      semantic: prepMode.value === 'fullbook',
+      apiKey: form.value.api_key || undefined,
+      provider: form.value.provider || undefined,
+      baseUrl: form.value.base_url || undefined,
+      model: form.value.model || undefined,
+    })
+    if (!prepCandidates.value.length) prepError.value = '未找到有原文证据的候选位置'
+  } catch (cause) {
+    prepError.value = cause instanceof Error ? cause.message : '证据定位失败'
+  } finally {
+    prepBusy.value = false
+    prepStage.value = ''
+  }
+}
+async function onSelectCandidate(id: string): Promise<void> {
+  const candidate = prepCandidates.value.find(item => item.id === id)
+  if (!candidate || prepBusy.value) return
+  prepSelectedId.value = id
+  prepBusy.value = true
+  prepStage.value = 'select'
+  prepError.value = ''
+  try {
+    prepSelection.value = await selectBookScene(currentBookId.value, {
+      candidate,
+      timepoint: prepTimepoint.value,
+      projectFacts: true,
+      apiKey: form.value.api_key || undefined,
+      provider: form.value.provider || undefined,
+      baseUrl: form.value.base_url || undefined,
+      model: form.value.model || undefined,
+    })
+  } catch (cause) {
+    prepError.value = cause instanceof Error ? cause.message : '开局位置确认失败'
+  } finally {
+    prepBusy.value = false
+    prepStage.value = ''
+  }
+}
+async function onPrepTimepoint(value: string): Promise<void> {
+  prepTimepoint.value = value as 'before' | 'during' | 'after'
+  if (selectedPrepCandidate.value) await onSelectCandidate(selectedPrepCandidate.value.id)
+}
 const state = ref<Record<string, unknown>>({})
 const chat = ref<ChatMessage[]>([])
+const draftText = ref('')
+let streamCommitted = false
 const selectedOption = ref<string | null>(null)
 // —— 增补通路（relay）：激活后选项进入多选模式，勾选后合并发送 ——
 const relayActive = computed(() => Boolean((state.value as Partial<RelayState>).relay_active))
@@ -177,6 +371,8 @@ const savePointName = ref('')
 const highlightedSaveId = ref<string | null>(null)
 let highlightTimer: number | undefined
 const goldenFingerChoices = ref<string[]>([])
+// 推荐金手指的完整规格（与 choices 前若干项同源同序）：开局提交完整 spec，防标签丢字段
+const goldenFingerSpecs = ref<Array<Record<string, string>>>([])
 const customGoldenFingerLabel = ref('自定义（由系统正式化后确认）')
 const goldenFingerText = ref('')
 const goldenFingerProposal = ref<GoldenFingerProposal | null>(null)
@@ -193,15 +389,12 @@ const fetchedModels = ref<string[]>([])
 const fetchingModels = ref(false)
 
 // ========== 角色闲聊状态（v2.0.4 Agent_refill 优化） ==========
-const chatRoster = ref<ChatRosterEntry[]>([])
-const selectedCharacter = ref<string>('')
-const chatMessages = ref<Array<{ player: string; reply: string }>>([])
-const chatBusy = ref(false)
-const chatInput = ref('')
-const chatOpen = ref(false)
 const testingConnection = ref(false)
 const connectionResult = ref<{ ok: boolean; message: string } | null>(null)
 const enableNemesis = ref(false)
+// 宿敌可选身体身份姓名：非空时直接作为宿敌身份（与名册「手动填写优先」一致），
+// 留空则由穿越落定从原著自动分配。
+const nemesisIdentity = ref('')
 const fontSize = ref<'standard' | 'large'>('standard')
 const reduceMotion = ref(false)
 const dropCapEnabled = ref(true)
@@ -240,12 +433,83 @@ function tapCat(): void {
 
 // —— 羽毛笔：应用内「我的原著」章节阅读器（Web/窗口版共用）。 ——
 const readerOpen = ref(false)
-const openOriginalReader = () => { readerOpen.value = true }
+const readerInitialBookId = ref<string | undefined>()
+const dossierOpen = ref(false)
+const dossierCardId = ref<string | undefined>()
+function openOriginalReader(bookId?: string): void {
+  readerInitialBookId.value = bookId
+  readerOpen.value = true
+}
+function openDossier(cardId?: string): void {
+  dossierCardId.value = cardId
+  dossierOpen.value = true
+}
+function openCharacterDesigner(): void {
+  dossierOpen.value = false
+  currentView.value = 'designer'
+}
+function showWorkbench(panel?: MobilePanel): void {
+  currentView.value = 'main'
+  if (panel) mobilePanel.value = panel
+}
+async function showUpload(): Promise<void> {
+  showWorkbench('setup')
+  basicOpen.value = true
+  await nextTick()
+  const input = document.getElementById('workdesk-upload')
+  input?.scrollIntoView({ block: 'center' })
+  input?.focus({ preventScroll: true })
+}
+type ChapterStartIntent = { book_id: string; chapter_no: number; source_hash: string; scene_selection: StartPayload['scene_selection'] }
+const readerChatTarget = ref<{ bookId: string; chapterNo: number } | null>(null)
+const readerStartIntent = ref<ChapterStartIntent | null>(null)
+const readerIntentBusy = ref(false)
+const readerIntentError = ref('')
+async function onReaderStart(target: { bookId: string; chapterNo: number }): Promise<void> {
+  if (readerIntentBusy.value || busy.value || startWorkflowBusy.value) return
+  readerIntentBusy.value = true; readerIntentError.value = ''
+  try {
+    readerStartIntent.value = await v3Request<ChapterStartIntent>(`/api/books/${encodeURIComponent(target.bookId)}/chapter-start`, { chapter_no: target.chapterNo })
+    readerOpen.value = false
+  } catch (cause) { readerIntentError.value = cause instanceof Error ? cause.message : '章节开局定位失败' }
+  finally { readerIntentBusy.value = false }
+}
+function onReaderChat(target: { bookId: string; chapterNo: number }): void {
+  readerChatTarget.value = target
+}
+async function confirmReaderStart(): Promise<void> {
+  const intent = readerStartIntent.value
+  if (!intent || busy.value || startWorkflowBusy.value) return
+  if (!window.confirm(`从第 ${intent.chapter_no} 章开始新游戏？${sessionId.value ? '当前游戏不会被覆盖，但界面会切换到新会话；请先保存当前进度。' : '此操作将创建新会话。'}阅读位置本身不会推进游戏。`)) return
+  await startGame(intent)
+}
 // 局域网远程使用：手机扫码访问本机服务。
 const lanQrOpen = ref(false)
 const lanInfo = ref<LanInfo | null>(null)
 const lanBusy = ref(false)
 const mobileThemeOpen = ref(false)
+
+// Copilot AI 助手与 AI 配置：导航行按钮打开；面板入口分发回主界面各功能区。
+const copilotOpen = ref(false)
+const modelConfigOpen = ref(false)
+function onCopilotEntry(id: string): void {
+  switch (id) {
+    case 'workbench': showWorkbench(); break
+    case 'library': currentView.value = 'resources'; break
+    case 'dossier': openDossier(); break
+    case 'upload': void showUpload(); break
+    case 'prepare':
+    case 'config': showWorkbench('setup'); basicOpen.value = true; break
+    case 'reader':
+    case 'reader_chat': openOriginalReader(); break
+    case 'model_settings': modelConfigOpen.value = true; break
+    case 'save_manage': savesOpen.value = true; showWorkbench(); break
+    case 'quests':
+    case 'autoplay': showWorkbench('story'); break
+    case 'export': exportOpen.value = true; break
+    default: break // copilot_docs 在面板内部聚焦文档搜索框，无需跳出。
+  }
+}
 const openLanQr = async () => {
   lanQrOpen.value = true
   lanBusy.value = true
@@ -276,6 +540,7 @@ const form = ref({
   thinking_mode: 'auto',
   thinking_param: '',
   mode: '基础模式',
+  book_id: '',
   work: '',
   fragment: '',
   role: '',
@@ -293,6 +558,15 @@ const form = ref({
   heroine_count: 0,
 })
 
+const availableModes = computed(() => bootstrap.value?.modes?.length ? bootstrap.value.modes : ['基础模式', '强化模式'])
+watch([() => form.value.mode, availableModes], ([mode, modes]) => {
+  if (modes.includes(mode)) return
+  // Older controls accidentally persisted their decorated display labels as values.
+  const canonical = mode.split(' · ')[0] || ''
+  form.value.mode = modes.includes(canonical) ? canonical : modes[0]!
+}, { immediate: true })
+watch(currentBookId, resetPreparation)
+
 const companionRoster = ref<EditableRosterEntry[]>([])
 const heroineRoster = ref<EditableRosterEntry[]>([])
 
@@ -304,14 +578,15 @@ const availableModels = computed(() =>
 )
 const enhanced = computed(() => form.value.mode.startsWith('强化'))
 // 设定锁定：金手指生成后 或 设定已确认（进入金手指阶段）均锁人物/难度
-const setupLocked = computed(() => inGame.value || busy.value || gfGenerated.value || setupConfirmed.value)
+const setupLocked = computed(() => inGame.value || busy.value || startWorkflowBusy.value || gfGenerated.value || setupConfirmed.value)
 // 模型与参数不受金手指/对局状态锁定：key 只存页面内存且随每条请求重发，
 // 后端逐回合重读请求体，读档/刷新恢复会话后也必须能改（否则无处重填 key）。
-const modelLocked = computed(() => busy.value)
+const modelLocked = computed(() => busy.value || startWorkflowBusy.value)
 // 金手指生成前置校验：主角/伴侣/伙伴/宿敌/难度全部确定 + 用户已点"确定设定"。
-// 数量即事实：定了几个伙伴/伴侣，名单就读取几行；每行选了池卡或手填了姓名即视为已配置
-//（与后端一致：后端仅要求 name，空行静默丢弃）。数量选 0 的栏视为已确定。
-// 宿敌：勾了才有——勾选后才要求选卡；不勾则完全跳过，不算"不齐备"。
+// 数量即事实：定了几个伙伴/伴侣，名单就读取几行。姓名/卡/性格全部可选——
+// 空名行后端保留名额（name_pending 占位名），开局穿越落定时由模型分配原著身份。
+// 数量选 0 的栏视为已确定。
+// 宿敌：勾了才有；卡与身体身份姓名均可留空，留空同样由穿越落定分配。
 const gfPrerequisites = computed(() => {
   const problems: string[] = []
   // 四栏角色均可留空：卡和性格都只是「魂」，空位的名字开局由模型分配——
@@ -354,25 +629,33 @@ const richnessThinkingHint = computed(() => form.value.story_richness > richness
 const DEFAULT_PAPER_TIERS = [
   { tier: 1, label: '轻盈', family: 'small', target_chars: 400, segments: 1, basic_ok: true, agent_required: false, agent_recommended: false },
   { tier: 2, label: '简明', family: 'small', target_chars: 650, segments: 2, basic_ok: true, agent_required: false, agent_recommended: false },
-  { tier: 3, label: '标准', family: 'small', target_chars: 950, segments: 3, basic_ok: false, agent_required: false, agent_recommended: false },
-  { tier: 4, label: '丰厚', family: 'large', target_chars: 1350, segments: 3, basic_ok: false, agent_required: false, agent_recommended: false },
+  { tier: 3, label: '标准', family: 'small', target_chars: 950, segments: 3, basic_ok: true, agent_required: false, agent_recommended: false },
+  { tier: 4, label: '丰厚', family: 'large', target_chars: 1350, segments: 3, basic_ok: true, agent_required: false, agent_recommended: false },
   { tier: 5, label: '鸿篇', family: 'large', target_chars: 1850, segments: 4, basic_ok: false, agent_required: false, agent_recommended: true },
   { tier: 6, label: '史诗', family: 'large', target_chars: 2400, segments: 5, basic_ok: false, agent_required: true, agent_recommended: false },
 ]
 const paperTiers = computed(() => bootstrap.value?.paper_tiers ?? DEFAULT_PAPER_TIERS)
-// 普通模式只渲染 1–2 档；强化模式全 6 档（agent_required 的档位在模板层联动禁用）。
-const visiblePaperTiers = computed(() =>
-  enhanced.value ? paperTiers.value : paperTiers.value.filter((item) => item.basic_ok),
-)
+// 所有模式展示同一组档位；但后端门禁规定基础（普通）模式只放行 basic_ok 档。
+const visiblePaperTiers = computed(() => paperTiers.value)
 const selectedPaperTier = computed(() =>
   paperTiers.value.find((item) => item.tier === form.value.paper_tier) ?? paperTiers.value[2],
 )
 const paperTierThinkingHint = computed(() => selectedPaperTier.value.tier >= 4)
-// 档位门禁联动（前端第一道，server/app 双侧再拦）：普通模式钳 ≤2；
-// 强化模式关掉类 Agent 时第 6 档自动回落第 5 档。
-watch([enhanced, () => form.value.story_agent_mode], () => {
-  if (!enhanced.value && form.value.paper_tier > 2) form.value.paper_tier = 2
-  if (enhanced.value && !form.value.story_agent_mode && form.value.paper_tier >= 6) {
+// 后端默认档位是第 3 档；普通（基础）模式只放行 basic_ok 档（1–4 档，至「丰厚」）。
+// 若当前档在普通模式不可用（现为 5/6 档），不钳制会让开局被 400 拒绝。
+// 换模式、载入默认值、恢复草稿、提交开局前都会经过这里。
+function clampPaperTierForMode(): void {
+  if (enhanced.value) return
+  const current = paperTiers.value.find((item) => item.tier === form.value.paper_tier)
+  if (!current || current.basic_ok === false) {
+    const fallback = [...paperTiers.value].filter((item) => item.basic_ok !== false).pop()
+    if (fallback) form.value.paper_tier = fallback.tier
+  }
+}
+watch(() => form.value.mode, clampPaperTierForMode)
+// 仅按生成能力联动档位，不按蒸馏范围限制。
+watch(() => form.value.story_agent_mode, () => {
+  if (!form.value.story_agent_mode && form.value.paper_tier >= 6) {
     form.value.paper_tier = 5
   }
 })
@@ -414,27 +697,26 @@ const goldenFingerSelectOptions = computed(() => {
 })
 const customGoldenFinger = computed(() => form.value.golden_finger === customGoldenFingerLabel.value)
 const customGoldenFingerReady = computed(() => !customGoldenFinger.value || goldenFingerProposal.value?.status === 'confirmed')
-const worksCount = computed(() => bootstrap.value?.works.length ?? 0)
-const poolsCount = computed(() => bootstrap.value?.character_pools.length ?? 0)
 // 金手指推荐语境：优先用主角栏已选卡名。
 const personaForRecommend = computed(() => {
   const protagonistCard = poolCardById('主角栏', selectedPoolCards.value['主角栏'])
   if (protagonistCard) return `${protagonistCard.name}（${protagonistCard.work || '原创'}）`
   return '未选择'
 })
-// 作品列表分页
-const WORK_PAGE_SIZE = 50
-const workPage = ref(1)
-const filteredWorks = computed(() => {
-  const works = bootstrap.value?.works ?? []
+// 作品库 = 已玩可复用（旧预置全量列表已下线）；搜索仍按作品名过滤
+const playableCount = computed(() => playableBooks.value.length)
+const filteredPlayableBooks = computed(() => {
   const query = workQuery.value.trim().toLowerCase()
-  return query ? works.filter((work) => work.toLowerCase().includes(query)) : works
+  return query ? playableBooks.value.filter((book) => book.title.toLowerCase().includes(query)) : playableBooks.value
 })
-const pagedWorks = computed(() => filteredWorks.value.slice(0, workPage.value * WORK_PAGE_SIZE))
-const hasMoreWorks = computed(() => pagedWorks.value.length < filteredWorks.value.length)
-function loadMoreWorks() { workPage.value++ }
-watch(workQuery, () => { workPage.value = 1 })
-const workValid = computed(() => Boolean(form.value.work) && (bootstrap.value?.works ?? []).includes(form.value.work))
+const workValid = computed(() => {
+  // v3.0.0 预置作品已下线、已玩库首局前必为空：上传 TXT 或已选书目同样是有效作品来源。
+  // 开局请求携带 book_id（后端以此定位原著），form.work 不再是唯一信号，否则首局永远无法开局。
+  if (currentBookId.value) return true
+  const work = form.value.work
+  return Boolean(work) && ((bootstrap.value?.works ?? []).includes(work)
+    || playableBooks.value.some((book) => book.title === work))
+})
 const round = computed(() => numeric(state.value.round, 0))
 const chapter = computed(() => numeric(state.value.current_chapter, 1))
 const chapterRound = computed(() => numeric(state.value.chapter_round, 0))
@@ -443,7 +725,6 @@ const compatibility = computed(() => state.value.last_compatibility_k ?? '未计
 const activeMembers = computed(() => arrayOfRecords(state.value.active_members))
 const ripple = computed(() => recordOf(state.value.last_ripple))
 const openingStep = computed<'gf' | 'opening' | null>(() => {
-  if (!enhanced.value) return null
   const s = state.value
   if (s.game_ready !== true) return null
   const nested = (s.opening_state ?? {}) as Record<string, unknown>
@@ -691,14 +972,15 @@ function anchorNodeOf(value: unknown): AnchorNode | null {
   }
 }
 const startDisabled = computed(() => {
+  if (startWorkflowBusy.value || jobSubmitting.value) return true
   if (busy.value || !customGoldenFingerReady.value) return true
   // 新流程：必须确认设定并选定金手指（或生成推荐）后才能开局
   if (!setupConfirmed.value) return true
   if (!form.value.golden_finger) return true
-  if (enhanced.value) return !novelUpload.value
   return !workValid.value
 })
 const inGame = computed(() => Boolean(sessionId.value && state.value.game_ready === true))
+const { chatRoster, selectedCharacter, chatMessages, chatBusy, chatInput, chatOpen, sendChat, onCharacterChange } = useSceneChat(sessionId, inGame, state, busy, error)
 const saveStage = computed(() => String(state.value.save_stage ?? ''))
 const saveConsistencyError = computed(() => Boolean(
   inGame.value
@@ -737,6 +1019,7 @@ async function restoreSession(id: string, source: 'link' | 'storage' | 'sync' = 
   try {
     const data = await fetchSessionState(id)
     const restored = (data?.state ?? {}) as Record<string, unknown>
+    if (source === 'sync' && (sessionId.value !== id || busy.value || Number(restored.revision ?? -1) < Number(state.value.revision ?? -1))) return false
     const history = Array.isArray(restored.history) ? restored.history as ChatMessage[] : []
     const usable = restored.game_ready === true
       && (restored.save_stage === 'opening'
@@ -794,19 +1077,19 @@ async function refreshOpeningProgress(): Promise<void> {
     const data = await fetchSessionState(sessionId.value)
     const restored = (data?.state ?? {}) as Record<string, unknown>
     if (restored.opening_distill) {
-      state.value = { ...state.value, opening_distill: restored.opening_distill }
+      openingProgress.value = recordOf(restored.opening_distill)
     }
   } catch {
     /* 进度拉取失败静默：下一次轮询重试 */
   }
 }
 
-// —— 锚点蒸馏进度：右侧小窗口数据源（强化模式开局前后持续轮询） ——
+// 蒸馏进度独立于正式剧情状态，所有模式使用相同轮询。
 const distillProgress = ref<DistillProgress | null>(null)
-const sessionEnhanced = computed(() =>
-  String(state.value.mode ?? '').startsWith('强化') || enhanced.value)
+const sessionDistillEnabled = computed(() => state.value.distill_enabled !== false)
 // —— 开局蒸馏进度（前置声明：轮询逻辑依赖）——
-const openingDistill = computed(() => recordOf(state.value.opening_distill) as OpeningDistill)
+const openingProgress = ref<Record<string, unknown> | null>(null)
+const openingDistill = computed(() => recordOf(openingProgress.value ?? state.value.opening_distill) as OpeningDistill)
 const openingRunning = computed(() =>
   Boolean(openingDistill.value.status) && openingDistill.value.status !== 'done')
 let distillTimer: ReturnType<typeof setInterval> | null = null
@@ -853,8 +1136,8 @@ async function refreshDistillProgress(): Promise<void> {
 }
 
 function syncDistillPolling(): void {
-  // 强化模式轮询锚点蒸馏；开局蒸馏进行中（任何模式）也轮询以显示进度
-  const shouldPoll = Boolean(sessionId.value) && (sessionEnhanced.value || openingRunning.value)
+  // 仅按是否启用蒸馏/存在准备任务决定轮询，不按模式限制。
+  const shouldPoll = Boolean(sessionId.value) && (sessionDistillEnabled.value || openingRunning.value)
   if (shouldPoll && !distillTimer) {
     void refreshDistillProgress()
     distillTimer = setInterval(refreshDistillProgress, 5000)
@@ -865,7 +1148,7 @@ function syncDistillPolling(): void {
   }
 }
 
-watch([sessionId, sessionEnhanced, openingRunning], syncDistillPolling, { immediate: true })
+watch([sessionId, sessionDistillEnabled, openingRunning], syncDistillPolling, { immediate: true })
 onBeforeUnmount(() => {
   window.removeEventListener('focus', syncSessionFromServer)
   document.removeEventListener('visibilitychange', onVisibilityChange)
@@ -1028,6 +1311,7 @@ function customTag(modelId: string): string {
   return customIds.includes(modelId) ? '〔自定义〕' : ''
 }
 
+const appliedCharacterDefaults = new WeakMap<EditableRosterEntry, { name: string; background: string }>()
 function applyCharacter(entry: EditableRosterEntry): void {
   const model = bootstrap.value?.character_pools.find((item) => item.id === entry.model_id)
   if (!model) {
@@ -1035,8 +1319,11 @@ function applyCharacter(entry: EditableRosterEntry): void {
     entry.character_model_source = ''
     return
   }
-  entry.name = model.name
-  entry.background = model.background
+  const previous = appliedCharacterDefaults.get(entry)
+  // Explicit body identity and manually edited background survive persona changes.
+  if (!entry.name || entry.name === previous?.name) entry.name = model.name
+  if (!entry.background || entry.background === previous?.background) entry.background = model.background
+  appliedCharacterDefaults.set(entry, { name: model.name, background: model.background })
   entry.character_model = model.name
   entry.character_model_source = model.source
   entry.gender = model.gender
@@ -1072,30 +1359,22 @@ function onProviderChanged(): void {
 }
 
 function onModeChanged(): void {
-  if (enhanced.value) {
-    form.value.work = ''
-    form.value.timepoint = '故事开篇'
-    // 强化模式的开工确认与回合门禁依赖锚点蒸馏，强制开启（后端同款兜底）。
-    form.value.distill_enabled = true
-  } else if (!workValid.value) {
-    form.value.work = bootstrap.value?.works[0] ?? ''
-    enableNemesis.value = false
-  }
-  // 切换模式使设定失效：回退到"待确认"，用户需重新点"确定设定"
+  // Modes change preparation coverage only; keep all gameplay selections.
   setupConfirmed.value = false
   gfGenerated.value = false
 }
 
-function selectWork(work: string): void {
-  form.value.work = work
+function selectWork(book: PlayableBook): void {
+  form.value.work = book.title
+  form.value.book_id = book.book_id
+  novelUpload.value = null
   workPickerOpen.value = false
   workQuery.value = ''
-  workPage.value = 1
 }
 
 function goldenFingerContext(): { world: string; persona: string; difficulty: string; nemesis_d: number } {
   return {
-    world: enhanced.value ? String(novelUpload.value?.filename || '') : form.value.work,
+    world: String(novelUpload.value?.filename || form.value.work),
     persona: personaForRecommend.value,
     difficulty: form.value.difficulty,
     // 宿敌强度 D（GF(D)=D^1.15 缩放的输入）：未启用宿敌系统时按玩家难度反推
@@ -1132,6 +1411,7 @@ async function refreshGoldenFingers(): Promise<void> {
     const context = goldenFingerContext()
     const result = await recommendGoldenFingers(context.world, context.persona, context.difficulty, context.nemesis_d)
     goldenFingerChoices.value = result.choices
+    goldenFingerSpecs.value = Array.isArray(result.specs) ? result.specs : []
     customGoldenFingerLabel.value = result.custom_label
     form.value.golden_finger = result.choices[0] ?? result.none_label
     goldenFingerProposal.value = null
@@ -1190,194 +1470,11 @@ async function confirmCustomGoldenFinger(): Promise<void> {
 
 // ---------------------------------------------------------------------------
 // 角色池候选数据，嵌入开局各人物栏
-// 主角性别决定伴侣栏过滤方向；跨栏同名即时提示；开局携带 roster_card_ids。
+// 各栏独立搜索人格卡；身体身份与人格选择分离；开局携带 roster_card_ids。
 // ---------------------------------------------------------------------------
 
-interface PoolSlotState {
-  /** 两级分组：第一级来源（主角/男主/女主/配角/反派），第二级栏位分类 */
-  groups: Array<{ key: string; sub_groups: Array<{ key: string; cards: PoolCardEntry[] }> }>
-  loading: boolean
-  error: string
-  query: string
-  /** 第一级选中的来源；空 = 全部来源 */
-  category: string
-  /** 第二级选中的具体分类；空 = 该来源下全部分类 */
-  subtype: string
-  /** 简介卡当前展示的卡 id（悬停优先，其次已选） */
-  previewId: string
-}
-
-function emptyPoolSlotState(): PoolSlotState {
-  return { groups: [], loading: false, error: '', query: '', category: '', subtype: '', previewId: '' }
-}
-
-const selectedPoolCards = ref<Record<PoolSlotKey, string>>({
-  '主角栏': '',
-  '伴侣栏': '',
-  '伙伴栏': '',
-  '宿敌栏': '',
-})
-const poolSlots = ref<Record<PoolSlotKey, PoolSlotState>>({
-  '主角栏': emptyPoolSlotState(),
-  '伴侣栏': emptyPoolSlotState(),
-  '伙伴栏': emptyPoolSlotState(),
-  '宿敌栏': emptyPoolSlotState(),
-})
-
-const POOL_SLOT_META: Array<{ slot: PoolSlotKey; label: string; note: string }> = [
-  { slot: '主角栏', label: '主角栏', note: '先选来源，再选类型；全池可选' },
-  { slot: '伴侣栏', label: '伴侣栏', note: '先选来源，再选类型；已剔除与主角同性别' },
-  { slot: '伙伴栏', label: '伙伴栏', note: '先选来源，再选类型；全池可选' },
-  { slot: '宿敌栏', label: '宿敌栏', note: '先选来源，再选类型；全池可选' },
-]
-
-async function loadPoolSlot(slot: PoolSlotKey): Promise<void> {
-  const state = poolSlots.value[slot]
-  state.loading = true
-  state.error = ''
-  try {
-    // 性别栏杆已破除：四栏均不按性别过滤，卡和性格都只是「魂」，
-    // 叙事以附身角色（书中身体）的生理性别为准。
-    const result = await fetchCharacterPool(slot)
-    state.groups = result.keys
-  } catch (cause) {
-    state.error = cause instanceof Error ? cause.message : '角色池加载失败'
-  } finally {
-    state.loading = false
-  }
-}
-
-function loadAllPoolSlots(): void {
-  POOL_SLOT_KEYS.forEach((slot) => {
-    void loadPoolSlot(slot)
-  })
-}
-
-// 角色池在开局配置加载时预取，候选控件直接嵌入对应配置栏。
-onMounted(() => {
-  loadAllPoolSlots()
-})
-
-function togglePoolCard(slot: PoolSlotKey, cardId: string): void {
-  selectedPoolCards.value[slot] = selectedPoolCards.value[slot] === cardId ? '' : cardId
-  poolSlots.value[slot].previewId = selectedPoolCards.value[slot]
-}
-
-function poolCardById(slot: PoolSlotKey, cardId: string): PoolCardEntry | null {
-  if (!cardId) return null
-  for (const group of poolSlots.value[slot].groups) {
-    for (const sub of group.sub_groups) {
-      const card = sub.cards.find((item) => item.id === cardId)
-      if (card) return card
-    }
-  }
-  return null
-}
-
-const POOL_SLOT_KEYS: PoolSlotKey[] = ['主角栏', '伴侣栏', '伙伴栏', '宿敌栏']
-
-const selectedPoolCardNames = computed(() => {
-  const entries: Array<{ slot: PoolSlotKey; name: string }> = []
-  POOL_SLOT_KEYS.forEach((slot) => {
-    const card = poolCardById(slot, selectedPoolCards.value[slot])
-    if (card) entries.push({ slot, name: card.name })
-  })
-  return entries
-})
-
-// 重名即时提示：同一角色卡（同 id）在多个栏位被选，或同名卡出现在不同栏。
-const duplicateNameWarnings = computed(() => {
-  const byName = new Map<string, string[]>()
-  selectedPoolCardNames.value.forEach(({ slot, name }) => {
-    byName.set(name, [...(byName.get(name) ?? []), slot])
-  })
-  const warnings: string[] = []
-  byName.forEach((slots, name) => {
-    if (slots.length > 1) {
-      warnings.push(`「${name}」被 ${slots.join('、')} 同时选中，开局将依世界观自动改名`)
-    }
-  })
-  return warnings
-})
-
-// 两级筛选：category = 来源（主角/男主/女主/配角/反派），subtype = 栏位分类。
-// category 为空显示全部来源；subtype 为空显示该来源下全部分类。
-
-// v2.0.3 跨书防线：默认只显示当前作品的角色卡（书名取自作品库上传文件或
-// 基础模式书名输入），避免其他作品的人物/设定乱入。匹配容忍《》与扩展名
-// 差异；无出处卡（原创/通用）不受限。用户可主动关闭过滤做跨书选择。
-const poolWorkFilterEnabled = ref(true)
-const currentWorkTitle = computed(() => {
-  const raw = enhanced.value
-    ? String(novelUpload.value?.filename || '')
-    : String(form.value.work || '')
-  return raw.replace(/\.txt$/i, '').replace(/[《》\s]/g, '').trim()
-})
-function poolWorkMatches(card: PoolCardEntry): boolean {
-  if (!poolWorkFilterEnabled.value || !currentWorkTitle.value) return true
-  const cardWork = String(card.work || '').replace(/[《》\s]/g, '')
-  if (!cardWork) return true
-  return cardWork === currentWorkTitle.value
-    || cardWork.includes(currentWorkTitle.value)
-    || currentWorkTitle.value.includes(cardWork)
-}
-
-function filteredPoolGroups(slot: PoolSlotKey): Array<{ key: string; sub_groups: Array<{ key: string; cards: PoolCardEntry[] }> }> {
-  const state = poolSlots.value[slot]
-  const query = state.query.trim().toLowerCase()
-  const match = (card: PoolCardEntry) =>
-    (!query || card.name.toLowerCase().includes(query)) && poolWorkMatches(card)
-  return state.groups
-    .filter((group) => !state.category || group.key === state.category)
-    .map((group) => ({
-      key: group.key,
-      sub_groups: group.sub_groups
-        .filter((sub) => !state.subtype || sub.key === state.subtype)
-        .map((sub) => ({ key: sub.key, cards: sub.cards.filter(match) }))
-        .filter((sub) => sub.cards.length),
-    }))
-    .filter((group) => group.sub_groups.length)
-}
-
-// 第一级来源选项（固定顺序来自后端分组）。
-function poolCategoryOptions(slot: PoolSlotKey): string[] {
-  return poolSlots.value[slot].groups.map((group) => group.key).filter(Boolean)
-}
-
-// 第二级分类选项：当前来源（未选来源则全部来源）下的分类并集。
-function poolSubtypeOptions(slot: PoolSlotKey): string[] {
-  const state = poolSlots.value[slot]
-  const seen = new Set<string>()
-  state.groups
-    .filter((group) => !state.category || group.key === state.category)
-    .forEach((group) => group.sub_groups.forEach((sub) => seen.add(sub.key)))
-  return [...seen].sort()
-}
-
-// 来源或分类切换后，第二级分类需要联动重置，避免残留无效选项。
-function onPoolCategoryChanged(slot: PoolSlotKey): void {
-  poolSlots.value[slot].subtype = ''
-}
-
-function onPoolQueryInput(slot: PoolSlotKey, event: Event): void {
-  poolSlots.value[slot].query = (event.target as HTMLInputElement).value
-  // 主栏搜索联动其余三栏，保持四栏一致体验。
-  const keyword = poolSlots.value[slot].query
-  POOL_SLOT_KEYS
-    .filter((other) => other !== slot)
-    .forEach((other) => { poolSlots.value[other].query = keyword })
-}
-
-// 简介卡：悬停中的卡优先，其次当前已选卡。
-function poolPreviewCard(slot: PoolSlotKey): PoolCardEntry | null {
-  const state = poolSlots.value[slot]
-  return poolCardById(slot, state.previewId || selectedPoolCards.value[slot])
-}
-
-// 简介卡正文：优先一句话简介 → 背景 → 欲望，保证任何卡都有可读内容。
-function poolPreviewText(card: PoolCardEntry): string {
-  return card.background || card.desire || card.archetype || '暂无简介'
-}
+const currentWorkTitle = computed(() => String(novelUpload.value?.filename || form.value.work || '').replace(/\.txt$/i, '').replace(/[《》\s]/g, '').trim())
+const { loadAllPoolSlots, togglePoolCard, selectedPoolCards, poolSlots, poolCardById, duplicateNameWarnings, poolWorkFilterEnabled, filteredPoolGroups, poolCategoryOptions, poolSubtypeOptions, onPoolCategoryChanged, onPoolQueryInput, poolPreviewCard, poolPreviewText } = useCharacterPools(currentWorkTitle)
 
 const totalPoolCards = computed(() => bootstrap.value?.counts?.character_pools ?? bootstrap.value?.character_pools.length ?? 0)
 
@@ -1430,7 +1527,7 @@ async function handleUpload(event: Event): Promise<void> {
     const result = await uploadTxt(file, sessionId.value)
     sessionId.value = result.session_id
     novelUpload.value = result.upload
-    status.value = enhanced.value ? 'TXT 已上传，开局时将执行切章校验' : 'TXT 已上传，开局时将优先使用该文本'
+    status.value = 'TXT 已上传，准备时将校验原著覆盖'
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : '上传失败'
     status.value = '上传失败'
@@ -1495,21 +1592,25 @@ async function runConnectionTest(): Promise<void> {
   }
 }
 
+let startingReaderSession = false
 function handleEvent(event: StreamEvent): void {
   if (event.type === 'error') {
     error.value = event.data.message || '生成失败'
     return
   }
-  if (event.data.session_id) sessionId.value = event.data.session_id
+  const readerCommit = startingReaderSession && event.type === 'state' && ['opening', 'committed'].includes(String(event.data.state?.save_stage))
+  if (event.data.session_id && (!startingReaderSession || readerCommit)) sessionId.value = event.data.session_id
   if (event.type === 'state') {
-    if (event.data.status) generationSnapshot.update({ phase: String(event.data.status), status: 'waiting', round: Number(event.data.state?.round || 0), chapter: Number(event.data.state?.current_chapter || 1) })
-    if (Array.isArray(event.data.chat)) {
-      chat.value = event.data.chat
-      const latest = event.data.chat[event.data.chat.length - 1]
-      if (latest?.role === 'assistant') generationSnapshot.update({ text: String(latest.content || '') })
-    }
-    if (event.data.state) state.value = event.data.state
-    if (event.data.status) status.value = event.data.status
+    // A new session has its own revision sequence; do not compare it to the active game's revision.
+    const projection = projectStreamEvent({ committed: readerCommit ? {} : state.value, chat: readerCommit ? [] : chat.value, draft: draftText.value, phase: status.value, committedSeen: streamCommitted }, event)
+    if (readerCommit) startingReaderSession = false
+    state.value = projection.committed
+    if (projection.committedSeen) openingProgress.value = null
+    chat.value = projection.chat
+    draftText.value = projection.draft
+    status.value = projection.phase
+    streamCommitted = projection.committedSeen
+    generationSnapshot.update({ phase: projection.phase, text: projection.draft, status: 'waiting' })
     void scrollToBottom()
   }
 }
@@ -1519,6 +1620,8 @@ async function runStream(url: string, body: unknown): Promise<void> {
   abortController = new AbortController()
   busy.value = true
   error.value = ''
+  streamCommitted = false
+  draftText.value = ''
   generationSnapshot.begin('正在整理剧情脉络')
   try {
     await readNdjson(url, body, abortController.signal, handleEvent)
@@ -1527,6 +1630,7 @@ async function runStream(url: string, body: unknown): Promise<void> {
       error.value = cause instanceof Error ? cause.message : '请求失败'
     }
   } finally {
+    if (!streamCommitted && !error.value) error.value = '生成未提交；正式状态保持不变，请恢复服务器状态后重试'
     if (!error.value) generationSnapshot.complete()
     else generationSnapshot.update({ status: 'error', phase: '生成遇到问题，可重试' })
     busy.value = false
@@ -1536,9 +1640,20 @@ async function runStream(url: string, body: unknown): Promise<void> {
   }
 }
 
-async function startGame(): Promise<void> {
-  const payload: StartPayload = {
-    session_id: sessionId.value,
+async function startGame(intent?: ChapterStartIntent): Promise<void> {
+  if (startWorkflowBusy.value || busy.value || jobSubmitting.value) return
+  clampPaperTierForMode()
+  startWorkflowBusy.value = true
+  startWorkflowCancelled = false
+  try {
+  // 开局作品来源三选一（服务端互斥校验，组合即 422）：book_id 优先——上传 TXT 切章后
+  // 与书库书目都带稳定 book_id；仅无 book_id 的上传（如 .md）回退 novel_upload_id；
+  // 两者皆无才用预置作品名 work。
+  const startBookId = intent?.book_id || currentBookId.value || null
+  const startUploadId = startBookId ? null : novelUpload.value?.upload_id ?? null
+  const payload: StartPayload & { book_id: string | null; preparation_job_id?: string } = {
+    book_id: startBookId,
+    session_id: intent ? null : sessionId.value,
     provider: form.value.provider,
     base_url: form.value.base_url,
     api_key: form.value.api_key,
@@ -1546,8 +1661,8 @@ async function startGame(): Promise<void> {
     thinking_mode: form.value.thinking_mode,
     thinking_param: form.value.thinking_param,
     mode: form.value.mode,
-    work: enhanced.value ? null : form.value.work,
-    novel_upload_id: novelUpload.value?.upload_id ?? null,
+    work: (startBookId || startUploadId) ? null : (form.value.work || null),
+    novel_upload_id: startUploadId,
     fragment: form.value.fragment,
     role: form.value.role,
     timepoint: form.value.timepoint,
@@ -1555,9 +1670,16 @@ async function startGame(): Promise<void> {
     convergence: form.value.convergence,
     story_richness: form.value.story_richness,
     paper_tier: form.value.paper_tier,
-    story_agent_mode: enhanced.value && form.value.story_agent_mode,
+    story_agent_mode: form.value.story_agent_mode,
     golden_finger: form.value.golden_finger || null,
     golden_finger_proposal: goldenFingerProposal.value ?? {},
+    // 推荐项携带完整规格（choices 与 specs 同源同序）：开局注入不丢 cost/cooldown
+    golden_finger_spec: (() => {
+      const index = goldenFingerChoices.value.indexOf(form.value.golden_finger)
+      return index >= 0 && index < goldenFingerSpecs.value.length
+        ? goldenFingerSpecs.value[index]
+        : null
+    })(),
     persona_preset: selectedPersonaPreset.value || poolCardById('主角栏', selectedPoolCards.value['主角栏'])?.name || '',
     persona_custom: '',
     persona_upload_id: null,
@@ -1572,22 +1694,60 @@ async function startGame(): Promise<void> {
     nemesis_select: selectedPoolCards.value['宿敌栏'].startsWith(PRESET_PREFIX)
       ? selectedPoolCards.value['宿敌栏'].slice(PRESET_PREFIX.length)
       : poolCardById('宿敌栏', selectedPoolCards.value['宿敌栏'])?.name ?? '',
+    nemesis_identity: nemesisIdentity.value.trim(),
     nemesis_upload_id: null,
     roster_card_ids: rosterCardIdsPayload(),
+    preparation_mode: prepMode.value,
+    target_chapter: intent?.chapter_no ?? selectedPrepCandidate.value?.chapter_no ?? 1,
+    // T09：定位确认结果接入开局——携带时点/知识截止/截点前事实；
+    // 不含 candidate 与 initial_state 等大体积投影（服务端按截止坐标复核）。
+    scene_selection: (() => {
+      if (intent) return intent.scene_selection
+      const sel = prepSelection.value
+      if (!sel) return null
+      return {
+        id: sel.id,
+        timepoint: sel.timepoint,
+        evidence: sel.evidence,
+        knowledge_cutoff: sel.knowledge_cutoff,
+        initial_facts: sel.initial_facts,
+        initialization_policy: sel.initialization_policy,
+      }
+    })(),
+  }
+  if (payload.preparation_mode === 'fullbook') {
+    if (!payload.book_id) throw new Error('强化开局需要稳定的作品 ID，请先选择或重新上传原著')
+    const selectionAtStart = currentBookId.value
+    const sessionAtStart = sessionId.value
+    error.value = ''
+    status.value = '正在准备完整人物；就绪前不会创建游戏会话'
+    mobilePanel.value = 'setup'
+    basicOpen.value = true
+    payload.preparation_job_id = await awaitFullbookPreparation(payload.book_id, payload.target_chapter ?? 1, intent?.source_hash)
+    if (selectionAtStart !== currentBookId.value || sessionAtStart !== sessionId.value || (intent && readerStartIntent.value !== intent)) throw new Error('作品、阅读意图或当前游戏已改变，已停止开局；请重新确认')
+    if (startWorkflowCancelled || appDisposed) throw new Error('已停止开局')
   }
   mobilePanel.value = 'story'
   askThread.value = []
   askError.value = ''
   askInput.value = ''
-  status.value = enhanced.value ? '正在校验原著并提取剧情' : '正在生成开场'
-  await runStream('/api/sessions/start', payload)
+  status.value = '正在校验原著并准备开局'
+  const previousSession = sessionId.value
+  startingReaderSession = !!intent
+  try { await runStream('/api/sessions/start', payload) }
+  finally { startingReaderSession = false }
+  if (intent && sessionId.value !== previousSession) readerStartIntent.value = null
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '开局准备失败，未创建会话'
+    status.value = '开局已停止，可检查准备任务后重试'
+  } finally { startWorkflowBusy.value = false }
 }
 
 /** 开启新游戏：把界面完整退回"刚打开应用"的状态。
  *  会话、正文、选项、提问、聊天、金手指与设定确认全部清零；
  *  停止蒸馏轮询；移动端切回配置面板。存档列表与模型配置保留（用户输入的连接信息不应丢）。 */
 function startNewGame(): void {
-  if (busy.value) return
+  if (busy.value || startWorkflowBusy.value) return
 
   // 会话与轮询
   if (distillTimer) {
@@ -1598,6 +1758,8 @@ function startNewGame(): void {
   distillProgress.value = null
   sessionId.value = null
   state.value = {}
+  draftText.value = ''
+  openingProgress.value = null
 
   // 正文 / 选项 / 增补通路
   chat.value = []
@@ -1630,6 +1792,7 @@ function startNewGame(): void {
 
   // 金手指与设定确认：回到"尚未确认设定、尚未选定金手指"的开局前状态
   goldenFingerChoices.value = []
+  goldenFingerSpecs.value = []
   goldenFingerText.value = ''
   goldenFingerProposal.value = null
   gfGenerated.value = false
@@ -1954,73 +2117,20 @@ async function scrollToBottom(): Promise<void> {
 
 // ========== 角色闲聊功能（v2.0.4 Agent_refill 优化） ==========
 
-/** 根据 active_members 刷新可聊天角色列表 */
-async function refreshChatRoster(): Promise<void> {
-  if (!sessionId.value || !inGame.value) {
-    chatRoster.value = []
-    selectedCharacter.value = ''
-    return
-  }
-  try {
-    const roster = await getChatRoster(sessionId.value)
-    chatRoster.value = roster
-    // 当前选中角色若已离场，清空选择
-    if (selectedCharacter.value && !roster.some(r => r.name === selectedCharacter.value)) {
-      selectedCharacter.value = ''
-      chatMessages.value = []
-    }
-  } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '角色列表加载失败'
-  }
-}
-
-/** 发送聊天消息 */
-async function sendChat(): Promise<void> {
-  const message = chatInput.value.trim()
-  if (!message || !selectedCharacter.value || chatBusy.value || !sessionId.value) return
-  
-  chatBusy.value = true
-  error.value = ''
-  try {
-    const result: ChatReply = await sendChatMessage(sessionId.value, selectedCharacter.value, message)
-    chatMessages.value.push({ player: message, reply: result.reply })
-    chatInput.value = ''
-  } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '角色回复失败'
-  } finally {
-    chatBusy.value = false
-  }
-}
-
-/** 切换角色时重置聊天记录 */
-function onCharacterChange(): void {
-  chatMessages.value = []
-  chatInput.value = ''
-}
-
-// 监听 active_members 变化，刷新聊天角色列表
-watch(() => (state.value as Record<string, unknown>).active_members, () => {
-  void refreshChatRoster()
-}, { deep: true })
-
-// 游戏开始时刷新角色列表
-watch(inGame, (nowInGame) => {
-  if (nowInGame) {
-    void refreshChatRoster()
-  } else {
-    chatRoster.value = []
-    selectedCharacter.value = ''
-    chatMessages.value = []
-    chatOpen.value = false
-  }
-})
-
 onMounted(async () => {
   activeTheme.value = currentTheme()
   applyTheme(activeTheme.value)
   reduceMotion.value = typeof window !== 'undefined'
     && typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  listPlayableBooks().then(books => {
+    playableBooks.value = books
+    // 作品库默认选中第一部已玩作品；无已玩作品时保持空（提示上传 TXT）
+    if (!form.value.work && books.length) {
+      form.value.work = books[0].title
+      form.value.book_id = books[0].book_id
+    }
+  }).catch(() => { /* 库不可用时留空 */ })
   try {
     bootstrap.value = await getBootstrap()
     const provider = bootstrap.value.providers[0]
@@ -2029,16 +2139,15 @@ onMounted(async () => {
       form.value.base_url = provider.base_url
       form.value.model = provider.models[0] ?? ''
     }
-    form.value.work = bootstrap.value.works[0] ?? ''
     form.value.difficulty = bootstrap.value.difficulties[0] ?? form.value.difficulty
     form.value.story_richness = richnessConfig.value.default
-    // 剧情丰度：强化模式取后端默认档（缺省 3），普通模式固定钳到第 2 档。
-    form.value.paper_tier = form.value.mode.startsWith('强化')
-      ? (bootstrap.value.paper_tier_default ?? 3)
-      : 2
+    // 所有模式使用同一个后端剧情丰度默认档；基础模式无该档权限时就近钳到可用档。
+    form.value.paper_tier = bootstrap.value.paper_tier_default ?? 3
+    clampPaperTierForMode()
     // 初始化只填兜底金手指列表（供下拉显示）；真正的生成必须等用户
     // 点"确定设定"后手动触发，绝不在选完主角时自动生成。
     goldenFingerChoices.value = [...bootstrap.value.golden_fingers]
+    goldenFingerSpecs.value = []
     form.value.golden_finger = ''
     status.value = '目录加载完成'
   } catch (cause) {
@@ -2070,6 +2179,7 @@ const uiPersistence = useUiStatePersistence({
     goldenFingerText: goldenFingerText.value,
     goldenFingerProposal: goldenFingerProposal.value,
     goldenFingerChoices: goldenFingerChoices.value,
+    goldenFingerSpecs: goldenFingerSpecs.value,
     gfOpen: gfOpen.value,
     currentView: currentView.value,
     generationSnapshot: generationSnapshot.snapshot.value || { busy: busy.value, status: status.value, error: error.value, sessionId: sessionId.value, round: Number(state.value.round || 0), chapter: Number(state.value.current_chapter || 1), savedAt: Date.now() },
@@ -2102,8 +2212,11 @@ const uiPersistence = useUiStatePersistence({
     workQuery: workQuery.value,
   }),
   restoreState: (restored) => {
-    // 基础配置面板状态
-    if (restored.form) Object.assign(form.value, restored.form)
+    // 基础配置面板状态（恢复的档位可能超出当前模式可用范围，就地钳制）
+    if (restored.form) {
+      Object.assign(form.value, restored.form)
+      clampPaperTierForMode()
+    }
     if (restored.novelUpload) novelUpload.value = restored.novelUpload
     if (restored.personaUpload) personaUpload.value = restored.personaUpload
     if (restored.selectedPoolCards) selectedPoolCards.value = restored.selectedPoolCards
@@ -2114,6 +2227,7 @@ const uiPersistence = useUiStatePersistence({
     if (restored.goldenFingerText) goldenFingerText.value = restored.goldenFingerText
     if (restored.goldenFingerProposal) goldenFingerProposal.value = restored.goldenFingerProposal
     if (Array.isArray(restored.goldenFingerChoices)) goldenFingerChoices.value = restored.goldenFingerChoices
+    if (Array.isArray(restored.goldenFingerSpecs)) goldenFingerSpecs.value = restored.goldenFingerSpecs
     if (typeof restored.gfOpen === 'boolean') gfOpen.value = restored.gfOpen
     if (restored.currentView === 'main' || restored.currentView === 'designer' || restored.currentView === 'resources') currentView.value = restored.currentView
     if (restored.generationSnapshot && restored.generationSnapshot.busy) status.value = '正在恢复上次生成进度，不会重复提交本回合'
@@ -2262,10 +2376,10 @@ watch([compressionRecord, round], () => {
       <div class="ml-auto flex items-center gap-2">
         <ThemePicker class="hidden sm:flex" :themes="THEME_META" :model-value="activeTheme" @update:model-value="selectTheme" />
         <div class="flex items-center gap-1.5 lg:hidden">
-        <button class="icon-button" title="配置" @click="mobilePanel = 'setup'">
+        <button class="icon-button" title="配置" @click="showWorkbench('setup')">
           <PanelLeft :size="16" />
         </button>
-        <button class="icon-button" title="状态" @click="mobilePanel = 'state'">
+        <button class="icon-button" title="状态" @click="showWorkbench('state')">
           <PanelRight :size="16" />
         </button>
         </div>
@@ -2276,19 +2390,29 @@ watch([compressionRecord, round], () => {
     </header>
 
     <Transition name="pop">
-      <div v-if="error" class="absolute inset-x-3 top-[62px] z-30 mx-auto flex max-w-2xl items-start gap-2 rounded-md border border-[color-mix(in_srgb,_var(--fe-danger)_28%,_var(--fe-panel))] bg-[color-mix(in_srgb,_var(--fe-danger)_6%,_var(--fe-panel))] px-3 py-2 text-xs text-(--fe-danger) shadow-sm">
+      <div v-if="error" role="alert" class="absolute inset-x-3 top-[62px] z-30 mx-auto flex max-w-2xl items-start gap-2 rounded-md border border-[color-mix(in_srgb,_var(--fe-danger)_28%,_var(--fe-panel))] bg-[color-mix(in_srgb,_var(--fe-danger)_6%,_var(--fe-panel))] px-3 py-2 text-xs text-(--fe-danger) shadow-sm">
         <CircleAlert class="mt-0.5 shrink-0" :size="15" />
         <span class="min-w-0 flex-1 break-words">{{ error }}</span>
         <button title="关闭" @click="error = ''"><X :size="15" /></button>
       </div>
     </Transition>
 
-    <main class="app-main grid min-h-0 grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)_300px] xl:grid-cols-[300px_minmax(420px,1fr)_320px]">
+    <nav class="workdesk-nav" aria-label="主要导航">
+      <button type="button" :aria-current="currentView !== 'resources' ? 'page' : undefined" @click="showWorkbench()"><PanelLeft :size="17" /> 工作台</button>
+      <button type="button" :aria-current="currentView === 'resources' ? 'page' : undefined" @click="currentView = 'resources'"><BookOpen :size="17" /> 我的书库</button>
+      <button type="button" aria-haspopup="dialog" @click="openDossier()"><UsersRound :size="17" /> 人物档案</button>
+      <button type="button" aria-haspopup="dialog" @click="copilotOpen = true"><Bot :size="17" /> AI 助手</button>
+      <button type="button" aria-haspopup="dialog" @click="modelConfigOpen = true"><KeyRound :size="17" /> AI 配置</button>
+      <span class="workdesk-nav-status" role="status">{{ booting ? '正在连接目录…' : busy ? status : '阅读与浏览不会创建游戏' }}</span>
+    </nav>
+    <LibraryScene v-if="currentView === 'resources'" class="workdesk-library" @close="showWorkbench()" @open-book="openOriginalReader($event.bookId)" @open-characters="openDossier()" @upload="showUpload" />
+    <main v-show="currentView !== 'resources'" class="app-main grid min-h-0 grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)_300px] xl:grid-cols-[300px_minmax(420px,1fr)_320px]">
       <aside
         class="panel-left scrollbar overflow-y-auto border-r border-(--fe-border) bg-(--fe-panel-2) pb-20 lg:block lg:pb-4"
         :class="mobilePanel === 'setup' ? 'block panel--active' : 'hidden'"
       >
-        <div class="mobile-panel-toolbar lg:hidden"><strong>配置面板</strong><button type="button" @click="mobilePanel = 'story'">返回剧情</button></div>
+        <div class="mobile-panel-toolbar lg:hidden"><strong>配置面板</strong><button type="button" @click="showWorkbench('story')">返回剧情</button></div>
+        <header class="workdesk-heading"><h2>世界与角色</h2><p>选择原著，准备证据，再决定从何处出发。</p></header>
         <section class="border-b border-(--fe-border) p-3">
           <button class="section-toggle" @click="basicOpen = !basicOpen">
             <span class="flex items-center gap-2"><Settings2 :size="15" /> 基础设定</span>
@@ -2297,9 +2421,9 @@ watch([compressionRecord, round], () => {
 
           <div v-if="basicOpen" class="mt-3">
             <label class="block">
-              <span class="label">运行模式</span>
+              <span class="label">蒸馏范围（唯一模式差异）</span>
               <select v-model="form.mode" class="field h-9 px-2 text-[13px]" :disabled="setupLocked" @change="onModeChanged">
-                <option v-for="item in bootstrap?.modes" :key="item">{{ item }}</option>
+                <option v-for="item in availableModes" :key="item" :value="item">{{ item }} · {{ item.startsWith('强化') ? '全书' : '窗口' }}</option>
               </select>
             </label>
 
@@ -2331,8 +2455,8 @@ watch([compressionRecord, round], () => {
                   type="button"
                   class="tier-btn"
                   :class="{ 'tier-btn-active': form.paper_tier === item.tier }"
-                  :disabled="setupLocked || (item.agent_required && !form.story_agent_mode)"
-                  :title="item.agent_required ? '史诗丰度需开启类 Agent 生成' : item.agent_recommended ? '建议开启类 Agent 生成' : `目标约 ${item.target_chars} 字 / ${item.segments} 段`"
+                  :disabled="setupLocked || (item.agent_required && !form.story_agent_mode) || (!enhanced && item.basic_ok === false)"
+                  :title="item.agent_required ? '史诗丰度需开启类 Agent 生成' : (!enhanced && item.basic_ok === false) ? '基础模式仅可用 1–4 档（至「丰厚」），更高档需切换强化模式' : item.agent_recommended ? '建议开启类 Agent 生成' : `目标约 ${item.target_chars} 字 / ${item.segments} 段`"
                   @click="form.paper_tier = item.tier"
                 >
                   <span class="block text-xs font-bold">{{ item.tier }} · {{ item.label }}</span>
@@ -2343,7 +2467,7 @@ watch([compressionRecord, round], () => {
               </div>
               <Transition name="pop">
                 <p
-                  v-if="paperTierThinkingHint && enhanced"
+                  v-if="paperTierThinkingHint"
                   class="mt-1 flex items-start gap-1 rounded-md border border-[color-mix(in_srgb,_var(--fe-warn)_32%,_var(--fe-panel))] bg-[color-mix(in_srgb,_var(--fe-warn)_10%,_var(--fe-panel))] px-2 py-1.5 text-[10px] leading-4 text-[color-mix(in_srgb,_var(--fe-warn)_72%,_var(--fe-ink))]"
                 >
                   <Sparkles :size="11" class="mt-0.5 shrink-0" />
@@ -2352,7 +2476,7 @@ watch([compressionRecord, round], () => {
               </Transition>
             </div>
 
-            <div v-if="enhanced" class="mt-2">
+            <div class="mt-2">
               <label class="flex cursor-pointer items-center gap-2 text-xs font-bold">
                 <input v-model="form.story_agent_mode" type="checkbox" class="size-4 accent-(--fe-accent)" :disabled="setupLocked" />
                 {{ bootstrap?.story_agent_mode?.label ?? '类 Agent 生成' }}
@@ -2361,10 +2485,10 @@ watch([compressionRecord, round], () => {
               <p class="mt-1 text-[10px] leading-4 text-(--fe-ink-3)">{{ bootstrap?.story_agent_mode?.note }}</p>
             </div>
 
-            <div v-if="!enhanced" class="mt-2">
+            <div class="mt-2">
               <span class="label flex items-center justify-between">
-                <span>作品库</span>
-                <span class="font-normal text-(--fe-ink-3)">{{ worksCount }} 部</span>
+                <span>作品库（已玩可复用）</span>
+                <span class="font-normal text-(--fe-ink-3)">{{ playableCount }} 部</span>
               </span>
               <div class="work-picker">
                 <button type="button" class="field work-picker-trigger" :disabled="setupLocked" @click="workPickerOpen = !workPickerOpen">
@@ -2375,20 +2499,23 @@ watch([compressionRecord, round], () => {
                 <div v-if="workPickerOpen" class="work-picker-panel">
                   <div class="work-picker-search">
                     <Search :size="13" class="shrink-0 text-(--fe-ink-3)" />
-                    <input v-model="workQuery" placeholder="搜索作品名或编号…" />
-                    <span class="shrink-0 text-[10px] text-(--fe-ink-3)">{{ filteredWorks.length }} 部</span>
+                    <input v-model="workQuery" placeholder="搜索已玩作品…" />
+                    <span class="shrink-0 text-[10px] text-(--fe-ink-3)">{{ filteredPlayableBooks.length }} 部</span>
                   </div>
                   <div class="work-picker-list scrollbar">
                     <button
-                      v-for="work in pagedWorks"
-                      :key="work"
+                      v-for="book in filteredPlayableBooks"
+                      :key="book.book_id"
                       type="button"
                       class="work-option"
-                      :class="work === form.work ? 'active' : ''"
-                      @click="selectWork(work)"
-                    >{{ work }}</button>
-                    <button v-if="hasMoreWorks" type="button" class="w-full py-2 text-center text-[11px] text-(--fe-accent) hover:underline" @click="loadMoreWorks">加载更多（{{ filteredWorks.length - pagedWorks.length }} 部）</button>
-                    <p v-if="!filteredWorks.length" class="py-4 text-center text-[11px] text-(--fe-ink-3)">无匹配作品</p>
+                      :class="book.book_id === currentBookId ? 'active' : ''"
+                      :disabled="setupLocked"
+                      :title="`覆盖 ${book.coverage.verified_blocks}/${book.coverage.expected_blocks} · ${book.mode === 'fullbook' ? '全书' : '窗口'}`"
+                      @click="selectWork(book)"
+                    >{{ book.title }}（{{ book.mode === 'fullbook' ? '全书' : '窗口' }}）</button>
+                    <p v-if="!filteredPlayableBooks.length" class="py-4 text-center text-[11px] leading-5 text-(--fe-ink-3)">
+                      {{ playableBooks.length ? '无匹配的已玩作品' : '暂无已玩可复用作品——成功开局并复验通过后出现在这里，新世界可上传 TXT' }}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -2399,10 +2526,10 @@ watch([compressionRecord, round], () => {
               </label>
               <label class="mt-2 block">
                 <span class="label">指定片段（可选）</span>
-                <textarea v-model="form.fragment" class="field h-16 p-2 text-xs" placeholder="粘贴原著片段，开局将锚定该片段" :disabled="setupLocked" />
+                <textarea v-model="form.fragment" class="field h-16 p-2 text-xs" placeholder="粘贴原著片段作为定位查询；以验证后的证据为准" :disabled="setupLocked" />
               </label>
 
-              <div v-if="!enhanced" class="mt-2">
+              <div class="mt-2">
                 <span class="label flex items-center justify-between">
                   <span>自定义原著（可选上传）</span>
                   <button v-if="novelUpload" type="button" class="text-[10px] text-(--fe-accent) hover:underline" :disabled="setupLocked" @click="novelUpload = null">清除（回到作品库）</button>
@@ -2415,24 +2542,34 @@ watch([compressionRecord, round], () => {
                       {{ novelUpload ? `${Number(novelUpload.bytes || 0).toLocaleString()} bytes · 开局时优先于作品库` : '上传自有文本作为穿越世界（优先于左侧作品库）' }}
                     </small>
                   </span>
-                  <input type="file" accept=".txt,text/plain" class="hidden" @change="handleUpload" />
+                  <input id="workdesk-upload" type="file" accept=".txt,text/plain" aria-label="上传自有 TXT 原著" class="absolute inset-0 h-full w-full cursor-pointer opacity-0" :disabled="setupLocked" @change="handleUpload" />
                 </label>
               </div>
+
+              <PreparationPanel
+                class="mt-2"
+                :preparation="prepPackage"
+                :candidates="prepCandidates"
+                :selected-id="prepSelectedId"
+                :selection="prepSelection"
+                :timepoint="prepTimepoint"
+                :busy="prepBusy || jobSubmitting || jobActive"
+                :stage="jobSubmitting || jobActive ? 'prepare' : prepStage"
+                :locked="setupLocked"
+                :error="prepError"
+                @prepare="runPrepare"
+                @locate="runLocate"
+                @select="onSelectCandidate"
+                @timepoint="onPrepTimepoint"
+              />
+              <div class="standalone-preparation">
+                <button type="button" class="small-action" :disabled="jobSubmitting || jobActive || startWorkflowBusy || !currentBookId" @click="submitPreparation('fullbook', true)">{{ jobSubmitting ? '正在提交…' : '仅全书准备（不开局）' }}</button>
+                <p>独立准备原著证据，可取消或恢复；不创建会话，不计为已玩。</p>
+              </div>
+              <p v-if="startWorkflowBusy && !busy" class="mt-3 text-xs leading-6" role="status">正在等待完整人物准备，就绪后自动开局。<button class="small-action" @click="cancelPendingStart">停止等待开局</button></p>
+              <PreparationJobPanel :job="preparationJob" :credentials="modelCredentials" :label="preparationJobLabel" @update="preparationJob = $event" @ready="onPreparationReady" />
             </div>
 
-            <div v-else class="mt-2">
-              <span class="label">完整原著 TXT</span>
-              <label class="upload-zone" @dragover.prevent @drop.prevent="handleUpload">
-                <Upload :size="16" class="shrink-0 text-(--fe-accent)" />
-                <span class="min-w-0 text-xs">
-                  <strong class="block truncate">{{ novelUpload?.filename || '选择 TXT 文件' }}</strong>
-                  <small class="block truncate text-[10px] text-(--fe-ink-3)">
-                    {{ novelUpload ? `${Number(novelUpload.bytes || 0).toLocaleString()} bytes` : '点击或拖入 TXT，开局时执行章节切分门禁' }}
-                  </small>
-                </span>
-                <input type="file" accept=".txt,text/plain" class="hidden" @change="handleUpload" />
-              </label>
-            </div>
           </div>
         </section>
 
@@ -2523,8 +2660,8 @@ watch([compressionRecord, round], () => {
           <div v-if="protagonistOpen" class="mt-3">
             <div class="grid grid-cols-1 gap-2 mb-3">
               <label class="block">
-                <span class="label">主角身份（可留空：默认穿成原著主角；性别不限，以书中身体为准）</span>
-                <input v-model="form.role" class="field h-9 px-2 text-[13px]" placeholder="例如：青云门外门弟子" :disabled="setupLocked" />
+                <span class="label">身体身份（原著中的身份；与下方人格卡分开）</span>
+                <input v-model="form.role" class="field h-9 px-2 text-[13px]" placeholder="例如：守灯塔的年轻学徒" :disabled="setupLocked" />
               </label>
             </div>
 
@@ -2673,7 +2810,7 @@ watch([compressionRecord, round], () => {
                   <div><dt>简介</dt><dd>{{ poolPreviewText(poolCardById('伙伴栏', entry.model_id)!) }}</dd></div>
                 </dl>
               </div>
-              <input v-model="entry.name" class="field mt-1.5 h-8 px-2 text-[11px]" placeholder="姓名" :disabled="setupLocked" />
+              <input v-model="entry.name" class="field mt-1.5 h-8 px-2 text-[11px]" placeholder="身体身份姓名（手动填写优先）" :disabled="setupLocked" />
               <select v-model="entry.persona_preset" class="field mt-1.5 h-8 w-full px-2 text-[11px]" :disabled="setupLocked">
                 <option value="">性格：跟随设定</option>
                 <option v-for="persona in genericPersonas" :key="persona" :value="persona">【通用】{{ persona }}</option>
@@ -2732,7 +2869,8 @@ watch([compressionRecord, round], () => {
                 :disabled="setupLocked"
                 @input="onPoolQueryInput('伴侣栏', $event)"
               />
-              <select v-model="entry.persona_preset" class="field mt-1.5 h-8 w-full px-2 text-[11px]" :disabled="setupLocked">
+              <input v-model="entry.name" class="field mt-1.5 h-8 px-2 text-[11px]" placeholder="身体身份姓名（手动填写优先，留空由原著分配）" :disabled="setupLocked" />
+              <select v-model="entry.persona_preset" class="field mt-1.5 h-8 w-full text-[11px]" :disabled="setupLocked">
                 <option value="">性格：跟随设定</option>
                 <option v-for="persona in genericPersonas" :key="persona" :value="persona">【通用】{{ persona }}</option>
               </select>
@@ -2770,7 +2908,6 @@ watch([compressionRecord, round], () => {
               <input v-model="enableNemesis" type="checkbox" class="size-4 accent-(--fe-accent)" :disabled="setupLocked" />
               启用宿敌系统
             </label>
-            <p v-if="enableNemesis && !enhanced" class="mt-1 text-[10px] text-(--fe-accent)">注：宿敌系统仅强化模式生效，基础模式下勾选不会启用</p>
 
             <div v-if="enableNemesis" class="mt-2">
               <div class="mt-1 flex gap-1.5">
@@ -2825,6 +2962,7 @@ watch([compressionRecord, round], () => {
                   :disabled="setupLocked"
                   @input="onPoolQueryInput('宿敌栏', $event)"
                 />
+                <input v-model="nemesisIdentity" class="field mt-1.5 h-8 px-2 text-[12px]" placeholder="身体身份姓名（手动填写优先，留空由原著分配）" :disabled="setupLocked" />
                 <div v-if="poolPreviewCard('宿敌栏')" class="pool-preview-card">
                   <div class="flex items-baseline justify-between gap-2">
                     <strong>{{ poolPreviewCard('宿敌栏')!.name }}</strong>
@@ -2949,78 +3087,41 @@ watch([compressionRecord, round], () => {
             <ChevronDown :size="15" class="chevron" :class="modelOpen ? 'rotate-180' : ''" />
           </button>
           <div v-if="modelOpen" class="mt-3 space-y-2">
-            <label class="block">
-              <span class="label">提供商</span>
-              <select v-model="form.provider" class="field h-9 px-2 text-[13px]" :disabled="modelLocked" @change="onProviderChanged">
-                <option v-for="item in bootstrap?.providers" :key="item.id" :value="item.id">{{ item.label }}</option>
-              </select>
-            </label>
-            <label class="block">
-              <span class="label">API Key（留空则使用服务端环境变量）</span>
-              <input v-model="form.api_key" type="password" name="fate-api-key" autocomplete="new-password" autocapitalize="off" spellcheck="false" class="field h-9 px-2 text-[13px]" placeholder="仅保存在当前页面内存" :disabled="modelLocked" />
-            </label>
-            <label class="block">
-              <span class="label flex items-center justify-between">
-                <span>模型</span>
-                <span class="text-[10px] font-normal text-(--fe-ink-3)">优先选带思考模式的模型</span>
-              </span>
-              <div class="flex gap-1.5">
-                <select v-if="availableModels.length" v-model="form.model" class="field h-9 flex-1 px-2 text-[13px]" :disabled="modelLocked">
-                  <option v-for="item in availableModels" :key="item">{{ item }}</option>
-                </select>
-                <input v-else v-model="form.model" class="field h-9 flex-1 px-2 text-[13px]" :disabled="modelLocked" />
-                <button type="button" class="small-action h-9" :disabled="fetchingModels" title="拉取模型列表" @click="pullModelList">
-                  <LoaderCircle v-if="fetchingModels" class="animate-spin" :size="12" />
-                  <ListChecks v-else :size="12" /> 拉取
-                </button>
+            <dl class="space-y-1 text-[11.5px] leading-relaxed">
+              <div class="flex justify-between gap-2">
+                <dt class="shrink-0 text-(--fe-ink-3)">提供商</dt>
+                <dd class="min-w-0 truncate text-right font-bold">{{ activeProvider?.label ?? form.provider }}</dd>
               </div>
-            </label>
-            <label class="block">
-              <span class="label">接口地址</span>
-              <div class="flex gap-1.5">
-                <input v-model="form.base_url" class="field h-9 flex-1 px-2 text-[13px]" placeholder="自定义服务的 Base URL" :disabled="modelLocked" />
-                <button type="button" class="small-action h-9" :disabled="testingConnection" title="测试连接" @click="runConnectionTest">
-                  <LoaderCircle v-if="testingConnection" class="animate-spin" :size="12" />
-                  <PlugZap v-else :size="12" /> 测试
-                </button>
+              <div class="flex justify-between gap-2">
+                <dt class="shrink-0 text-(--fe-ink-3)">模型</dt>
+                <dd class="min-w-0 truncate text-right font-bold">{{ form.model || '未选择（用服务端默认）' }}</dd>
               </div>
-            </label>
-            <Transition name="pop">
-              <p v-if="connectionResult" class="rounded-md border px-2.5 py-1.5 text-[11px]" :class="connectionResult.ok ? 'border-[color-mix(in_srgb,_var(--fe-ok)_30%,_var(--fe-panel))] bg-[color-mix(in_srgb,_var(--fe-ok)_8%,_var(--fe-panel))] text-(--fe-ok)' : 'border-[color-mix(in_srgb,_var(--fe-danger)_28%,_var(--fe-panel))] bg-[color-mix(in_srgb,_var(--fe-danger)_6%,_var(--fe-panel))] text-(--fe-danger)'">
-                {{ connectionResult.message }}
-              </p>
-            </Transition>
-            <div class="grid grid-cols-2 gap-2">
-              <label>
-                <span class="label">思考模式</span>
-                <select v-model="form.thinking_mode" class="field h-9 px-2 text-[13px]" :disabled="modelLocked">
-                  <option value="auto">自动</option>
-                  <option value="on">开启</option>
-                  <option value="off">关闭</option>
-                </select>
-              </label>
-              <label>
-                <span class="label">思考参数</span>
-                <input v-model="form.thinking_param" class="field h-9 px-2 text-[13px]" placeholder="如 budget_tokens" :disabled="modelLocked" />
-              </label>
-            </div>
-            <label class="flex cursor-pointer items-center gap-2 text-xs font-bold" :class="enhanced ? 'opacity-80' : ''">
-              <input v-model="form.distill_enabled" type="checkbox" class="size-4 accent-(--fe-accent)" :disabled="modelLocked || enhanced" />
-              启用锚点蒸馏{{ enhanced ? '（强化模式必需）' : '' }}
-            </label>
+              <div class="flex justify-between gap-2">
+                <dt class="shrink-0 text-(--fe-ink-3)">API Key</dt>
+                <dd class="min-w-0 truncate text-right font-bold" :class="form.api_key ? 'text-(--fe-ok)' : 'text-(--fe-ink-3)'">{{ form.api_key ? '已填写（仅页面内存）' : '未填写（用环境变量）' }}</dd>
+              </div>
+              <div class="flex justify-between gap-2">
+                <dt class="shrink-0 text-(--fe-ink-3)">思考模式</dt>
+                <dd class="min-w-0 truncate text-right font-bold">{{ form.thinking_mode === 'auto' ? '自动' : form.thinking_mode === 'on' ? '开启' : '关闭' }}</dd>
+              </div>
+              <div class="flex justify-between gap-2">
+                <dt class="shrink-0 text-(--fe-ink-3)">锚点蒸馏</dt>
+                <dd class="min-w-0 truncate text-right font-bold">{{ form.distill_enabled ? '启用' : '关闭' }}{{ enhanced ? '（强化模式必需）' : '' }}</dd>
+              </div>
+            </dl>
+            <button type="button" class="flex h-9 w-full items-center justify-center gap-2 rounded-md border border-(--fe-border) bg-(--fe-panel-2) px-3 text-[12.5px] font-bold text-(--fe-ink-2) hover:border-(--fe-accent) hover:text-(--fe-accent)" @click="modelConfigOpen = true">
+              <KeyRound :size="13" /> 打开 AI 配置
+            </button>
+            <p class="text-[10.5px] leading-relaxed text-(--fe-ink-3)">完整配置已移至顶部「AI 配置」；也可在导航行随时打开。</p>
           </div>
 
-          <button class="start-button mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-md bg-(--fe-accent) px-3 text-[13px] font-bold text-(--fe-accent-ink) hover:bg-(--fe-accent-strong) disabled:bg-(--fe-panel-3) disabled:text-(--fe-ink-3)" :disabled="startDisabled" @click="startGame">
+          <button class="start-button mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-md bg-(--fe-accent) px-3 text-[13px] font-bold text-(--fe-accent-ink) hover:bg-(--fe-accent-strong) disabled:bg-(--fe-panel-3) disabled:text-(--fe-ink-3)" :disabled="startDisabled" @click="startGame()">
             <LoaderCircle v-if="busy" class="animate-spin" :size="16" />
             <Play v-else :size="16" />
-            {{ busy ? '正在推演' : enhanced ? '校验原著并准备' : '开始模拟' }}
+            {{ busy ? (inGame ? '正在推演' : '正在准备开局') : startWorkflowBusy ? '等待完整人物准备…' : '校验原著并准备' }}
           </button>
         </section>
 
-        <ThemeFrame class="m-3" eyebrow="WORKBENCH" title="世界与角色">
-          <ThemeBadge label="配置工作台" tone="accent" />
-          <ThemeProgress class="mt-3" :value="enhanced ? 0.72 : 0.35" label="准备度" />
-        </ThemeFrame>
         <section class="p-3">
           <button class="section-toggle" @click="uiOpen = !uiOpen">
             <span class="flex items-center gap-2"><Palette :size="15" /> 界面</span>
@@ -3099,22 +3200,23 @@ watch([compressionRecord, round], () => {
           </template>
         </div>
 
+        <GenerationStatePanel :busy="busy" :phase="status" :draft="draftText" :revision="state.revision" :wish-effects="(state.wish_effects as unknown as WishEffectRow[] | undefined)" />
         <div ref="storyScroll" class="scrollbar min-h-0 flex-1 overflow-y-auto">
-          <div v-if="booting" class="grid h-full place-items-center">
-            <LoaderCircle class="animate-spin text-(--fe-accent)" :size="24" />
+          <div v-if="booting" class="grid h-full place-items-center" role="status" aria-live="polite">
+            <div class="workdesk-loading"><LoaderCircle class="animate-spin text-(--fe-accent)" :size="24" aria-hidden="true" /><p>正在读取工作台配置…</p></div>
           </div>
-          <div v-else-if="!chat.length" class="mx-auto flex h-full max-w-lg flex-col items-center justify-center px-8 text-center">
-            <div class="grid size-12 place-items-center rounded-md border border-(--fe-border) bg-(--fe-panel) text-(--fe-accent)">
-              <Sparkles :size="21" />
+          <div v-else-if="!chat.length" class="story-prologue">
+            <BookOpen :size="32" :stroke-width="1.2" class="text-(--fe-accent)" />
+            <p class="prologue-kicker">书页未启，故事待续</p>
+            <h2>你的第一幕<br />从这里开始</h2>
+            <p class="prologue-note">选一本原著，决定你想成为谁。<br />准备好后，让故事在你的选择中展开。</p>
+            <p class="prologue-library">从自己的原著与人物开始。不自动创建示例藏书，也不会在浏览时生成剧情。</p>
+            <div class="workdesk-quick-actions">
+              <button type="button" @click="currentView = 'resources'"><BookOpen :size="18" /> 浏览我的书库</button>
+              <button type="button" @click="showWorkbench('setup')"><Settings2 :size="18" /> 配置世界与角色</button>
+              <button type="button" aria-haspopup="dialog" @click="openDossier()"><UsersRound :size="18" /> 查看人物档案</button>
             </div>
-            <h2 class="mt-4 text-base font-bold">等待第一幕</h2>
-            <p class="mt-1 text-[13px] leading-6 text-(--fe-ink-3)">
-              {{ enhanced ? '上传可切章的完整 TXT，并完成左侧配置。' : '从作品库选择世界，配置主角与同伴。' }}
-            </p>
-            <div class="mt-5 flex gap-2 text-[10px] text-(--fe-ink-3)">
-              <span class="rounded border border-(--fe-border) bg-(--fe-panel) px-2 py-1">{{ worksCount }} 部作品</span>
-              <span class="rounded border border-(--fe-border) bg-(--fe-panel) px-2 py-1">{{ poolsCount }} 个角色模型</span>
-            </div>
+            <p class="workdesk-empty-note">没有原著？在配置面板上传 TXT；没有人物？可在人物档案中进入角色设计。</p>
           </div>
           <div v-else class="mx-auto w-full max-w-[860px] px-3 py-5 sm:px-6 sm:py-7">
             <div class="book-page">
@@ -3177,7 +3279,7 @@ watch([compressionRecord, round], () => {
                     <Send v-else :size="12" /> 提问
                   </button>
                 </div>
-                <p v-if="askError" class="mt-1.5 text-[10px] text-(--fe-danger)">{{ askError }}</p>
+                <p v-if="askError" role="alert" class="mt-1.5 text-xs text-(--fe-danger)">{{ askError }}</p>
               </div>
             </div>
 
@@ -3409,30 +3511,24 @@ watch([compressionRecord, round], () => {
         class="panel-right scrollbar overflow-y-auto border-l border-(--fe-border) bg-(--fe-panel-2) pb-20 lg:block lg:pb-4"
         :class="mobilePanel === 'state' ? 'block panel--active' : 'hidden'"
       >
-        <div class="mobile-panel-toolbar lg:hidden"><strong>状态面板</strong><button type="button" @click="mobilePanel = 'story'">返回剧情</button></div>
+        <div class="mobile-panel-toolbar lg:hidden"><strong>状态面板</strong><button type="button" @click="showWorkbench('story')">返回剧情</button></div>
         <div class="flex h-11 items-center border-b border-(--fe-border) bg-(--fe-panel) px-3">
           <Gauge :size="15" class="mr-2 text-(--fe-ok)" />
           <h2 class="text-xs font-bold">运行状态</h2>
           <span class="status-dot ml-auto size-2 rounded-full" :class="busy ? 'animate-pulse bg-(--fe-warn)' : inGame ? 'bg-(--fe-ok)' : 'bg-(--fe-border-strong)'" />
         </div>
 
-        <section class="grid grid-cols-2 border-b border-(--fe-border) bg-(--fe-panel)">
-          <div class="metric"><span>回合</span><strong>{{ round }}</strong></div>
-          <div class="metric border-l"><span>章节</span><strong>{{ chapter }}</strong></div>
-          <div class="metric border-t"><span>章内进度</span><strong>{{ chapterRound }}/{{ turnBudget || '—' }}</strong></div>
-          <div class="metric border-l border-t"><span>相容性 K</span><strong>{{ compatibility }}</strong></div>
-          <div class="metric border-t">
-            <span>剧情丰度</span>
-            <strong>{{ stateRichnessLabel }}</strong>
-          </div>
-          <div class="metric col-span-2 border-t" title="最近一次调用：入 {{ tokenUsage.lastIn.toLocaleString() }} · 出 {{ tokenUsage.lastOut.toLocaleString() }}">
-            <span>本局 Token{{ tokenUsage.source === 'measured' ? '' : tokenUsage.source === 'mixed' ? '（含估算）' : '（估算）' }}</span>
-            <strong class="metric-token">
-              入 {{ fmtTok(tokenUsage.in) }} · 出 {{ fmtTok(tokenUsage.out) }}<template v-if="tokenUsage.cache"> · 缓存 {{ fmtTok(tokenUsage.cache) }}</template>
-              <em v-if="tokenUsage.source === 'measured'" class="metric-token-badge">实测</em>
-              <em v-else-if="tokenUsage.source === 'mixed'" class="metric-token-badge">含估算</em>
-            </strong>
-          </div>
+        <section class="reading-status">
+          <p v-if="!inGame" class="status-introduction">故事尚未开始。开局后，这里会记录任务、人物与世界的变化。</p>
+          <dl v-else class="status-facts"><div><dt>章内进度</dt><dd>{{ chapterRound }} / {{ turnBudget || '—' }}</dd></div><div><dt>剧情丰度</dt><dd>{{ stateRichnessLabel }}</dd></div></dl>
+          <details class="technical-diagnostics">
+            <summary>技术诊断与用量</summary>
+            <dl class="status-facts"><div><dt>相容性 K</dt><dd>{{ compatibility }}</dd></div></dl>
+            <div class="token-diagnostic" :title="`最近一次调用：入 ${tokenUsage.lastIn.toLocaleString()} · 出 ${tokenUsage.lastOut.toLocaleString()}`">
+              <p>本局 Token · {{ tokenUsage.source === 'measured' ? '实测' : tokenUsage.source === 'mixed' ? '含估算' : '估算' }}</p>
+              <p>入 {{ fmtTok(tokenUsage.in) }} · 出 {{ fmtTok(tokenUsage.out) }}<template v-if="tokenUsage.cache"> · 缓存 {{ fmtTok(tokenUsage.cache) }}</template></p>
+            </div>
+          </details>
         </section>
 
         <section class="state-section">
@@ -3664,13 +3760,13 @@ watch([compressionRecord, round], () => {
     <!-- Lomsting 遗物：羽毛笔（点击在新页面展开铭文，所见即所抄） -->
     <button
       type="button"
-      class="reader-trigger fixed bottom-3 right-3 z-40 flex cursor-pointer select-none items-center justify-center bg-transparent p-0"
+      class="reader-trigger fixed bottom-3 right-3 z-50 flex size-11 cursor-pointer select-none items-center justify-center rounded-full bg-(--fe-panel) p-0 shadow-md"
       style="user-select: none; -webkit-user-select: none; border: none;"
       aria-label="打开我的原著阅读器"
       title="我的原著"
-      @click="openOriginalReader"
+      @click="openOriginalReader()"
     >
-      <span class="flex size-6 items-center justify-center rounded text-(--fe-ink-3) opacity-60 transition-opacity duration-200 hover:opacity-100">
+      <span class="pointer-events-none flex size-11 items-center justify-center text-(--fe-accent)">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
           <path d="M20 4c-5 0-11 4-13.5 9.5C5 17 5 19 5 19s2 0 5.5-1.5C16 15 20 9 20 4Z" />
           <path d="M5 19 15 9" />
@@ -3683,6 +3779,23 @@ watch([compressionRecord, round], () => {
       <LanQrModal v-if="lanQrOpen" :info="lanInfo" :loading="lanBusy" @close="lanQrOpen = false" />
     </Transition>
 
+    <CopilotPanel :open="copilotOpen" :credentials="modelCredentials" :session-id="sessionId" @close="copilotOpen = false" @entry="onCopilotEntry" />
+    <ModelConfigModal
+      :open="modelConfigOpen"
+      :form="form"
+      :providers="bootstrap?.providers ?? []"
+      :available-models="availableModels"
+      :model-locked="modelLocked"
+      :enhanced="enhanced"
+      :fetching-models="fetchingModels"
+      :testing-connection="testingConnection"
+      :connection-result="connectionResult"
+      @close="modelConfigOpen = false"
+      @provider-changed="onProviderChanged"
+      @pull-models="pullModelList"
+      @test-connection="runConnectionTest"
+    />
+
     <Transition name="pop">
       <div v-if="mobileThemeOpen" class="mobile-theme-sheet" @click.self="mobileThemeOpen = false">
         <section role="dialog" aria-modal="true" aria-label="主题选择">
@@ -3693,13 +3806,13 @@ watch([compressionRecord, round], () => {
     </Transition>
 
     <nav v-if="isMobileShell || !isWindowed" class="app-bottom-nav fixed inset-x-0 bottom-0 z-20 grid h-16 grid-cols-4 border-t border-(--fe-border) bg-(--fe-panel)" :class="isMobileShell ? '' : 'lg:hidden'">
-      <button class="mobile-tab" :class="mobilePanel === 'setup' ? 'active' : ''" @click="mobilePanel = 'setup'">
+      <button class="mobile-tab" :class="mobilePanel === 'setup' ? 'active' : ''" @click="showWorkbench('setup')">
         <Menu :size="18" /><span>配置</span>
       </button>
-      <button class="mobile-tab" :class="mobilePanel === 'story' ? 'active' : ''" @click="mobilePanel = 'story'">
+      <button class="mobile-tab" :class="mobilePanel === 'story' ? 'active' : ''" @click="showWorkbench('story')">
         <MessageSquareText :size="18" /><span>剧情</span>
       </button>
-      <button class="mobile-tab" :class="mobilePanel === 'state' ? 'active' : ''" @click="mobilePanel = 'state'">
+      <button class="mobile-tab" :class="mobilePanel === 'state' ? 'active' : ''" @click="showWorkbench('state')">
         <Gauge :size="18" /><span>状态</span>
       </button>
       <button class="mobile-tab" :class="mobileThemeOpen ? 'active' : ''" @click="mobileThemeOpen = !mobileThemeOpen">
@@ -3707,7 +3820,21 @@ watch([compressionRecord, round], () => {
       </button>
     </nav>
 
-    <OriginalReaderModal v-if="readerOpen" @close="readerOpen = false" />
+    <CharacterDossier v-if="dossierOpen" :card-id="dossierCardId" @close="dossierOpen = false" @create="openCharacterDesigner" />
+    <OriginalReaderModal v-if="readerOpen" :key="readerInitialBookId ?? 'reader-library'" :initial-book-id="readerInitialBookId" @close="readerOpen = false; readerIntentError = ''" @start-from-chapter="onReaderStart" @chat-with-character="onReaderChat" />
+    <div v-if="readerIntentError || readerIntentBusy" class="reader-intent-status" role="alert">{{ readerIntentBusy ? '正在核验章节开局边界…' : readerIntentError }}<button v-if="!readerIntentBusy" @click="readerIntentError = ''">关闭提示</button></div>
+    <ReaderChatPanel v-if="readerChatTarget" :key="`${readerChatTarget.bookId}:${readerChatTarget.chapterNo}`" :book-id="readerChatTarget.bookId" :chapter-no="readerChatTarget.chapterNo" :credentials="modelCredentials" @close="readerChatTarget = null" />
+    <div v-if="readerStartIntent" class="reader-start-backdrop" @click.self="!busy && !startWorkflowBusy && (readerStartIntent = null)">
+      <section class="reader-start-dialog" role="dialog" aria-modal="true" aria-labelledby="reader-start-title">
+        <p class="text-(--fe-ink-3)">原著章节开局</p><h2 id="reader-start-title">从第 {{ readerStartIntent.chapter_no }} 章出发</h2>
+        <p>已核验章节边界。开始前，当前游戏和阅读记录保持不变；点击下方按钮并确认后才创建新会话。</p>
+        <p>将沿用当前模型、人物和难度设置；如需调整，请先返回配置。</p>
+        <details><summary>来源与知识边界</summary><p>{{ readerStartIntent.book_id }} · 第 {{ readerStartIntent.chapter_no }} 章</p><p class="break-all">{{ readerStartIntent.source_hash }}</p><pre>{{ JSON.stringify(readerStartIntent.scene_selection?.knowledge_cutoff, null, 2) }}</pre></details>
+        <p v-if="error" role="alert">{{ error }}</p>
+        <p v-if="startWorkflowBusy && !busy" role="status">完整人物准备中，尚未创建会话。<button @click="cancelPendingStart">停止等待开局</button></p>
+        <footer><button :disabled="busy || startWorkflowBusy" @click="readerStartIntent = null">返回，保留当前游戏</button><button :disabled="busy || startWorkflowBusy || !form.model" @click="confirmReaderStart">{{ busy ? '正在创建新会话…' : startWorkflowBusy ? '等待完整人物准备…' : '确认并开始新游戏' }}</button></footer>
+      </section>
+    </div>
 
     <CharacterDesigner
       v-if="currentView === 'designer'"
@@ -3727,6 +3854,42 @@ watch([compressionRecord, round], () => {
 </template>
 
 <style scoped>
+.workdesk-nav { display: flex; align-items: center; gap: 8px; height: 56px; padding: 6px 16px; border-bottom: 1px solid var(--fe-border); background: var(--fe-panel); overflow-x: auto; }
+.workdesk-nav button, .workdesk-quick-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; flex-shrink: 0; min-height: 44px; padding: 8px 12px; border: 1px solid var(--fe-border); border-radius: var(--fe-radius); background: var(--fe-panel); color: var(--fe-ink); font-size: 12px; }
+.workdesk-nav button[aria-current=page] { color: var(--fe-accent); border-color: var(--fe-accent); background: var(--fe-panel-2); }
+.workdesk-nav-status { margin-left: auto; color: var(--fe-ink-3); font-size: 11px; white-space: nowrap; }
+.workdesk-quick-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 24px; }
+.workdesk-loading { display: grid; justify-items: center; gap: 12px; color: var(--fe-ink-3); font-size: 13px; }
+.workdesk-empty-note { margin-top: 20px; color: var(--fe-ink-3); font-size: 12px; line-height: 1.8; }
+.workdesk-nav button:focus-visible, .workdesk-quick-actions button:focus-visible, .upload-zone:focus-within { outline: 2px solid var(--fe-accent); outline-offset: 2px; }
+.app-root .app-main, .app-root.windowed-root .app-main, .workdesk-library { height: calc(100dvh - var(--app-header-height) - var(--app-safe-top) - 56px); min-height: 0; }
+.panel-left, .panel-right, .story-panel { min-width: 0; overflow-wrap: anywhere; }
+.pool-preview-fields dd, .reader-start-dialog { overflow-wrap: anywhere; }
+.reader-start-dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+@media(max-width: 650px) {
+  .workdesk-nav { padding-inline: 8px; gap: 4px; }
+  .workdesk-nav-status { display: none; }
+  .workdesk-nav button { padding-inline: 10px; }
+  .workdesk-library { padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px)); }
+  .workdesk-quick-actions { flex-direction: column; width: 100%; }
+}
+.workdesk-heading { padding: 24px 18px 8px; }
+.workdesk-heading h2 { color: var(--fe-ink); font-size: 20px; font-weight: 700; letter-spacing: .04em; }
+.workdesk-heading p, .standalone-preparation p { margin-top: 8px; color: var(--fe-ink-3); font-size: 11px; line-height: 1.8; }
+.panel-left > section { padding: 20px 16px; border-bottom: 0; }
+.panel-left > section + section { margin-top: 4px; }
+.standalone-preparation { margin-top: 18px; }
+.reader-start-backdrop { position: fixed; inset: 0; z-index: 110; display: grid; place-items: center; padding: 20px; background: color-mix(in srgb, var(--fe-ink) 45%, transparent); }
+.reader-start-dialog { width: min(580px, 100%); max-height: 90dvh; overflow: auto; padding: 28px; border-radius: 14px; background: var(--fe-panel); color: var(--fe-ink); font-size: 13px; line-height: 1.8; }
+.reader-start-dialog h2 { margin: 10px 0 18px; font-size: 24px; font-weight: 700; }
+.reader-start-dialog p { margin: 12px 0; }
+.reader-start-dialog details { margin: 20px 0; color: var(--fe-ink-3); }
+.reader-start-dialog footer { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+.reader-start-dialog button, .reader-intent-status button { padding: 8px 12px; border-radius: 7px; background: var(--fe-panel-2); color: var(--fe-ink); }
+.reader-start-dialog footer button:last-child { background: var(--fe-accent); color: var(--fe-accent-ink); }
+.reader-start-dialog button:disabled { opacity: .5; }
+.reader-intent-status { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 120; width: min(600px, 90vw); padding: 16px; border-radius: 10px; background: var(--fe-panel); color: var(--fe-warn); box-shadow: var(--fe-shadow-2); }
+
 .app-header { box-shadow: var(--fe-shadow-1); }
 .windowed-root .app-main { height: calc(100dvh - 40px); min-height: 600px; }
 
@@ -4026,8 +4189,8 @@ watch([compressionRecord, round], () => {
 .tier-btn:hover:not(:disabled) { border-color: var(--fe-accent); color: var(--fe-ink); transform: translateY(-1px); }
 .tier-btn-active { border-color: var(--fe-accent); background: var(--fe-accent-soft); color: var(--fe-accent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fe-accent) 25%, transparent); }
 .tier-btn:disabled { cursor: not-allowed; opacity: .42; }
-.upload-zone { display: flex; min-height: 64px; cursor: pointer; align-items: center; gap: 8px; border: 1px dashed var(--fe-border-strong); border-radius: var(--fe-radius); background: var(--fe-panel); padding: 8px 12px; transition: border-color 140ms ease, background-color 140ms ease; }
-.upload-zone:hover { border-color: var(--fe-accent); }
+.upload-zone { position: relative; display: flex; min-height: 64px; cursor: pointer; align-items: center; gap: 8px; border: 1px dashed var(--fe-border-strong); border-radius: var(--fe-radius); background: var(--fe-panel); padding: 8px 12px; transition: border-color 140ms ease, background-color 140ms ease; }
+.upload-zone:hover, .upload-zone:focus-within { border-color: var(--fe-accent); }
 .upload-chip { display: flex; min-height: 34px; cursor: pointer; align-items: center; gap: 6px; border: 1px dashed var(--fe-border); border-radius: var(--fe-radius); background: var(--fe-panel); padding: 5px 9px; font-size: 11px; color: var(--fe-ink-2); transition: border-color 140ms ease, background-color 140ms ease; }
 .upload-chip:hover { border-color: var(--fe-accent); }
 .work-picker { position: relative; }
@@ -4148,29 +4311,32 @@ watch([compressionRecord, round], () => {
 .tl-title { display: block; max-width: 132px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; font-weight: 700; color: var(--fe-ink); }
 .tl-past .tl-title { color: var(--fe-ok); }
 .tl-current .tl-title { color: var(--fe-accent); }
-.metric { padding: 12px; border-color: var(--fe-border); }
-.metric span { display: block; color: var(--fe-ink-3); font-size: 10px; }
-.metric strong { display: block; margin-top: 2px; font-size: 15px; }
-.metric-token { font-size: 13px !important; }
-.metric-token-badge {
-  margin-left: 5px;
-  border: 1px solid color-mix(in srgb, var(--fe-ok) 45%, transparent);
-  border-radius: 4px;
-  padding: 0 4px;
-  color: var(--fe-ok);
-  font-size: 9px;
-  font-style: normal;
-  font-weight: 700;
-  vertical-align: 1px;
-}
-.state-section { border-bottom: 1px solid var(--fe-border); padding: 12px; }
-.state-section h3 { display: flex; align-items: center; gap: 7px; margin-bottom: 10px; font-size: 12px; font-weight: 700; }
+.reading-status { padding: 22px 18px 10px; }
+.status-introduction { color: var(--fe-ink-3); font-size: 13px; line-height: 1.9; }
+.status-facts > div { display: flex; justify-content: space-between; gap: 14px; padding: 8px 0; font-size: 13px; }
+.status-facts dt { color: var(--fe-ink-3); }
+.status-facts dd { text-align: right; color: var(--fe-ink); }
+.technical-diagnostics { margin-top: 18px; color: var(--fe-ink-3); font-size: 12px; line-height: 1.9; }
+.technical-diagnostics summary { cursor: pointer; padding: 6px 0; }
+.token-diagnostic { padding: 8px 0; font-variant-numeric: tabular-nums; }
+.state-section { padding: 22px 18px; }
+.state-section h3 { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font-size: 14px; font-weight: 700; }
+.panel-right .compact-list { border: 0; background: transparent; }
+.panel-right .compact-list div { border: 0; padding: 8px 0; font-size: 12px; }
+.panel-right .member-card { border: 0; padding: 12px 0; background: transparent; }
+.panel-left .label, .panel-right .label { font-size: 12px; line-height: 1.7; }
+.panel-left p[class*="text-[10px]"], .panel-right p[class*="text-[10px]"] { font-size: 12px; line-height: 1.8; }
+.story-prologue { display: flex; min-height: 100%; max-width: 540px; margin: 0 auto; padding: 48px 32px; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.prologue-kicker { margin-top: 24px; color: var(--fe-ink-3); font-size: 12px; letter-spacing: .16em; }
+.story-prologue h2 { margin: 18px 0 24px; color: var(--fe-ink); font-family: var(--fe-font-story, serif); font-size: clamp(28px, 3vw, 40px); line-height: 1.6; font-weight: 500; letter-spacing: .06em; }
+.prologue-note { color: var(--fe-ink-2); font-size: 15px; line-height: 2; }
+.prologue-library { max-width: 300px; margin-top: 28px; color: var(--fe-ink-3); font-size: 12px; line-height: 1.9; }
 .compact-list { overflow: hidden; border: 1px solid var(--fe-border); border-radius: var(--fe-radius); background: var(--fe-panel); }
 .compact-list div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 8px; border-bottom: 1px solid color-mix(in srgb, var(--fe-border) 60%, var(--fe-panel)); padding: 7px 9px; font-size: 10px; }
 .compact-list div:last-child { border-bottom: 0; }
 .compact-list dt { color: var(--fe-ink-3); }
 .compact-list dd { min-width: 0; overflow-wrap: anywhere; text-align: right; color: var(--fe-ink); font-weight: 650; }
-.empty-state { border: 1px dashed var(--fe-border); border-radius: var(--fe-radius); padding: 18px 8px; text-align: center; color: var(--fe-ink-3); font-size: 10px; }
+.empty-state { padding: 16px 0; color: var(--fe-ink-3); font-size: 12px; line-height: 1.8; }
 .mobile-tab { display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--fe-ink-3); font-size: 10px; transition: color 140ms ease; }
 .mobile-tab.active { color: var(--fe-accent); font-weight: 700; }
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import time
+from pathlib import Path
 
 from core import fate_engine as fe
 from core import engine
@@ -21,13 +22,27 @@ DATA_DIR = os.path.join(fe.BASE_DIR, "assets", "data")
 # ---------- 会话日志 ----------
 
 
+def _write_log_file(path, text):
+    target = Path(path)
+    if ".." in target.parts:
+        raise ValueError("日志路径不允许包含 ..")
+    target.write_text(text, encoding="utf-8")
+
+
+def _append_log_file(path, text):
+    target = Path(path)
+    if ".." in target.parts:
+        raise ValueError("日志路径不允许包含 ..")
+    existing = target.read_text(encoding="utf-8") if target.exists() else ""
+    target.write_text(existing + text, encoding="utf-8")
+
+
 def _new_session_log(settings_line):
     """每局创建一个运行日志文件（logs/ 下），返回路径。"""
     try:
         os.makedirs(LOG_DIR, exist_ok=True)
         path = os.path.join(LOG_DIR, time.strftime("session_%Y%m%d_%H%M%S") + ".md")
-        with open(path, "w", encoding="utf-8") as f:
-            f.write("# 命运引擎 · 运行日志\n\n" + settings_line + "\n")
+        _write_log_file(path, "# 命运引擎 · 运行日志\n\n" + settings_line + "\n")
         return path
     except Exception:
         return ""
@@ -37,8 +52,7 @@ def _append_log(path, text):
     if not path:
         return
     try:
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(text)
+        _append_log_file(path, text)
     except Exception:
         pass
 

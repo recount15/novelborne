@@ -1,8 +1,7 @@
-"""Shadow-capable specialist story agent facade.
+"""Specialist story facade: read-only shadow planning or actual active cluster.
 
-It orchestrates deterministic planning metadata without changing the public API.
-The current implementation deliberately delegates prose generation to the existing
-turn pipeline and records a safe shadow plan for incremental rollout.
+Active mode routes through turn_pipeline's explicit agent_cluster branch and
+returns only a validated candidate. The existing application owns persistence.
 """
 from __future__ import annotations
 from typing import Any, Mapping
@@ -12,8 +11,6 @@ from core.engine.narrative_objective import active
 from core.engine.story_weighting import event_weight
 from core.services.story_context import ContextLayer, fit_layers
 from core.services import choice_agent
-from core.engine.turn_transaction import TurnTransaction
-from core.engine.story_invariants import validate_narrative, validate_options
 from core.services import turn_pipeline
 from core.engine.plot_threading import prepare as prepare_plot_threads, generation_brief
 from core.engine.sequence_feedback import recent_feedback, digest as feedback_digest
@@ -44,22 +41,16 @@ class StoryAgent:
         return {'mode':self.mode,'snapshot_hash':snap.state_hash,'weighted_events':weighted,'objectives':active(state),'plot_thread_map':thread_map.to_dict(),'chapter_arc_plan':arc,'generation_brief':{**brief, **chapter_brief, "tasks": tasks},'skill_results':{'planning':planning.to_dict(),'scene':scene.to_dict(),'choice_preconditions':preconditions.to_dict(),'choice_coverage':coverage.to_dict()},'feedback_digest':feedback_digest(feedback),'context_audit':{k:v for k,v in bundle.items() if k!='layers'},'choice_path':choice_agent.public_options(choice_agent.select_diverse(choice_agent.filter_candidates(state.get('choice_candidates') or [],state)))}
 
     def run_turn(self, state, *args, **kwargs):
-        """Run the established pipeline transactionally; shadow mode is read-only."""
+        """Run the actual cluster and return a candidate; app owns the commit."""
         if self.mode != 'agent':
             raise RuntimeError('run_turn is only available in active agent mode')
-        transaction = TurnTransaction(state)
-        before = dict(transaction.before)
-        transaction.advance('PLANNED')
-        try:
-            result = turn_pipeline.run_turn(transaction.candidate, *args, **kwargs)
-            transaction.advance('GENERATED')
-            if result != turn_pipeline.LEGACY:
-                checks = (validate_narrative(getattr(result, 'narrative', '')), validate_options(getattr(result, 'options', [])))
-                if not all(check['ok'] for check in checks):
-                    raise ValueError(checks)
-            transaction.advance('VALIDATED'); transaction.advance('COMMITTED')
-            return result
-        except Exception:
-            transaction.advance('FAILED'); transaction.rollback()
-            if isinstance(state, dict): state.clear(); state.update(before)
-            raise
+        # Selection is explicit, independent of enhanced mode and paper stage.
+        # A shallow outer copy preserves live nested revision/source observations;
+        # the cluster freezes and deep-detaches everything passed to workers.
+        candidate = dict(state)
+        candidate['generation_strategy'] = 'agent_cluster'
+        result = turn_pipeline.run_turn(candidate, *args, **kwargs)
+        from core.services.generation_skills import validate_turn_output, require
+        require(result != turn_pipeline.LEGACY, 'explicit_agent_legacy_rejected')
+        validate_turn_output(result.narrative, result.options)
+        return result

@@ -8,7 +8,7 @@ defineProps<{ characters: Array<{ name: string; detail?: string }>; loading?: bo
   <div class="reader-insight-panel">
     <div class="drawer-head"><strong><Users :size="14" /> 本章活跃人物</strong><span>{{ characters.length }} 人</span></div>
     <div v-if="loading" class="character-empty"><LoaderCircle class="animate-spin" :size="22" /><p>正在读取人物信息</p></div>
-    <div v-else-if="!characters.length" class="character-empty"><CircleAlert :size="22" /><p>本章暂无活跃人物</p><small>锚点蒸馏完成后会显示人物摘要</small></div>
+    <div v-else-if="!characters.length" class="character-empty"><CircleAlert :size="22" /><p>本章暂无活跃人物</p><small>蒸馏到本章后会自动显示人物摘要</small></div>
     <div v-else class="character-list"><article v-for="character in characters" :key="character.name" class="character-item"><strong>{{ character.name }}</strong><p v-if="character.detail">{{ character.detail }}</p></article></div>
   </div>
 </template>

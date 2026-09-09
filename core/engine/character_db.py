@@ -6,16 +6,17 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import sqlite3
 import threading
+from dataclasses import asdict
+from uuid import uuid4
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from core.engine.catalog import ROLES, CharacterCard
 
 # 数据库路径：FATE_VAR_DIR 优先（多实例并发时每实例独立库），
-# 否则项目根 var/db。集群实例首次启动时若库缺失会从主库拷贝种子。
+# 否则项目根 var/db。每个实例独立空库启动，禁止隐式拷贝种子。
 def _database_path() -> Path:
     override = os.environ.get("FATE_VAR_DIR", "").strip()
     if override:
@@ -23,28 +24,7 @@ def _database_path() -> Path:
     return Path(__file__).resolve().parents[2] / "var" / "db" / "fate_engine.db"
 
 
-def _seed_cluster_database(path: Path) -> None:
-    """集群实例（FATE_VAR_DIR）首次启动：若库缺失，从主库拷贝角色资产种子。"""
-    if path.exists():
-        return
-    main_db = Path(__file__).resolve().parents[2] / "var" / "db" / "fate_engine.db"
-    if main_db.exists() and main_db.resolve() != path.resolve():
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(main_db, path)
-            # WAL/SHM 侧文件不拷贝：新库从干净状态开始。
-            for suffix in ("-wal", "-shm"):
-                sidecar = path.with_name(path.name + suffix)
-                if sidecar.exists():
-                    sidecar.unlink()
-        except OSError:
-            pass  # 拷贝失败则空库冷启动（bootstrap 仍可用，仅无历史卡）
-
-
-_DATABASE_PATH = _database_path()
-if os.environ.get("FATE_VAR_DIR", "").strip():
-    _seed_cluster_database(_DATABASE_PATH)
-DATABASE_PATH = _DATABASE_PATH
+DATABASE_PATH = _database_path()
 PROJECT_DATA_DIR = Path(__file__).resolve().parents[2] / "assets" / "data"
 
 # 线程锁
@@ -64,7 +44,8 @@ def set_database_path(new_path: str | Path) -> None:
     global DATABASE_PATH
     with _LOCK:
         DATABASE_PATH = Path(new_path)
-    init_database()
+    ensure_database()
+    _invalidate_cache()
 
 
 def get_connection() -> sqlite3.Connection:
@@ -82,8 +63,10 @@ def get_connection() -> sqlite3.Connection:
 def init_database() -> None:
     """初始化数据库表结构"""
     with _LOCK:
+        DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
         conn = get_connection()
         try:
+            conn.execute("BEGIN IMMEDIATE")
             cursor = conn.cursor()
             
             # 创建角色主表
@@ -172,30 +155,20 @@ def init_database() -> None:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_character_slots_slot_name ON character_slots(slot_name)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_character_semantic_fields_character_id ON character_semantic_fields(character_id)")
 
-            # 栏位名迁移：历史"主线栏"统一改写为"伴侣栏"
-            cursor.execute(
-                "UPDATE character_slots SET slot_name = '伴侣栏' WHERE slot_name = '主线栏'"
-            )
-
-            # 四维兜底：每个活跃角色四个栏位各至少一条标签，缺失补"通用"。
-            cursor.execute(
-                "SELECT DISTINCT character_id FROM character_slots"
-            )
-            all_ids = [row[0] for row in cursor.fetchall()]
-            for cid in all_ids:
-                cursor.execute(
-                    "SELECT DISTINCT slot_name FROM character_slots WHERE character_id = ?",
-                    (cid,),
-                )
-                present = {row[0] for row in cursor.fetchall()}
-                for slot in ("主角栏", "伴侣栏", "伙伴栏", "宿敌栏"):
-                    if slot not in present:
-                        cursor.execute(
-                            "INSERT OR IGNORE INTO character_slots (character_id, slot_name, slot_type)"
-                            " VALUES (?, ?, '通用')",
-                            (cid, slot),
-                        )
-
+            # Additive schema only: no rewriting existing role qualifications.
+            cursor.execute("""CREATE TABLE IF NOT EXISTS character_record_snapshots (
+                character_id TEXT NOT NULL,
+                revision INTEGER NOT NULL,
+                record_json TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (character_id, revision),
+                FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
+            )""")
+            cursor.execute("""CREATE TABLE IF NOT EXISTS character_write_requests (
+                request_key TEXT PRIMARY KEY, request_json TEXT NOT NULL,
+                character_id TEXT NOT NULL, revision INTEGER NOT NULL
+            )""")
+            _migrate_revision_indexes(conn)
             conn.commit()
         except sqlite3.Error as e:
             conn.rollback()
@@ -204,144 +177,182 @@ def init_database() -> None:
             conn.close()
 
 
-def insert_character(card: CharacterCard, source_type: str = "builtin") -> None:
-    """插入单个角色到数据库"""
+def _invalidate_cache() -> None:
+    from core.engine.character_library import refresh_game_cache
+    refresh_game_cache()
+
+
+def _index_revision(conn, record):
+    """Rebuildable indexes only; snapshot JSON remains the sole record authority."""
+    cid, revision = record["id"], record["revision"]
+    for field in ("aliases", "evidence", "facts", "relationships", "tags"):
+        conn.execute(f"DELETE FROM character_revision_{field} WHERE character_id=? AND revision=?", (cid, revision))
+    for i, alias in enumerate(record.get("aliases", [])):
+        conn.execute("INSERT INTO character_revision_aliases VALUES (?,?,?,?)", (cid,revision,i,str(alias)))
+    for item in record.get("evidence", []):
+        conn.execute("INSERT INTO character_revision_evidence VALUES (?,?,?,?,?,?,?,?,?,?)", (cid,revision,item["evidence_id"],item.get("book_id"),item.get("source_hash"),item.get("block_id"),item.get("chapter_no"),item.get("start"),item.get("end"),json.dumps(item,ensure_ascii=False)))
+    for i, item in enumerate(record.get("facts", [])):
+        conn.execute("INSERT INTO character_revision_facts VALUES (?,?,?,?,?,?,?,?,?,?)", (cid,revision,str(item.get("fact_id",i)),item.get("domain"),item.get("predicate"),item.get("subject_id"),item.get("knowledge_holder_id"),json.dumps(item.get("valid_from")),json.dumps(item.get("valid_until")),json.dumps(item,ensure_ascii=False)))
+    for i, item in enumerate(record.get("relationships", [])):
+        conn.execute("INSERT INTO character_revision_relationships VALUES (?,?,?,?,?,?,?,?)", (cid,revision,str(item.get("relation_id",i)),item.get("source_character_id"),item.get("target_character_id"),item.get("type"),json.dumps(item.get("effective_boundary")),json.dumps(item,ensure_ascii=False)))
+    for slot, tags in record.get("slot_keys", {}).items():
+        for tag in dict.fromkeys(tags):
+            conn.execute("INSERT INTO character_revision_tags VALUES (?,?,?,?)",(cid,revision,slot,tag))
+
+
+def _migrate_revision_indexes(conn):
+    """v3 schema compatibility: canonical view maps directly to existing snapshots.
+
+    No second revision authority or legacy/non-character data rewrite is introduced.
+    All indexes, migration marker and current pointers commit with the schema upgrade.
+    """
+    conn.execute("CREATE TABLE IF NOT EXISTS character_schema_metadata (component TEXT PRIMARY KEY, version INTEGER NOT NULL)")
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(characters)")}
+    if "current_revision" not in columns:
+        conn.execute("ALTER TABLE characters ADD COLUMN current_revision INTEGER")
+    conn.execute("CREATE VIEW IF NOT EXISTS character_revisions AS SELECT character_id,revision,record_json,created_at FROM character_record_snapshots")
+    conn.execute("CREATE TABLE IF NOT EXISTS character_revision_aliases (character_id TEXT NOT NULL, revision INTEGER NOT NULL, item_order INTEGER NOT NULL, alias TEXT NOT NULL, PRIMARY KEY(character_id,revision,item_order), FOREIGN KEY(character_id,revision) REFERENCES character_record_snapshots(character_id,revision) ON DELETE CASCADE)")
+    conn.execute("CREATE TABLE IF NOT EXISTS character_revision_evidence (character_id TEXT NOT NULL, revision INTEGER NOT NULL, evidence_id TEXT NOT NULL, book_id TEXT, source_hash TEXT, block_id TEXT, chapter_no INTEGER, start INTEGER, end INTEGER, record_json TEXT NOT NULL, PRIMARY KEY(character_id,revision,evidence_id), FOREIGN KEY(character_id,revision) REFERENCES character_record_snapshots(character_id,revision) ON DELETE CASCADE)")
+    conn.execute("CREATE TABLE IF NOT EXISTS character_revision_facts (character_id TEXT NOT NULL, revision INTEGER NOT NULL, fact_id TEXT NOT NULL, domain TEXT, predicate TEXT, subject_id TEXT, knowledge_holder_id TEXT, valid_from TEXT, valid_until TEXT, record_json TEXT NOT NULL, PRIMARY KEY(character_id,revision,fact_id), FOREIGN KEY(character_id,revision) REFERENCES character_record_snapshots(character_id,revision) ON DELETE CASCADE)")
+    conn.execute("CREATE TABLE IF NOT EXISTS character_revision_relationships (character_id TEXT NOT NULL, revision INTEGER NOT NULL, relation_id TEXT NOT NULL, source_character_id TEXT, target_character_id TEXT, type TEXT, effective_boundary TEXT, record_json TEXT NOT NULL, PRIMARY KEY(character_id,revision,relation_id), FOREIGN KEY(character_id,revision) REFERENCES character_record_snapshots(character_id,revision) ON DELETE CASCADE)")
+    conn.execute("CREATE TABLE IF NOT EXISTS character_revision_tags (character_id TEXT NOT NULL, revision INTEGER NOT NULL, slot_name TEXT NOT NULL, tag TEXT NOT NULL, PRIMARY KEY(character_id,revision,slot_name,tag), FOREIGN KEY(character_id,revision) REFERENCES character_record_snapshots(character_id,revision) ON DELETE CASCADE)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_character_revision_alias ON character_revision_aliases (alias)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_character_revision_book ON character_revision_evidence (book_id,source_hash,chapter_no,start,end)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_character_revision_knowledge ON character_revision_facts (knowledge_holder_id,domain,predicate,valid_from,valid_until)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_character_revision_relation ON character_revision_relationships (target_character_id,type,effective_boundary)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_character_revision_tag ON character_revision_tags (slot_name,tag)")
+    row = conn.execute("SELECT version FROM character_schema_metadata WHERE component='revision_indexes'").fetchone()
+    if row is None or row[0] < 1:
+        for snapshot in conn.execute("SELECT character_id,revision,record_json FROM character_record_snapshots").fetchall():
+            record = json.loads(snapshot["record_json"])
+            record.update(id=snapshot["character_id"],revision=snapshot["revision"])
+            _index_revision(conn,record)
+        conn.execute("UPDATE characters SET current_revision=(SELECT MAX(revision) FROM character_record_snapshots WHERE character_id=characters.id)")
+        conn.execute("INSERT OR REPLACE INTO character_schema_metadata VALUES ('revision_indexes',1)")
+
+
+def _write_record(conn, record, source_type):
+    raw = dict(record)
+    raw["id"] = str(raw.get("id") or raw.get("character_id") or f"user-{uuid4().hex}")
+    card = CharacterCard.from_record(raw)
+    old = conn.execute("SELECT MAX(revision) FROM character_record_snapshots WHERE character_id=?", (card.id,)).fetchone()[0]
+    expected = raw.pop("base_revision", None)
+    if expected is not None and expected != old:
+        raise DatabaseError("角色修订冲突")
+    raw["revision"] = 0 if old is None else old + 1
+    encoded = json.dumps(raw, ensure_ascii=False, allow_nan=False)
+    fields = ("role", "name", "work", "archetype", "desire", "fear", "voice", "background", "source", "gender", "original_position", "source_medium", "source_region", "distill_level")
+    conn.execute("INSERT INTO characters (id," + ",".join(fields) + ",source_type) VALUES (" + ",".join("?" for _ in range(len(fields)+2)) + ") ON CONFLICT(id) DO UPDATE SET " + ",".join(f"{k}=excluded.{k}" for k in fields) + ",source_type=excluded.source_type,is_active=1,updated_at=CURRENT_TIMESTAMP", [card.id, *(getattr(card,k) for k in fields), source_type])
+    for table in ("character_lists", "character_relationships", "character_slots", "character_semantic_fields"):
+        conn.execute(f"DELETE FROM {table} WHERE character_id=?", (card.id,))
+    for field_name in ("abilities", "knowledge_scope", "unacceptable_actions", "skill_ids"):
+        for i, item in enumerate(getattr(card,field_name)):
+            conn.execute("INSERT INTO character_lists (character_id,field_name,item_order,item_value) VALUES (?,?,?,?)", (card.id,field_name,i,item))
+    for target, relation in card.relationship_vector:
+        conn.execute("INSERT OR REPLACE INTO character_relationships (character_id,target_entity,relationship_type) VALUES (?,?,?)", (card.id,target,relation))
+    for slot, types in card.slot_keys.items():
+        if types:
+            # Legacy unique slot projection; snapshot retains ALL tags.
+            conn.execute("INSERT INTO character_slots (character_id,slot_name,slot_type) VALUES (?,?,?)", (card.id,slot,types[0]))
+    for field_name in ("mind_model", "decision_policy", "voice_transfer", "behavior_boundaries"):
+        conn.execute("INSERT INTO character_semantic_fields (character_id,field_name,field_data) VALUES (?,?,?)", (card.id,field_name,json.dumps(raw.get(field_name,getattr(card,field_name)),ensure_ascii=False)))
+    conn.execute("INSERT INTO character_record_snapshots (character_id,revision,record_json) VALUES (?,?,?)", (card.id,raw["revision"],encoded))
+    _index_revision(conn,raw)
+    conn.execute("UPDATE characters SET current_revision=? WHERE id=?", (raw["revision"],card.id))
+    return raw
+
+
+def save_character_record(record: Mapping[str, Any], source_type: str = "user") -> dict[str, Any]:
     with _LOCK:
         conn = get_connection()
         try:
-            cursor = conn.cursor()
-            
-            # 插入主表
-            cursor.execute("""
-                INSERT OR REPLACE INTO characters (
-                    id, role, name, work, archetype, desire, fear, voice, background,
-                    source, gender, original_position, source_medium, source_region,
-                    distill_level, source_type, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-            """, (
-                card.id, card.role, card.name, card.work, card.archetype,
-                card.desire, card.fear, card.voice, card.background,
-                card.source, card.gender, card.original_position,
-                card.source_medium, card.source_region, card.distill_level,
-                source_type
-            ))
-            
-            # 删除旧数据（如果存在）
-            cursor.execute("DELETE FROM character_lists WHERE character_id = ?", (card.id,))
-            cursor.execute("DELETE FROM character_relationships WHERE character_id = ?", (card.id,))
-            cursor.execute("DELETE FROM character_slots WHERE character_id = ?", (card.id,))
-            
-            # 插入列表字段
-            list_fields = [
-                ("abilities", card.abilities),
-                ("knowledge_scope", card.knowledge_scope),
-                ("unacceptable_actions", card.unacceptable_actions),
-                ("skill_ids", card.skill_ids),
-            ]
-            
-            for field_name, items in list_fields:
-                for idx, item in enumerate(items):
-                    cursor.execute("""
-                        INSERT INTO character_lists (character_id, field_name, item_order, item_value)
-                        VALUES (?, ?, ?, ?)
-                    """, (card.id, field_name, idx, item))
-            
-            # 插入关系数据
-            for target, rel_type in card.relationship_vector:
-                cursor.execute("""
-                    INSERT OR REPLACE INTO character_relationships (character_id, target_entity, relationship_type)
-                    VALUES (?, ?, ?)
-                """, (card.id, target, rel_type))
-            
-            # 插入栏位数据；历史名"主线栏"统一写为"伴侣栏"
-            for slot_name, slot_types in card.slot_keys.items():
-                normalized_slot = "伴侣栏" if slot_name == "主线栏" else slot_name
-                for slot_type in slot_types:
-                    cursor.execute("""
-                        INSERT OR REPLACE INTO character_slots (character_id, slot_name, slot_type)
-                        VALUES (?, ?, ?)
-                    """, (card.id, normalized_slot, slot_type))
-
+            conn.execute("BEGIN IMMEDIATE")
+            request_key = record.get("idempotency_key")
+            request_json = json.dumps(dict(record), ensure_ascii=False, sort_keys=True, allow_nan=False)
+            replay = conn.execute("SELECT request_json,character_id,revision FROM character_write_requests WHERE request_key=?", (request_key,)).fetchone() if request_key else None
+            if replay:
+                if replay["request_json"] != request_json:
+                    raise DatabaseError("幂等键冲突")
+                row = conn.execute("SELECT record_json FROM character_record_snapshots WHERE character_id=? AND revision=?", (replay["character_id"], replay["revision"])).fetchone()
+                if row is None:
+                    raise DatabaseError("幂等记录已删除，不能重新创建")
+                result = json.loads(row[0])
+            else:
+                result = _write_record(conn,record,source_type)
+                if request_key:
+                    conn.execute("INSERT INTO character_write_requests VALUES (?,?,?,?)", (request_key,request_json,result["id"],result["revision"]))
             conn.commit()
-        except sqlite3.Error as e:
+        except sqlite3.Error as exc:
             conn.rollback()
-            raise DatabaseError(f"插入角色失败: {e}") from e
+            raise DatabaseError(f"保存角色失败: {exc}") from exc
+        except Exception:
+            conn.rollback()
+            raise
         finally:
             conn.close()
+    _invalidate_cache()
+    return result
+
+
+def insert_character(card: CharacterCard, source_type: str = "builtin") -> None:
+    save_character_record(asdict(card),source_type)
 
 
 def insert_characters_batch(cards: Iterable[CharacterCard], source_type: str = "builtin") -> int:
-    """批量插入角色到数据库"""
     count = 0
     with _LOCK:
         conn = get_connection()
         try:
-            cursor = conn.cursor()
-            
+            conn.execute("BEGIN IMMEDIATE")
             for card in cards:
-                # 插入主表
-                cursor.execute("""
-                    INSERT OR REPLACE INTO characters (
-                        id, role, name, work, archetype, desire, fear, voice, background,
-                        source, gender, original_position, source_medium, source_region,
-                        distill_level, source_type, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                """, (
-                    card.id, card.role, card.name, card.work, card.archetype,
-                    card.desire, card.fear, card.voice, card.background,
-                    card.source, card.gender, card.original_position,
-                    card.source_medium, card.source_region, card.distill_level,
-                    source_type
-                ))
-                
-                # 删除旧数据（如果存在）
-                cursor.execute("DELETE FROM character_lists WHERE character_id = ?", (card.id,))
-                cursor.execute("DELETE FROM character_relationships WHERE character_id = ?", (card.id,))
-                cursor.execute("DELETE FROM character_slots WHERE character_id = ?", (card.id,))
-                
-                # 插入列表字段
-                list_fields = [
-                    ("abilities", card.abilities),
-                    ("knowledge_scope", card.knowledge_scope),
-                    ("unacceptable_actions", card.unacceptable_actions),
-                    ("skill_ids", card.skill_ids),
-                ]
-                
-                for field_name, items in list_fields:
-                    for idx, item in enumerate(items):
-                        cursor.execute("""
-                            INSERT INTO character_lists (character_id, field_name, item_order, item_value)
-                            VALUES (?, ?, ?, ?)
-                        """, (card.id, field_name, idx, item))
-                
-                # 插入关系数据
-                for target, rel_type in card.relationship_vector:
-                    cursor.execute("""
-                        INSERT OR REPLACE INTO character_relationships (character_id, target_entity, relationship_type)
-                        VALUES (?, ?, ?)
-                    """, (card.id, target, rel_type))
-                
-                # 插入栏位数据；历史名"主线栏"统一写为"伴侣栏"
-                for slot_name, slot_types in card.slot_keys.items():
-                    normalized_slot = "伴侣栏" if slot_name == "主线栏" else slot_name
-                    for slot_type in slot_types:
-                        cursor.execute("""
-                            INSERT OR REPLACE INTO character_slots (character_id, slot_name, slot_type)
-                            VALUES (?, ?, ?)
-                        """, (card.id, normalized_slot, slot_type))
-
+                _write_record(conn,asdict(card),source_type)
                 count += 1
-            
             conn.commit()
-            return count
-        except sqlite3.Error as e:
+        except Exception:
             conn.rollback()
-            raise DatabaseError(f"批量插入角色失败: {e}") from e
+            raise
         finally:
             conn.close()
+    _invalidate_cache()
+    return count
+
+
+def get_character_record(character_id: str, revision: int | None = None) -> dict[str, Any] | None:
+    conn = get_connection()
+    try:
+        sql = "SELECT s.record_json FROM character_record_snapshots s JOIN characters c ON c.id=s.character_id WHERE c.id=?"
+        params = [character_id]
+        if revision is None:
+            sql += " AND c.is_active=1 ORDER BY s.revision DESC LIMIT 1"
+        else:
+            sql += " AND s.revision=?"
+            params.append(revision)
+        row = conn.execute(sql,params).fetchone()
+        if row:
+            return json.loads(row[0])
+    finally:
+        conn.close()
+    if revision is not None:
+        return None
+    card = _get_legacy_character_by_id(character_id)
+    return asdict(card) if card else None
+
+
+def get_character_source_type(character_id: str) -> str | None:
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT source_type FROM characters WHERE id=? AND is_active=1",(character_id,)).fetchone()
+        return row[0] if row else None
+    finally:
+        conn.close()
 
 
 def get_character_by_id(character_id: str) -> CharacterCard | None:
+    record = get_character_record(character_id)
+    return CharacterCard.from_record(record) if record is not None else None
+
+
+def _get_legacy_character_by_id(character_id: str) -> CharacterCard | None:
     """根据ID获取角色"""
     conn = get_connection()
     try:
@@ -391,6 +402,8 @@ def get_character_by_id(character_id: str) -> CharacterCard | None:
             slot_keys[slot_name] = slot_keys[slot_name] + (slot_type,)
         card_data["slot_keys"] = slot_keys
         
+        for item in cursor.execute("SELECT field_name,field_data FROM character_semantic_fields WHERE character_id=?",(character_id,)):
+            card_data[item["field_name"]] = json.loads(item["field_data"])
         return CharacterCard.from_record(card_data)
     finally:
         conn.close()
@@ -477,104 +490,15 @@ def get_all_characters() -> list[CharacterCard]:
 
 
 def update_character(character_id: str, updates: Mapping[str, Any]) -> bool:
-    """更新角色信息"""
-    with _LOCK:
-        conn = get_connection()
-        try:
-            cursor = conn.cursor()
-            
-            # 检查角色是否存在
-            cursor.execute("SELECT id FROM characters WHERE id = ?", (character_id,))
-            if not cursor.fetchone():
-                return False
-            
-            # 构建更新语句
-            allowed_fields = [
-                "role", "name", "work", "archetype", "desire", "fear", "voice",
-                "background", "source", "gender", "original_position", "source_medium",
-                "source_region", "distill_level"
-            ]
-            
-            set_clauses = []
-            values = []
-            
-            for field in allowed_fields:
-                if field in updates:
-                    set_clauses.append(f"{field} = ?")
-                    values.append(updates[field])
-            
-            if set_clauses:
-                set_clauses.append("updated_at = CURRENT_TIMESTAMP")
-                values.append(character_id)
-                
-                sql = f"UPDATE characters SET {', '.join(set_clauses)} WHERE id = ?"
-                cursor.execute(sql, values)
-            
-            # 更新所有列表字段；兼容 list/tuple/逗号分隔字符串。
-            list_fields = ("abilities", "knowledge_scope", "unacceptable_actions", "skill_ids")
-            for field_name in list_fields:
-                if field_name not in updates:
-                    continue
-                value = updates[field_name]
-                if isinstance(value, str):
-                    items = [item.strip() for item in value.replace("，", ",").split(",") if item.strip()]
-                elif isinstance(value, (list, tuple, set)):
-                    items = [str(item).strip() for item in value if str(item).strip()]
-                else:
-                    items = []
-                cursor.execute("DELETE FROM character_lists WHERE character_id = ? AND field_name = ?",
-                               (character_id, field_name))
-                for idx, item in enumerate(items):
-                    cursor.execute("""
-                        INSERT INTO character_lists (character_id, field_name, item_order, item_value)
-                        VALUES (?, ?, ?, ?)
-                    """, (character_id, field_name, idx, item))
-
-            # 更新关系数据；Mapping 是最常见的 API 形态，不能直接迭代键名。
-            if "relationship_vector" in updates:
-                relation = updates["relationship_vector"]
-                if isinstance(relation, Mapping):
-                    pairs = relation.items()
-                elif isinstance(relation, (list, tuple, set)):
-                    pairs = (item for item in relation
-                             if isinstance(item, (list, tuple)) and len(item) >= 2)
-                else:
-                    pairs = ()
-                cursor.execute("DELETE FROM character_relationships WHERE character_id = ?", (character_id,))
-                for pair in pairs:
-                    target, rel_type = str(pair[0]).strip(), str(pair[1]).strip()
-                    if not target or not rel_type:
-                        continue
-                    cursor.execute("""
-                        INSERT INTO character_relationships (character_id, target_entity, relationship_type)
-                        VALUES (?, ?, ?)
-                    """, (character_id, target, rel_type))
-
-            # 更新栏位数据；主线栏历史别名统一为伴侣栏，兼容字符串/数组。
-            if "slot_keys" in updates:
-                slot_keys = updates["slot_keys"] if isinstance(updates["slot_keys"], Mapping) else {}
-                cursor.execute("DELETE FROM character_slots WHERE character_id = ?", (character_id,))
-                for slot_name, slot_types in slot_keys.items():
-                    normalized_slot = "伴侣栏" if str(slot_name).strip() == "主线栏" else str(slot_name).strip()
-                    if isinstance(slot_types, str):
-                        values = [item.strip() for item in slot_types.replace("，", ",").split(",") if item.strip()]
-                    elif isinstance(slot_types, (list, tuple, set)):
-                        values = [str(item).strip() for item in slot_types if str(item).strip()]
-                    else:
-                        values = []
-                    for slot_type in values:
-                        cursor.execute("""
-                            INSERT INTO character_slots (character_id, slot_name, slot_type)
-                            VALUES (?, ?, ?)
-                        """, (character_id, normalized_slot, slot_type))
-            
-            conn.commit()
-            return True
-        except sqlite3.Error as e:
-            conn.rollback()
-            raise DatabaseError(f"更新角色失败: {e}") from e
-        finally:
-            conn.close()
+    record = get_character_record(character_id)
+    if record is None:
+        return False
+    expected = record.get("revision")
+    record.update(updates)
+    record["id"] = character_id
+    record.setdefault("base_revision", expected)
+    save_character_record(record, get_character_source_type(character_id) or "user")
+    return True
 
 
 def delete_character(character_id: str, soft_delete: bool = True) -> bool:
@@ -598,7 +522,9 @@ def delete_character(character_id: str, soft_delete: bool = True) -> bool:
                 cursor.execute("DELETE FROM characters WHERE id = ?", (character_id,))
             
             conn.commit()
-            return cursor.rowcount > 0
+            removed = cursor.rowcount > 0
+            _invalidate_cache()
+            return removed
         except sqlite3.Error as e:
             conn.rollback()
             raise DatabaseError(f"删除角色失败: {e}") from e
@@ -693,52 +619,26 @@ def get_character_stats() -> dict[str, Any]:
 
 
 def migrate_from_json() -> dict[str, Any]:
-    """从JSON文件迁移数据到数据库"""
+    """从JSON文件迁移用户自有数据到数据库。
+
+    v3.0.0 预置退役后仅迁移用户显式放置的卡（characters/user 与 overrides）；
+    不再扫描任何内置目录，手动调用也不可能带回预置内容。
+    """
     results = {
-        "builtin_pool": 0,
-        "builtin_files": 0,
         "user_cards": 0,
         "override_cards": 0,
         "errors": []
     }
-    
+
     try:
-        # 1. 迁移character_pools.json
-        from core.engine.catalog import load_character_pool
-        builtin_cards = load_character_pool()
-        insert_characters_batch(builtin_cards, source_type="builtin")
-        results["builtin_pool"] = len(builtin_cards)
-        
-        # 2. 迁移data/characters/builtin/目录
-        builtin_dir = PROJECT_DATA_DIR / "characters" / "builtin"
-        if builtin_dir.is_dir():
-            for json_file in builtin_dir.glob("**/*.json"):
-                try:
-                    with open(json_file, encoding="utf-8") as f:
-                        data = json.load(f)
-                    
-                    if isinstance(data, dict) and "characters" in data:
-                        # 处理包装格式
-                        for char_data in data["characters"]:
-                            card = CharacterCard.from_record(char_data)
-                            insert_character(card, source_type="builtin")
-                            results["builtin_files"] += 1
-                    elif isinstance(data, dict) and "role" in data:
-                        # 单个角色格式
-                        card = CharacterCard.from_record(data)
-                        insert_character(card, source_type="builtin")
-                        results["builtin_files"] += 1
-                except Exception as e:
-                    results["errors"].append(f"处理文件 {json_file} 失败: {str(e)}")
-        
-        # 3. 迁移用户卡目录
+        # 1. 迁移用户卡目录
         user_dir = PROJECT_DATA_DIR / "characters" / "user"
         if user_dir.is_dir():
             for json_file in user_dir.glob("*.json"):
                 try:
                     with open(json_file, encoding="utf-8") as f:
                         data = json.load(f)
-                    
+
                     if isinstance(data, dict) and "role" in data:
                         card = CharacterCard.from_record(data)
                         insert_character(card, source_type="user")
@@ -746,7 +646,7 @@ def migrate_from_json() -> dict[str, Any]:
                 except Exception as e:
                     results["errors"].append(f"处理用户卡 {json_file} 失败: {str(e)}")
         
-        # 4. 迁移替换卡目录
+        # 2. 迁移替换卡目录
         overrides_dir = user_dir / "overrides"
         if overrides_dir.is_dir():
             for json_file in overrides_dir.glob("*.json"):
@@ -767,35 +667,9 @@ def migrate_from_json() -> dict[str, Any]:
         return results
 
 
-# 初始化数据库
 def ensure_database() -> None:
-    """确保数据库已初始化，并在空库时安全迁移 JSON 角色资产。
-
-    迁移只在数据库没有角色行时执行，避免每次导入模块都用 JSON 覆盖
-    用户编辑过的 SQLite 数据。迁移本身是尽力而为：单个坏 JSON 会由
-    ``migrate_from_json`` 记录到结果中，数据库初始化仍然成功。
-    """
-    try:
-        init_database()
-    except DatabaseError:
-        # 如果初始化失败，尝试创建数据库文件
-        DATABASE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        init_database()
-
-    # 首次启动的空库自动从 JSON 种子填充；已有库绝不重跑，保证安全迁移。
-    try:
-        conn = get_connection()
-        try:
-            row = conn.execute("SELECT COUNT(*) AS count FROM characters").fetchone()
-            has_characters = bool(row and int(row["count"] or 0))
-        finally:
-            conn.close()
-        if not has_characters:
-            migrate_from_json()
-    except Exception:
-        # 迁移失败不能阻断服务启动；调用方仍可显式重试迁移。
-        pass
+    """Initialize schema only; an empty database must remain empty."""
+    init_database()
 
 
-# 模块加载时自动初始化
 ensure_database()

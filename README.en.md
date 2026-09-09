@@ -1,116 +1,63 @@
 # Novelborne · 书中织梦
 
-大模型驱动的互动小说世界模拟器：AI 负责叙事表达，代码负责锚点、角色、任务、涟漪、收束力和状态一致性。
+> **v3.0.0 development candidate — not an accepted production release.** Integration is ongoing. A matching version number is not evidence of functional, model-quality, security, or package acceptance.
 
-## Highlights
+Novelborne is an interactive novel simulator: models generate narrative, while code controls character context, source boundaries, tasks, and state commits.
 
-- Enhanced mode for long-running, high-fidelity original-text simulation.
-- Structured blueprint, segment filling, per-slot grading, targeted refill, code assembly, and global prose polish.
-- Six narrative-richness levels; ordinary mode exposes levels 1–2, and level 6 requires Agent generation.
-- Opening distillation runs parallel plot, anchor, work-archive, and character-card extraction.
-- Character state patches require exact evidence from the final narrative before relationship state is updated.
-- Dynamic API concurrency with a hard cap of 10 and graceful queueing under provider limits.
-- BSD 3-Clause licensed source distribution.
+## Documentation
 
-## Modes
+- [Chinese user guide](docs/USER_MANUAL.md)
+- [Code structure & features](docs/CODE_OVERVIEW.md) (Chinese)
+- [中文](README.md)
 
-| Mode | Source | Scope | Character/anchor runtime |
-| --- | --- | --- | --- |
-| Ordinary | Public work archive | Short, focused simulation | Lightweight legacy path |
-| Enhanced | User-supplied complete TXT | Chapter-by-chapter long-running simulation | Full character, anchor, quest, ripple, nemesis, and persistence pipeline |
+## v3 operation and boundaries
 
-## Six narrative-richness levels
+1. **Database-only active character library.** A fresh database starts empty. Legacy JSON, Markdown, and recovery assets are not automatic runtime fallbacks. Existing private files do not prove that characters are present in the active library.
+2. **Unified designer save.** Use the character-library save action and verify the server-confirmed revision. A separate persona save followed by a second character save is no longer the intended workflow. UI integration is still being validated.
+3. **Prepare only means full-book preparation.** Upload a TXT you are entitled to use, verify chapter splitting, configure a model, and submit a `fullbook` preparation job. Follow its state; use cancellation/resume controls when available. Only `READY` means ready. Preparation alone must not create a game session or a played-library entry: prepared and played are different states.
+4. **Reader search needs no model.** Exact and text-fuzzy searches inspect source text independently of model setup. Fuzzy means approximate text matching, not semantic search or AI answers. Open a result to inspect its chapter and highlight.
+5. **Reader interview uses the end of the current chapter.** It is a separate conversation, not a game action or a way to change game resources. It may discuss events within that chapter, so finish reading it first. Missing applicable character data requires preparation; it is not permission to silently run paid extraction.
+6. **Start from this chapter uses its beginning.** Return to setup, review the selected chapter and settings, then create a new session. It must not overwrite the existing game or preload events from later in the chapter.
+7. **Agent-cluster generation is bounded.** Calls, retries, concurrency, deadlines, and budgets are limited. Code-level hard gates still apply; model approval cannot authorize invalid commits. Failed/cancelled work may already have incurred provider charges. Budget accounting is not a guaranteed invoice or currency quote.
 
-1. Light — about 400 characters
-2. Brief — about 650 characters
-3. Standard — about 950 characters
-4. Rich — about 1,350 characters
-5. Long-form — about 1,850 characters; Agent recommended
-6. Epic — about 2,400 characters; Agent required
-
-The levels describe scene richness rather than a promise of exact model output length. The engine uses slot contracts and segment windows, grades each generated slot independently, refills only failed slots, and safely falls back when a provider cannot satisfy a request.
+These descriptions explain the implementation's user-facing boundaries, not a claim that every path has passed end-to-end acceptance. If a control is unavailable or a request fails, preserve the error and task identifier rather than assuming success.
 
 ## Quick start
 
-Requirements: Python 3.10+, Node.js 18+.
+Requirements: Python 3.10+, Node.js 18+. Install Python dependencies yourself (the script below only checks and prints a reminder — it never installs anything):
 
 ```bash
 pip install -r requirements.txt
+```
+
+Then build and start in one step (on Windows you can also double-click `start.bat`):
+
+```bash
+python setup_and_run.py
+```
+
+The script checks the environment, builds the frontend, and starts the service at <http://127.0.0.1:21560/> (it falls back to an adjacent port if 21560 is busy). To run the steps manually instead:
+
+```bash
 cd frontend
-npm install
+npm ci
 npm run build
 cd ..
-python run_app.py
+python run_app.py --host 127.0.0.1 --port 21560
 ```
 
-Open <http://127.0.0.1:21560>, configure an OpenAI-compatible provider and API key, then choose a mode and start a session.
+Open <http://127.0.0.1:21560>. Configure an OpenAI-compatible model for generation/preparation/interviews. Send API keys in request bodies, never URL query strings; do not include them in screenshots, logs, exports, or bug reports. Reader text search requires no API key.
 
-API keys are held in process memory only. They are not written to state, saves, logs, databases, or release packages.
+## Data, LAN, and upgrades
 
-## LAN access and QR codes
+Runtime data uses the selected data directory, normally `var/`. Stop the service and back up the database, sessions, and uploads before migration. Keep legacy assets quarantined in a private backup location; do not automatically restore them into the active library or run force-overwrite recovery scripts.
 
-The source launcher listens on `0.0.0.0` by default. On the same Wi-Fi network, click the phone icon in the top bar to view available adapter addresses and generate a session-preserving QR code.
+For trusted LAN use, launch with `--host 0.0.0.0`, allow the selected firewall port, and use the correct adapter address. Session-bearing URLs and QR codes are private. Do not expose the service directly to the public Internet.
 
-```bash
-python run_app.py --host 0.0.0.0 --port 21560
-python run_app.py --host 127.0.0.1 --port 21560  # local-only
-```
+## Candidate acceptance
 
-If a phone cannot connect:
+No verified screenshots are included here; no mockup is presented as a screenshot. Windows build recipes require fresh builds, clean-machine smoke tests, functional acceptance, and artifact privacy audits before distribution. No Android APK is claimed as verified.
 
-- verify both devices are on the same Wi-Fi;
-- do not use `--host 127.0.0.1` for LAN access;
-- in the windowed build, do not use `--no-lan`;
-- allow the executable and selected port through Windows Firewall;
-- select the actual Wi-Fi adapter when multiple interfaces are shown.
+Never distribute runtime databases, uploads, private recovery packages, credentials, or copyrighted manuscripts. A private working tree is not a sanitized public source package.
 
-The QR URL carries the server's original session identifier, so scanning it restores the same session instead of opening a new one.
-
-## Windows builds
-
-```bash
-pip install pyinstaller pywebview pythonnet clr-loader
-build\build_windows.bat
-build\build_windows_windowed.bat
-```
-
-Distribute the complete output directories:
-
-- `dist\FateEngine\` — browser/Web build;
-- `dist\网页版构建\` — desktop window build.
-
-Do not distribute only the executable. Runtime data is created in an adjacent `var/` directory.
-
-## Testing
-
-```bash
-python -m unittest discover -s . -p "test_*.py"
-cd frontend
-npm run build
-```
-
-The repository includes deterministic unit tests, strengthened FakeClient playtests, HTTP playtest tools, and release build recipes.
-
-## Architecture
-
-```text
-launcher
-  -> core.server              FastAPI routes and static hosting
-      -> core.app             session and round orchestration
-          -> core.services    orchestration facades
-              -> core.engine  deterministic mechanisms
-                  -> assets    public prompts, rules, data, and richness templates
-```
-
-Important public service facades include opening distillation, turn pipeline, option generation, character state patches, and directive/cheat-code registration.
-
-## Privacy and copyright boundary
-
-- Runtime data, uploaded TXT files, saves, logs, databases, and private recovery packages are excluded from source and release artifacts.
-- User-provided copyrighted manuscripts used for local validation remain on the user's machine and are never included in this repository or its releases.
-- Do not publish API keys, session QR codes, or session-bearing URLs.
-- Public examples and static assets must remain redistributable.
-
-## License
-
-Novelborne is released under the [BSD 3-Clause License](LICENSE).
+Licensed under the [GNU AGPL-3.0](LICENSE) (AGPL-3.0-or-later). AGPL covers this project's source code and built-in assets only, including its network-interaction source-sharing obligation (Section 13) when the software is offered over a network; user-imported manuscripts, characters, and generated content remain the property of their owners and are not licensed for redistribution.

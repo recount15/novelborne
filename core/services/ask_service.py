@@ -103,23 +103,34 @@ def handle_ask(state: dict[str, Any], question: str,
     # 作弊码专属通路：只有 ask 通路允许触发特权，其余输入一律按普通问答处理。
     # 状态修改（武装/消耗/激活/增补）后立即落盘：刷新页面或重启服务按最新存档
     # 回填 state，三愿计数与通路状态不会回退（按局绑定、读档不刷新）。
-    def _persist_cheat_state() -> None:
+    def _persist_cheat_state() -> str | None:
+        """落盘最新状态；失败返回错误描述（不吞掉），由响应携带警告痕迹。"""
         try:
             engine.persistence.save_state(
                 state, save_id="latest", root=fe.WRITABLE_DIR,
                 start_params=state.get("start_params"),
                 session_id=session_id,
             )
-        except Exception:  # noqa: BLE001  落盘失败不阻断交互，下回合仍会落盘
-            pass
+        except Exception as exc:  # noqa: BLE001  不阻断交互，但错误必须可见（D10）
+            return f"{type(exc).__name__}: {exc}"
+        return None
+
+    def _persisted(result: dict[str, Any]) -> dict[str, Any]:
+        """落盘并把失败痕迹附进响应：answer 追加警告，persist_error 供前端提示。"""
+        error = _persist_cheat_state()
+        if error:
+            result["persist_error"] = error
+            result["answer"] = (
+                str(result.get("answer") or "")
+                + f"\n[警告] 状态落盘失败（{error[:160]}）：刷新或重启后本次变更可能回退，请尽快手动存档。")
+        return result
 
     if engine.cheat_code.is_relay_code(question):
         if engine.cheat_code.is_relay_active(state):
             return {"answer": "通路已处于接通状态：本局无法关闭。", "relay_activated": True}
         # 不可逆操作必须先确认：接通后无法撤销，仅对本局生效。
         engine.cheat_code.relay_request_confirm(state)
-        _persist_cheat_state()
-        return {
+        return _persisted({
             "answer": (
                 "检测到永久通路指令。接通前请确认：\n"
                 "· 该通路仅对本局生效，一经接通无法撤销、无法关闭；\n"
@@ -134,12 +145,11 @@ def handle_ask(state: dict[str, Any], question: str,
                 "回复「确认」接通，回复「取消」放弃。"
             ),
             "relay_confirm_pending": True,
-        }
+        })
     if engine.cheat_code.is_relay_confirm_pending(state):
         if engine.cheat_code.is_confirm_text(question):
             activation = directives_service.activate_relay(state)
-            _persist_cheat_state()
-            return {
+            return _persisted({
                 "answer": (
                     "通路已接通：本局问答框永久升级为「增补通道」。\n"
                     "· 此后在此输入的每一句话都会成为代码级注入的「玩家增补铁律」，"
@@ -153,22 +163,20 @@ def handle_ask(state: dict[str, Any], question: str,
                 ),
                 "relay_activated": True,
                 "anchors_shattered_from": activation.get("anchors_shattered_from", 0),
-            }
+            })
         if engine.cheat_code.is_cancel_text(question):
             engine.cheat_code.relay_cancel_confirm(state)
-            _persist_cheat_state()
-            return {"answer": "已取消：永久通路保持关闭。", "relay_confirm_pending": False}
+            return _persisted({"answer": "已取消：永久通路保持关闭。", "relay_confirm_pending": False})
         return {
             "answer": "永久通路等待确认：该操作不可撤销且仅对本局生效。回复「确认」接通，或「取消」放弃。",
             "relay_confirm_pending": True,
         }
     if engine.cheat_code.is_arm_code(question):
         engine.cheat_code.arm(state)
-        _persist_cheat_state()
         remaining = engine.cheat_code.remaining_wishes(state)
         if remaining <= 0:
-            return {"answer": "三愿已全部耗尽：本局无法再许愿。", "wish_armed": False}
-        return {
+            return _persisted({"answer": "三愿已全部耗尽：本局无法再许愿。", "wish_armed": False})
+        return _persisted({
             "answer": (
                 f"三愿通路已开启（剩余 {remaining} 次）：请直接说出你的愿望。\n"
                 "· 愿望将作为「外部设定铁律」实现：修改世界观与剧情，无代价、"
@@ -178,7 +186,7 @@ def handle_ask(state: dict[str, Any], question: str,
                 "· 每次输入一个愿望，实现即消耗一次次数。"
             ),
             "wish_armed": True, "wish_remaining": remaining,
-        }
+        })
     if engine.cheat_code.is_armed(state):
         # M5：三愿改走结构化铁律账本。原子性由 directives_service 保证：
         # 机制护栏/登记（或兜底登记）成功后才 consume；任何客户端错误都不扣费。
@@ -199,12 +207,11 @@ def handle_ask(state: dict[str, Any], question: str,
         history = state.setdefault("history", [])
         if isinstance(history, list):
             history.append({"role": "assistant", "content": "[外部设定铁律] " + granted})
-        _persist_cheat_state()
         notice = f"[铁律已生效｜剩余愿望 {remaining} 次]"
         if rejected:
             notice += "\n[机制护栏] 以下诉求试图修改游戏机制，已被剥离未生效：" + "；".join(rejected)
-        return {"answer": notice + "\n\n" + granted, "wish_granted": True,
-                "wish_remaining": remaining, "mechanism_rejected": rejected}
+        return _persisted({"answer": notice + "\n\n" + granted, "wish_granted": True,
+                           "wish_remaining": remaining, "mechanism_rejected": rejected})
     # 永久增补通路：激活后问答框不再是规则答疑，而是「玩家增补铁律」通道。
     if engine.cheat_code.is_relay_active(state):
         try:
@@ -218,12 +225,11 @@ def handle_ask(state: dict[str, Any], question: str,
             raise AskUpstreamError(f"增补生成失败：{exc}") from exc
         fact_text = str(result.get("text") or "").strip()
         rejected = list(result.get("rejected") or [])
-        _persist_cheat_state()
         notice = f"[增补铁律已生效｜累计 {len(engine.cheat_code.relay_facts(state))} 条]"
         if rejected:
             notice += "\n[机制护栏] 以下诉求试图修改游戏机制，已被剥离未生效：" + "；".join(rejected)
-        return {"answer": notice + "\n\n" + fact_text, "relay_fact": True,
-                "mechanism_rejected": rejected}
+        return _persisted({"answer": notice + "\n\n" + fact_text, "relay_fact": True,
+                           "mechanism_rejected": rejected})
     enhanced = str(state.get("mode") or "").startswith("强化")
     system_prompt = (
         "你是《书中行》命运引擎的规则问答助手。只依据下列规则文档与当前对局状态"

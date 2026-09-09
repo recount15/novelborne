@@ -1,9 +1,15 @@
 <script setup lang="ts">
-defineProps<{ label: string; tone?: 'accent' | 'ok' | 'warn' | 'danger' }>()
+withDefaults(defineProps<{ label: string; tone?: 'neutral' | 'accent' | 'ok' | 'warn' | 'danger' }>(), { tone: 'accent' })
 </script>
-<template><span class="theme-badge" :class="`theme-badge--${tone || 'accent'}`"><i aria-hidden="true"></i>{{ label }}</span></template>
+
+<template>
+  <span class="theme-badge" :class="`theme-badge--${tone}`">{{ label }}</span>
+</template>
+
 <style scoped>
-.theme-badge { display: inline-flex; align-items: center; gap: 5px; border: 1px solid color-mix(in srgb, var(--fe-accent) 42%, var(--fe-border)); border-radius: 999px; padding: 3px 8px; color: var(--fe-accent); background: color-mix(in srgb, var(--fe-accent-soft) 52%, var(--fe-panel)); font-size: 10px; font-weight: 750; }
-.theme-badge i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 14%, transparent); }
-.theme-badge--ok { color: var(--fe-ok); }.theme-badge--warn { color: var(--fe-warn); }.theme-badge--danger { color: var(--fe-danger); }
+.theme-badge { --badge-tone: var(--fe-accent); display: inline-block; max-width: 100%; border: 0; border-radius: 4px; padding: 3px 8px; color: var(--badge-tone); background: color-mix(in srgb, var(--badge-tone) 8%, var(--fe-panel)); font-family: var(--fe-font-sans); font-size: 12px; font-weight: 600; line-height: 1.5; vertical-align: middle; overflow-wrap: anywhere; }
+.theme-badge--neutral { --badge-tone: var(--fe-ink-2); }
+.theme-badge--ok { --badge-tone: var(--fe-ok); }
+.theme-badge--warn { --badge-tone: var(--fe-warn); }
+.theme-badge--danger { --badge-tone: var(--fe-danger); }
 </style>

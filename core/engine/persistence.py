@@ -7,6 +7,21 @@ sessions/<timestamp>/ 下的可读工作记录。所有写入均使用 UTF-8 和
 from __future__ import annotations
 
 import copy
+from contextvars import ContextVar
+from contextlib import contextmanager
+
+_DEFER_SAVES = ContextVar('novelborne_defer_saves', default=False)
+
+
+@contextmanager
+def defer_candidate_saves():
+    """API streams own the durable boundary; app callbacks only propose saves."""
+    token = _DEFER_SAVES.set(True)
+    try:
+        yield
+    finally:
+        _DEFER_SAVES.reset(token)
+
 import datetime as _datetime
 import json
 import os
@@ -229,16 +244,26 @@ def _scoped_save_id(save_id: Optional[str], session_id: Optional[str]) -> str:
 
 
 def save_state(state: Optional[Mapping[str, Any]], save_id: str = "latest", root: Optional[PathLike] = None,
-               start_params: Optional[Mapping[str, Any]] = None, session_id: Optional[str] = None) -> str:
-    """保存到 ``<root>/saves/<save_id>.json``（兼容镜像）并写入 SQLite，返回写入路径。"""
+               start_params: Optional[Mapping[str, Any]] = None, session_id: Optional[str] = None,
+               request_id: Optional[str] = None, expected_revision: Optional[int] = None) -> str:
+    """Commit SQLite first, then best-effort delivery of the compatibility mirror.
+
+    A failed mirror remains in the durable outbox; it cannot undo a committed save.
+    Request IDs are scoped by session and save; reuse with different facts fails.
+    """
     payload = _snapshot(state, start_params)
     # 自动存档（save_id=latest）按会话隔离文件名：不同会话互不覆盖镜像，
     # 磁盘回填按 save_id 加载不会张冠李戴；手动命名的存档不受影响。
     effective_id = _scoped_save_id(save_id, session_id)
     path = _root(root) / "saves" / f"{_safe_part(effective_id, 'latest')}.json"
-    result = _atomic_json(path, payload)
-    _db_save(payload, effective_id, root, session_id or "legacy")
-    return result
+    if _DEFER_SAVES.get():
+        return str(path)
+    revision = _db_save(payload, effective_id, root, session_id or "legacy",
+                        request_id=request_id, expected_revision=expected_revision)
+    if isinstance(state, dict):
+        state["revision"] = revision
+    flush_outbox(root)
+    return str(path)
 
 
 # ---------------------------------------------------------------------------
@@ -261,7 +286,21 @@ CREATE TABLE IF NOT EXISTS saves (
     chapter    INTEGER NOT NULL DEFAULT 0,
     payload_json TEXT NOT NULL,
     PRIMARY KEY (session_id, save_id)
-)
+);
+CREATE TABLE IF NOT EXISTS save_revisions (
+    session_id TEXT NOT NULL, save_id TEXT NOT NULL, revision INTEGER NOT NULL,
+    PRIMARY KEY(session_id, save_id)
+);
+CREATE TABLE IF NOT EXISTS save_requests (
+    session_id TEXT NOT NULL, save_id TEXT NOT NULL, request_id TEXT NOT NULL,
+    fingerprint TEXT NOT NULL, revision INTEGER NOT NULL,
+    PRIMARY KEY(session_id, save_id, request_id)
+);
+CREATE TABLE IF NOT EXISTS save_outbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL,
+    save_id TEXT NOT NULL, revision INTEGER NOT NULL, payload_json TEXT NOT NULL,
+    delivered INTEGER NOT NULL DEFAULT 0
+);
 """
 
 
@@ -319,12 +358,38 @@ def _metadata(payload: Mapping[str, Any], session_id: str, save_id: str) -> dict
     }
 
 
-def _db_save(payload: Mapping[str, Any], save_id: str, root: Optional[PathLike], session_id: str) -> None:
+class RevisionConflict(ValueError):
+    """The caller's snapshot is stale or a request ID was reused."""
+
+
+def _db_save(payload: Mapping[str, Any], save_id: str, root: Optional[PathLike], session_id: str,
+             *, request_id: Optional[str] = None, expected_revision: Optional[int] = None) -> int:
+    import hashlib
+    payload = copy.deepcopy(dict(payload))
+    canonical = copy.deepcopy(payload)
+    canonical.pop("saved_at", None)
+    canonical.get("state", {}).pop("revision", None)
+    fingerprint = hashlib.sha256(json.dumps(canonical, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
     meta = _metadata(payload, session_id, _safe_part(save_id, "latest"))
-    body = json.dumps(dict(payload), ensure_ascii=False)
     conn = _db_connect(root)
     try:
         with conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if request_id:
+                prior = conn.execute("SELECT fingerprint, revision FROM save_requests WHERE session_id=? AND save_id=? AND request_id=?",
+                                     (session_id, save_id, request_id)).fetchone()
+                if prior:
+                    if prior[0] != fingerprint:
+                        raise RevisionConflict("request ID reused with different state")
+                    return int(prior[1])
+            row = conn.execute("SELECT revision FROM save_revisions WHERE session_id=? AND save_id=?",
+                               (session_id, save_id)).fetchone()
+            current = int(row[0]) if row else 0
+            if expected_revision is not None and expected_revision != current:
+                raise RevisionConflict("stale state revision")
+            revision = current + 1
+            payload.setdefault("state", {})["revision"] = revision
+            body = json.dumps(payload, ensure_ascii=False)
             conn.execute(
                 """
                 INSERT INTO saves (session_id, save_id, saved_at, mode, work, novel, role,
@@ -340,8 +405,39 @@ def _db_save(payload: Mapping[str, Any], save_id: str, root: Optional[PathLike],
                  meta["work"], meta["novel"], meta["role"], meta["persona"],
                  meta["difficulty"], meta["round"], meta["chapter"], body),
             )
+            conn.execute("INSERT INTO save_revisions VALUES (?, ?, ?) ON CONFLICT(session_id,save_id) DO UPDATE SET revision=excluded.revision",
+                         (session_id, save_id, revision))
+            if request_id:
+                conn.execute("INSERT INTO save_requests VALUES (?, ?, ?, ?, ?)",
+                             (session_id, save_id, request_id, fingerprint, revision))
+            conn.execute("INSERT INTO save_outbox(session_id,save_id,revision,payload_json) VALUES (?,?,?,?)",
+                         (session_id, save_id, revision, body))
+        return revision
     finally:
         conn.close()
+
+
+def flush_outbox(root: Optional[PathLike] = None) -> int:
+    """Deliver mirrors in commit order; retain failed delivery for later retries."""
+    delivered = 0
+    conn = None
+    try:
+        conn = _db_connect(root)
+        with conn:
+            conn.execute("BEGIN IMMEDIATE")
+            for ident, save_id, body in conn.execute(
+                    "SELECT id,save_id,payload_json FROM save_outbox WHERE delivered=0 ORDER BY id").fetchall():
+                path = _root(root) / "saves" / f"{_safe_part(save_id, 'latest')}.json"
+                _atomic_json(path, json.loads(body))
+                conn.execute("UPDATE save_outbox SET delivered=1 WHERE id=?", (ident,))
+                delivered += 1
+    except (OSError, sqlite3.Error, ValueError):
+        # SQLite remains authoritative even when a compatibility mirror is unavailable.
+        return 0
+    finally:
+        if conn is not None:
+            conn.close()
+    return delivered
 
 
 def _restore_payload(payload: Mapping[str, Any]) -> dict[str, Any]:

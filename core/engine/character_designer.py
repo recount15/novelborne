@@ -25,7 +25,7 @@ MAX_LIST_ITEMS = 12             # 与 character_library.MAX_LIST_ITEMS 对齐
 # ---------------------------------------------------------------- 第一步：身份
 
 IDENTITY_FIELDS: List[Dict[str, Any]] = [
-    {"id": "name", "label": "角色名", "required": True, "placeholder": "如：李青"},
+    {"id": "name", "label": "角色名", "required": True, "placeholder": "如：沈知行"},
     {"id": "work", "label": "出处作品", "required": False, "placeholder": "如：《示例作品》；原创可留空"},
     {"id": "role_type", "label": "角色定位", "required": False,
      "options": ["主角", "伙伴", "女主", "反派", "配角"],
@@ -37,9 +37,9 @@ IDENTITY_FIELDS: List[Dict[str, Any]] = [
      "options": ["", "主角", "男主", "女主", "配角", "反派"],
      "hint": "数据库字段 original_position：影响宿敌强度 D 的战力推断（反派4/主角3/配角2）"},
     {"id": "archetype", "label": "原型", "required": False,
-     "placeholder": "如：魔道巨擘 / 隐忍复仇者 / 乐天傻瓜"},
+     "placeholder": "如：游历医师 / 隐忍复仇者 / 乐天向导"},
     {"id": "one_line", "label": "一句话概括", "required": False,
-     "placeholder": "如：以永生为唯一目标的五百年老魔"},
+     "placeholder": "如：只想开一间小药铺却总被卷入麻烦的游方医师"},
 ]
 
 # ---------------------------------------------------------------- 第二步：语料分类

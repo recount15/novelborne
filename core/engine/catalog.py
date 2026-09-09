@@ -294,29 +294,20 @@ def _builtin_character_rows(directory: Path | None = None) -> list[Mapping[str, 
     return rows
 
 
-def load_character_pool(path: str | Path = CHARACTERS_PATH) -> tuple[CharacterCard, ...]:
-    """加载角色卡目录，丢弃非对象记录并按 id 去重、稳定排序。
+def load_character_pool(path: str | Path | None = None) -> tuple[CharacterCard, ...]:
+    """Runtime is database-only; the legacy path argument is ignored."""
+    from core.engine.character_db import get_all_characters
+    return tuple(get_all_characters())
 
-    统一数据库优先：首先尝试从SQLite数据库加载，如果数据库不可用则回退到JSON文件加载。
-    这是所有角色数据访问的统一入口。
-    """
-    # 统一数据库优先
-    try:
-        from core.engine.character_db import get_all_characters
-        characters = get_all_characters()
-        if characters:
-            return tuple(characters)
-    except Exception:
-        # 数据库加载失败，记录错误并回退
-        import warnings
-        warnings.warn("数据库加载失败，回退到JSON文件加载")
-    
-    # 回退到JSON文件加载（兼容模式）；索引文件缺失（清库分发态）按空池处理
+
+def load_character_pool_from_json(path: str | Path | None = None) -> tuple[CharacterCard, ...]:
+    """Read only an explicitly supplied import file; never merge bundled presets."""
+    if path is None:
+        return ()
     try:
         rows = _record_list(_load_json(path), ("characters", "items", "entries"), "角色目录")
     except OSError:
         rows = []
-    rows = list(rows) + _builtin_character_rows()
     return _dedupe_sorted(CharacterCard.from_record(row, index) for index, row in enumerate(rows))
 
 

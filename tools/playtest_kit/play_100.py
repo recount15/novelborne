@@ -23,19 +23,22 @@ from __future__ import annotations
 import argparse
 import copy
 import hashlib
+import ipaddress
 import json
 import os
 import re
+import socket
 import sys
 import time
 import traceback
-import urllib.error
 import urllib.parse
-import urllib.request
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
+
+import requests
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_BASE = "http://127.0.0.1:8010"
@@ -315,52 +318,75 @@ def valid_options(value: Any) -> bool:
     return True
 
 
+def checked_base(base: str, *, allow_public: bool) -> str:
+    """出站前校验 base URL：仅 http/https、无 userinfo、拒绝云元数据地址；
+    回环/内网/链路本地始终允许，公网地址仅当 allow_public=True 且 https 时允许。"""
+    cleaned = str(base or "").strip().rstrip("/")
+    parts = urlsplit(cleaned)
+    if parts.scheme not in ("http", "https"):
+        raise ValueError("仅支持 http/https 地址")
+    host = parts.hostname
+    if not host or parts.username or parts.password:
+        raise ValueError("地址缺少主机名或携带了用户名密码")
+    port = parts.port or (443 if parts.scheme == "https" else 80)
+    infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+    for info in infos:
+        address = ipaddress.ip_address(info[4][0])
+        if address == ipaddress.ip_address("169.254.169.254"):
+            raise ValueError("拒绝访问云元数据地址")
+        if address.is_loopback or address.is_private or address.is_link_local:
+            continue
+        if not allow_public:
+            raise ValueError("该出口仅允许本机/内网地址")
+        if parts.scheme != "https":
+            raise ValueError("公网地址必须使用 https")
+    return cleaned
+
+
 def http(base: str, method: str, path: str, body: Any = None, *, timeout: int = 300) -> tuple[int, Any]:
     data = None
     headers: dict[str, str] = {}
     if body is not None:
         data = json.dumps(body, ensure_ascii=False).encode("utf-8")
         headers["Content-Type"] = "application/json"
-    request = urllib.request.Request(base.rstrip("/") + path, data=data, method=method, headers=headers)
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            raw = response.read()
-            try:
-                return response.status, json.loads(raw.decode("utf-8"))
-            except Exception:
-                return response.status, raw.decode("utf-8", "replace")
-    except urllib.error.HTTPError as exc:
-        return exc.code, {"__http_error__": exc.read().decode("utf-8", "replace")[:1200]}
+        base = checked_base(base, allow_public=False)
+        r = requests.request(method, base.rstrip("/") + path, data=data, headers=headers, timeout=timeout)
+        if r.status_code >= 400:
+            return r.status_code, {"__http_error__": r.content.decode("utf-8", "replace")[:1200]}
+        try:
+            return r.status_code, json.loads(r.content.decode("utf-8"))
+        except Exception:
+            return r.status_code, r.content.decode("utf-8", "replace")
     except Exception as exc:  # noqa: BLE001
         return -1, {"__error__": str(exc)[:1200]}
 
 
 def stream(base: str, path: str, body: dict[str, Any], *, timeout: int = 1800) -> tuple[list[dict[str, Any]], dict[str, Any] | None, str | None]:
     data = json.dumps(body, ensure_ascii=False).encode("utf-8")
-    request = urllib.request.Request(base.rstrip("/") + path, data=data, method="POST",
-                                     headers={"Content-Type": "application/json"})
     events: list[dict[str, Any]] = []
     last_state: dict[str, Any] | None = None
     error: str | None = None
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            for raw_line in response:
-                line = raw_line.decode("utf-8", "replace").strip()
-                if not line:
-                    continue
-                try:
-                    event = json.loads(line)
-                except Exception:
-                    continue
-                events.append(event)
-                if event.get("type") == "error":
-                    error = str((event.get("data") or {}).get("message") or "未知错误")[:1200]
-                if event.get("type") == "state":
-                    state = (event.get("data") or {}).get("state")
-                    if isinstance(state, dict):
-                        last_state = state
-    except urllib.error.HTTPError as exc:
-        error = exc.read().decode("utf-8", "replace")[:1200]
+        base = checked_base(base, allow_public=False)
+        r = requests.post(base.rstrip("/") + path, data=data,
+                          headers={"Content-Type": "application/json"}, stream=True, timeout=timeout)
+        r.raise_for_status()
+        for raw_line in r.iter_lines():
+            line = raw_line.decode("utf-8", "replace").strip() if raw_line else ""
+            if not line:
+                continue
+            try:
+                event = json.loads(line)
+            except Exception:
+                continue
+            events.append(event)
+            if event.get("type") == "error":
+                error = str((event.get("data") or {}).get("message") or "未知错误")[:1200]
+            if event.get("type") == "state":
+                state = (event.get("data") or {}).get("state")
+                if isinstance(state, dict):
+                    last_state = state
     except Exception as exc:  # noqa: BLE001
         error = str(exc)[:1200]
     return events, last_state, error
@@ -377,13 +403,13 @@ def upload_novel(base: str, txt: Path, session_id: str) -> tuple[int, Any]:
         file_bytes,
         f"\r\n--{boundary}--\r\n".encode("utf-8"),
     ]
-    request = urllib.request.Request(base.rstrip("/") + "/api/uploads", data=b"".join(parts), method="POST",
-                                     headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
     try:
-        with urllib.request.urlopen(request, timeout=900) as response:
-            return response.status, json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        return exc.code, {"__http_error__": exc.read().decode("utf-8", "replace")[:1200]}
+        base = checked_base(base, allow_public=False)
+        r = requests.post(base.rstrip("/") + "/api/uploads", data=b"".join(parts),
+                          headers={"Content-Type": f"multipart/form-data; boundary={boundary}"}, timeout=900)
+        if r.status_code >= 400:
+            return r.status_code, {"__http_error__": r.content.decode("utf-8", "replace")[:1200]}
+        return r.status_code, json.loads(r.content.decode("utf-8"))
     except Exception as exc:  # noqa: BLE001
         return -1, {"__error__": str(exc)[:1200]}
 
@@ -407,12 +433,12 @@ def decide(endpoint: str, api_key: str, model: str, options: list[dict[str, Any]
               "只回复一个大写字母，不要解释。\n\n最近剧情：\n" + context[-1400:] +
               "\n\n行动选项：\n" + text)
     body = {"model": model, "messages": [{"role": "user", "content": prompt}], "max_tokens": 10, "temperature": 0.2}
-    request = urllib.request.Request(endpoint.rstrip("/") + "/chat/completions",
-                                     data=json.dumps(body, ensure_ascii=False).encode("utf-8"), method="POST",
-                                     headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"})
     try:
-        with urllib.request.urlopen(request, timeout=120) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        endpoint = checked_base(endpoint, allow_public=True)
+        r = requests.post(endpoint.rstrip("/") + "/chat/completions", json=body,
+                          headers={"Authorization": f"Bearer {api_key}"}, timeout=120)
+        r.raise_for_status()
+        payload = json.loads(r.content.decode("utf-8"))
         content = str(((payload.get("choices") or [{}])[0].get("message") or {}).get("content") or "").upper()
         for letter in re.findall(r"[A-F]", content):
             if any(str(item.get("key")) == letter for item in options):

@@ -194,6 +194,8 @@ export interface StartPayload {
   story_agent_mode: boolean
   golden_finger: string | null
   golden_finger_proposal: Record<string, unknown>
+  /** 推荐金手指的完整规格（含 cost/cooldown/limits）：开局注入用，与推荐列表同源 */
+  golden_finger_spec?: Record<string, string> | null
   persona_preset: string
   persona_custom: string
   persona_upload_id: string | null
@@ -208,8 +210,16 @@ export interface StartPayload {
   protagonist_gender?: 'male' | 'female'
   enable_nemesis: boolean
   nemesis_select: string
+  /** 宿敌可选身体身份姓名：非空直接作为宿敌身份，留空由穿越落定从原著分配 */
+  nemesis_identity: string
   nemesis_upload_id: string | null
   roster_card_ids?: Array<{ slot: string; card_id: string }>
+  /** 开局准备策略：普通=窗口、强化=全书；唯一模式差异，随证据定位选择提交 */
+  preparation_mode?: 'window' | 'fullbook' | null
+  /** 证据定位的章节号（中后章开局时决定准备窗口与角色时点初始化） */
+  target_chapter?: number
+  /** 定位确认结果（select 路由）：时点/知识截止/截点前事实接入开局初始化（T09） */
+  scene_selection?: Record<string, unknown> | null
 }
 
 export interface SaveMeta {
@@ -526,6 +536,94 @@ export interface UserBookChapterInsight {
   chapter_index: number
   anchor: UserBookAnchor | null
   characters: Array<{ name: string; detail?: string }>
+}
+
+/** 原著准备包（window=普通窗口 / fullbook=强化全书），服务端磁盘复验后的投影。 */
+export interface PreparationPackage {
+  book_id?: string
+  mode: 'window' | 'fullbook'
+  preparation_id: string
+  source_hash: string
+  coverage: { expected_blocks: number; verified_blocks: number; complete?: boolean }
+  entities?: unknown[]
+  identity_ready?: boolean
+  identity_report?: unknown
+  coverage_ready?: boolean
+  ready: boolean
+  errors: Array<string | { block_id?: string; error: string }>
+  target_chapter?: number
+  [key: string]: unknown
+}
+
+/** 证据定位候选：excerpt 必须是原文精确子串（服务端校验过坐标）。 */
+export interface LocatorCandidate {
+  id: string
+  chapter_no: number
+  block_id: string
+  excerpt: string
+  /** 展示用截断（服务端显式上限 + '…'）；excerpt 本体保持完整供确认校验。 */
+  excerpt_display: string
+  /** 证据原文总字符数（配合 excerpt_display 显示「共 N 字」）。 */
+  excerpt_total: number
+  start: number
+  end: number
+  source_hash: string
+  timepoints: Array<'before' | 'during' | 'after'>
+  match: 'exact' | 'keywords' | 'semantic'
+  ambiguous: boolean
+  requires_confirmation: boolean
+  semantic_verified: boolean
+  during_offset?: number
+  score?: number
+  reason?: string
+  [key: string]: unknown
+}
+
+/** locate/select 确认结果：服务端 select_scene 投影（无 book_id/selected 字段）。 */
+export interface LocateSelectResult {
+  id: string
+  timepoint: 'before' | 'during' | 'after'
+  evidence: {
+    chapter_no: number
+    block_id: string
+    start: number
+    end: number
+    excerpt: string
+    source_hash: string
+    during_offset?: number
+  }
+  candidate: LocatorCandidate
+  temporal_precision: 'event_boundary' | 'conservative'
+  knowledge_cutoff: { chapter_no: number; offset: number }
+  initial_facts: unknown[]
+  initialization_policy: string
+  initial_state?: Record<string, unknown> | null
+  [key: string]: unknown
+}
+
+export interface PlayableBook {
+  book_id: string
+  title: string
+  book_dir: string
+  mode: 'window' | 'fullbook'
+  preparation_id: string
+  source_hash: string
+  played: boolean
+  ready: boolean
+  coverage: { expected_blocks: number; verified_blocks: number; complete?: boolean }
+  [key: string]: unknown
+}
+
+/** 愿望/增补兑现状态（服务端 wish_effects 投影；一次铁律一行）。 */
+export interface WishEffectRow {
+  directive_id?: number | string
+  kind?: string
+  scope?: string
+  affected?: string[]
+  fact?: string
+  round?: number
+  characters_touched?: string[]
+  [key: string]: unknown
 }
 
 export interface NovelChapter {

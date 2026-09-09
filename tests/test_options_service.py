@@ -202,14 +202,15 @@ class TestGradeWiring(unittest.TestCase):
             "先撤回茶棚再图后计（后果：d）",
         ])
         sanitized = options_service._sanitize_option_items(items)
-        self.assertGreaterEqual(len(sanitized), options_service.MIN_AI_OPTIONS)
+        # 6 条中 1 条判重、1 条 AI 来源措辞被剔除，清洗器保留 4 条合法文本
+        self.assertEqual(len(sanitized), 4)
         keys = [item["key"] for item in sanitized]
         self.assertEqual(keys, list("ABCD")[: len(keys)])
         self.assertTrue(all("金手指）" not in item["text"] for item in sanitized))
         self.assertTrue(all("AI" not in item["text"] for item in sanitized))
 
     def test_too_few_valid_items_falls_to_none_not_template(self):
-        # 6 条里 4 条两两判重 → 清洗后仅 3 条 < MIN_AI_OPTIONS：AI-only 兜底为空。
+        # 6 条里 4 条两两判重 → 清洗后不足 6 条不得成榜：AI-only 兜底为空。
         dup_heavy = ('{"options": ['
                      '"推演北墙裂痕的下一步甲（后果：a）",'
                      '"推演北墙裂痕的下一步乙（后果：a）",'

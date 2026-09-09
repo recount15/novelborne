@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import re
 from typing import Any, Callable, Mapping, Optional, Sequence
 
 from core.engine.distill import distill_model
@@ -15,6 +16,52 @@ Model = Callable[[str], Any]
 #: 单条回复字数窗口
 CHAT_MIN_LENGTH = 50
 CHAT_MAX_LENGTH = 150
+
+#: 回忆/转述等非在场提及标记：句内含任一标记时，该句对在场资格无效。
+_RECOLLECTION_MARKERS = ("回忆", "想起", "记起", "梦中", "往事", "当年", "传闻",
+                         "听说", "传言", "转述", "坟前", "灵前", "遗容")
+
+#: 角色状态硬门禁键（character_states 断言）：生死/在场域。
+_PRESENCE_KEYS = ("alive", "生死", "在场", "presence")
+#: 高置信断言值含任一标记 → 判定离场/死亡，无闲聊资格。
+_ABSENCE_TOKENS = ("已死", "死亡", "身亡", "已亡", "离场", "不在场", "已离开", "远在他乡")
+
+
+def present_in_narrative(narrative: str, name: str) -> bool:
+    """名字是否被「当下场景」提及：至少一句提及且该句不含回忆/转述标记。
+
+    仅被回忆、传闻、转述句提到的角色不算在场（D11）。
+    """
+    text = str(narrative or "")
+    if name not in text:
+        return False
+    for sentence in re.split(r"[。！？!?；;\n]", text):
+        if name in sentence and not any(marker in sentence for marker in _RECOLLECTION_MARKERS):
+            return True
+    return False
+
+
+def absent_by_state(state: Mapping[str, Any], name: str) -> bool:
+    """角色状态硬门禁：高置信（≥0.8）生死/在场断言标记死亡或离场 → 无资格。"""
+    char_states = state.get("character_states") if isinstance(state, Mapping) else None
+    entry = char_states.get(name) if isinstance(char_states, Mapping) else None
+    if not isinstance(entry, Mapping):
+        return False
+    for row in entry.get("assertions") or ():
+        if not isinstance(row, Mapping):
+            continue
+        if str(row.get("key") or "").strip() not in _PRESENCE_KEYS:
+            continue
+        try:
+            confidence = float(row.get("confidence") or 0)
+        except (TypeError, ValueError):
+            confidence = 0.0
+        if confidence < 0.8:
+            continue
+        value = str(row.get("value") or "")
+        if any(token in value for token in _ABSENCE_TOKENS):
+            return True
+    return False
 
 #: 轻量质量门规则关键词
 FORBIDDEN_ACTIONS = (
@@ -59,8 +106,24 @@ def get_roster(state: Mapping[str, Any]) -> list[dict[str, Any]]:
 
     # active_members 在回合推进时才写入：开局阶段（或角色尚未入戏时）
     # 退回 companions + heroines 池，保证下拉框开局即可见。
-    if not active_members:
+    if "active_members" not in state:
         active_members = list(pool.keys())
+
+    # P4：合并场景 NPC 名单（state["scene_participants"]，由回合提交处按
+    # 「本章锚点人物 ∩ 最终正文当下场景提及」写入）。NPC 无自选卡，voice/
+    # desire 留空，由提示词回退为普通语气；合并端再执行一次生死/在场硬门禁
+    # （D11 纵深防御：名单写入端与读取端都不得放入死亡/离场角色）。
+    scene_names = state.get("scene_participants") if isinstance(state, Mapping) else None
+    if isinstance(scene_names, list):
+        merged = list(active_members)
+        seen_names = {str((m.get("name") if isinstance(m, Mapping) else m) or "").strip()
+                      for m in merged}
+        for npc_name in scene_names:
+            text = str(npc_name or "").strip()
+            if text and text not in seen_names and not absent_by_state(state, text):
+                merged.append(text)
+                seen_names.add(text)
+        active_members = merged
 
     roster: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -191,9 +254,9 @@ def generate_reply(character_name: str, player_input: str, state: Mapping[str, A
     recent_summary = ""
     history = state.get("history") if isinstance(state, Mapping) else None
     if isinstance(history, list) and len(history) > 0:
-        last_turn = history[-1]
-        if isinstance(last_turn, Mapping):
-            scene_excerpt = str(last_turn.get("narrative") or "")[:500]
+        last_turn = next((turn for turn in reversed(history)
+                          if isinstance(turn, Mapping) and turn.get("role") == "assistant"), {})
+        scene_excerpt = str(last_turn.get("content") or last_turn.get("narrative") or "")[:500]
     
     # 构造提示词
     prompt = build_chat_prompt(character, player_input, state, scene_excerpt, recent_summary)
@@ -205,9 +268,8 @@ def generate_reply(character_name: str, player_input: str, state: Mapping[str, A
     try:
         from core.engine import parallel as _parallel
         import contextvars as _cv
-        _chat_ctx = _cv.copy_context()
         _chat_jobs = [
-            (lambda: _chat_ctx.run(lambda: str(model_call(prompt) or "").strip()))
+            (lambda ctx=_cv.copy_context(): ctx.run(lambda: str(model_call(prompt) or "").strip()))
             for _ in range(2)
         ]
         _chat_results = _parallel.run_parallel(_chat_jobs, _parallel.PRIORITY_TURN)

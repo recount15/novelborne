@@ -220,7 +220,7 @@ def propose_custom(text: str, world: str = "", persona: str = "", difficulty: st
         "由玩家描述界定，且不得覆盖全局",
         _scaled_cost(f"按世界规则等价代价（难度 D{level} 加权）", gf),
         _scaled_cooldown(cooldown, gf),
-        _scaled_limits("不得突破世界力量上限、不得抹除他人既成事实、效果必须可验证", gf),
+        _scaled_limits("不得抹除既成事实、不得越过世界上限、必须可验证", gf),
         f"适配世界：{world or '待确认'}；性格：{persona or '待确认'}；GF={gf:.2f}",
         source="custom")
     return {"status": "await_confirmation", "attempt": attempt,

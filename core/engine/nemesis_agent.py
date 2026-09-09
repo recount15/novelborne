@@ -22,7 +22,7 @@ from .ripple import difficulty_number
 # 绝不允许进入公开状态的私密键；集成层剥离 + assert_hidden 双重防线。
 PUBLIC_BLOCK_KEYS = ("nemesis_private",)
 
-_PRIVATE_KEY = "nemesis_private"
+_PRIVATE_FIELD = "nemesis_private"
 _SUMMARY_KEY = "nemesis_summary"
 _LOG_LIMIT = 30
 _SUMMARY_WINDOW = 5
@@ -59,12 +59,12 @@ def init_private(state: dict, nemesis_config: Mapping[str, Any] | None = None) -
         "quest": None,  # 任务系统接口预留，由 engine.quest 集成时填充。
         "log": [],
     }
-    state[_PRIVATE_KEY] = private
+    state[_PRIVATE_FIELD] = private
     return private
 
 
 def _private(state: Mapping[str, Any]) -> dict:
-    box = state.get(_PRIVATE_KEY) if isinstance(state, Mapping) else None
+    box = state.get(_PRIVATE_FIELD) if isinstance(state, Mapping) else None
     return box if isinstance(box, dict) else {}
 
 

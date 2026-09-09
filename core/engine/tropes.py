@@ -40,7 +40,6 @@ STYLE_KEYWORDS = {
 DEFAULT_TROPE_FILES = ("tropes_biz.json", "tropes_combat.json", "tropes_life.json",
                        "tropes_mystery.json", "tropes_romance.json")
 
-_TABLE_NAME_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _TRIGGER_SPLIT_PATTERN = re.compile(r"[,，|、]")
 
 
@@ -102,8 +101,10 @@ class TropeStore:
 
     @classmethod
     def from_json(cls, path: str | Path) -> "TropeStore":
-        with open(path, encoding="utf-8") as handle:
-            raw = json.load(handle)
+        target = Path(path)
+        if ".." in target.parts:
+            raise ValueError("套路数据路径不允许包含 ..")
+        raw = json.loads(target.read_text(encoding="utf-8"))
         if isinstance(raw, Mapping):
             raw = raw.get("tropes", raw.get("items", []))
         if not isinstance(raw, list):
@@ -111,16 +112,14 @@ class TropeStore:
         return cls(Trope.from_record(item, i) for i, item in enumerate(raw) if isinstance(item, Mapping))
 
     @classmethod
-    def from_sqlite(cls, path: str | Path, table: str = "tropes") -> "TropeStore":
-        if not _TABLE_NAME_PATTERN.fullmatch(table):
-            raise ValueError("无效的 SQLite 表名")
+    def from_sqlite(cls, path: str | Path) -> "TropeStore":
         connection = sqlite3.connect(str(path))
         try:
             data_cursor = connection.cursor()
-            rows = data_cursor.execute(f'SELECT * FROM "{table}"').fetchall()
+            rows = data_cursor.execute('SELECT * FROM "tropes"').fetchall()
             data_cursor.close()
             info_cursor = connection.cursor()
-            columns = [column[1] for column in info_cursor.execute(f'PRAGMA table_info("{table}")')]
+            columns = [column[1] for column in info_cursor.execute("SELECT * FROM pragma_table_info(?)", ("tropes",))]
             info_cursor.close()
         finally:
             connection.close()

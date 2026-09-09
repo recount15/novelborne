@@ -1,19 +1,22 @@
 # -*- coding: utf-8 -*-
 """真实模型全流程检验 runner（通用多供应商版）：由 tools/playtest_kit 调度。
 
-覆盖：开局→两步确认→选项/自由行动→任务短中长→托管→作弊码→存读档→压缩→导出。
+覆盖：上传原著→全书准备（fullbook，READY 后开局）→开局→两步确认→选项/自由行动→任务短中长→托管→作弊码→存读档→压缩→导出。
 供应商 / 模型 / 思考模式 / base_url 全部由启动配置决定，与主程序同一套
 fate_engine.thinking_kwargs 映射；决策体与剧情引擎分开调用，模拟真实玩家。
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
+import socket
 import time
-import urllib.error
-import urllib.request
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import urlsplit
+
+import requests
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 OUT_DIR = ROOT / "outputs"
@@ -22,33 +25,58 @@ TXT_PATH = Path(os.environ["PLAYTEST_TXT"]) if os.environ.get("PLAYTEST_TXT") el
 REPORT_PATH = OUT_DIR / "playtest_monitor_report.json"
 
 
+def checked_base(base: str, *, allow_public: bool) -> str:
+    """出站前校验 base URL：仅 http/https、无 userinfo、拒绝云元数据地址；
+    回环/内网/链路本地始终允许，公网地址仅当 allow_public=True 且 https 时允许。"""
+    cleaned = str(base or "").strip().rstrip("/")
+    parts = urlsplit(cleaned)
+    if parts.scheme not in ("http", "https"):
+        raise ValueError("仅支持 http/https 地址")
+    host = parts.hostname
+    if not host or parts.username or parts.password:
+        raise ValueError("地址缺少主机名或携带了用户名密码")
+    port = parts.port or (443 if parts.scheme == "https" else 80)
+    infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+    for info in infos:
+        address = ipaddress.ip_address(info[4][0])
+        if address == ipaddress.ip_address("169.254.169.254"):
+            raise ValueError("拒绝访问云元数据地址")
+        if address.is_loopback or address.is_private or address.is_link_local:
+            continue
+        if not allow_public:
+            raise ValueError("该出口仅允许本机/内网地址")
+        if parts.scheme != "https":
+            raise ValueError("公网地址必须使用 https")
+    return cleaned
+
+
 def _resolve_txt(cfg: dict[str, Any] | None = None) -> Path:
-    """解析本轮检验用的原著 TXT 路径：启动配置 > 环境变量 > 默认样本。"""
+    """解析本轮检验用的原著 TXT 路径：启动配置 > 环境变量；缺失给出中文错误。"""
     if cfg:
         p = str(cfg.get("txt_path") or "").strip()
         if p:
             return Path(p)
+    if TXT_PATH is None:
+        raise RuntimeError(
+            "未配置检验用原著 TXT：请设置 PLAYTEST_TXT 环境变量，"
+            "或在检验启动配置中提供 txt_path")
     return TXT_PATH
 
 
 def _http(base: str, method: str, path: str, body: Any = None,
           timeout: int = 300) -> tuple[int, Any]:
-    url = base + path
     data = None
     hdrs: dict[str, str] = {}
     if body is not None:
         data = json.dumps(body, ensure_ascii=False).encode("utf-8")
         hdrs["Content-Type"] = "application/json"
-    req = urllib.request.Request(url, data=data, method=method, headers=hdrs)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            raw = r.read()
-            try:
-                return r.status, json.loads(raw.decode("utf-8"))
-            except Exception:
-                return r.status, raw.decode("utf-8", "replace")
-    except urllib.error.HTTPError as e:
-        return e.code, {"__http_error__": e.read().decode("utf-8", "replace")}
+        base = checked_base(base, allow_public=False)
+        r = requests.request(method, base + path, data=data, headers=hdrs, timeout=timeout)
+        try:
+            return r.status_code, json.loads(r.content.decode("utf-8"))
+        except Exception:
+            return r.status_code, r.content.decode("utf-8", "replace")
     except Exception as e:  # noqa: BLE001
         return -1, {"__error__": str(e)}
 
@@ -56,36 +84,35 @@ def _http(base: str, method: str, path: str, body: Any = None,
 def _stream_events(base: str, path: str, body: dict[str, Any],
                    timeout: int = 1200) -> tuple[list[dict], dict | None, str | None]:
     data = json.dumps(body, ensure_ascii=False).encode("utf-8")
-    req = urllib.request.Request(base + path, data=data, method="POST",
-                                 headers={"Content-Type": "application/json"})
     events: list[dict] = []
     last_state: dict | None = None
     err: str | None = None
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            for line in r:
-                line = line.decode("utf-8", "replace").strip()
-                if not line:
-                    continue
-                try:
-                    ev = json.loads(line)
-                except Exception:
-                    continue
-                events.append(ev)
-                if ev.get("type") == "error":
-                    err = str(ev.get("data", {}).get("message", "未知错误"))
-                if ev.get("type") == "state":
-                    st = ev.get("data", {}).get("state")
-                    if isinstance(st, dict):
-                        last_state = st
-    except urllib.error.HTTPError as e:
-        err = e.read().decode("utf-8", "replace")
+        base = checked_base(base, allow_public=False)
+        r = requests.post(base + path, data=data, headers={"Content-Type": "application/json"},
+                          stream=True, timeout=timeout)
+        r.raise_for_status()
+        for line in r.iter_lines():
+            text_line = line.decode("utf-8", "replace").strip() if line else ""
+            if not text_line:
+                continue
+            try:
+                ev = json.loads(text_line)
+            except Exception:
+                continue
+            events.append(ev)
+            if ev.get("type") == "error":
+                err = str(ev.get("data", {}).get("message", "未知错误"))
+            if ev.get("type") == "state":
+                st = ev.get("data", {}).get("state")
+                if isinstance(st, dict):
+                    last_state = st
     except Exception as e:  # noqa: BLE001
         err = str(e)
     return events, last_state, err
 
 
-def _upload_novel(base: str, txt: Path) -> tuple[str, str]:
+def _upload_novel(base: str, txt: Path) -> tuple[str, str, str]:
     boundary = "----fateplaytest" + str(int(time.time()))
     file_bytes = txt.read_bytes()
     filename = txt.name
@@ -96,12 +123,40 @@ def _upload_novel(base: str, txt: Path) -> tuple[str, str]:
         file_bytes,
         f"\r\n--{boundary}--\r\n".encode(),
     ]
-    req = urllib.request.Request(
-        base + "/api/uploads", data=b"".join(parts), method="POST",
-        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
-    with urllib.request.urlopen(req, timeout=600) as r:
-        resp = json.loads(r.read().decode("utf-8"))
-    return resp["session_id"], resp["upload"]["upload_id"]
+    base = checked_base(base, allow_public=False)
+    r = requests.post(base + "/api/uploads", data=b"".join(parts),
+                      headers={"Content-Type": f"multipart/form-data; boundary={boundary}"}, timeout=600)
+    resp = json.loads(r.content.decode("utf-8"))
+    return resp["session_id"], resp["upload"]["upload_id"], _upload_book_id(resp)
+
+
+def _post_chat_completions(endpoint: str, api_key: str, body: dict[str, Any],
+                           timeout: int = 120) -> dict[str, Any]:
+    endpoint = checked_base(endpoint, allow_public=True)
+    r = requests.post(endpoint + "/chat/completions",
+                      data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+                      headers={"Content-Type": "application/json",
+                               "Authorization": f"Bearer {api_key}"}, timeout=timeout)
+    r.raise_for_status()
+    return json.loads(r.content.decode("utf-8"))
+
+
+def _upload_book_id(resp: dict[str, Any]) -> str:
+    """从上传响应提取 book_id；上传 novel TXT 时服务端已同步切章落盘。"""
+    book_id = str(((resp or {}).get("upload") or {}).get("book_id") or "")
+    if not book_id:
+        raise RuntimeError("上传成功但未返回 book_id（TXT 未切章，无法进行全书准备）")
+    return book_id
+
+
+def _job_id_of(payload: Any) -> str:
+    """准备任务响应的 job_id 双形态：顶层或 ``job`` 包裹。"""
+    if not isinstance(payload, dict):
+        return ""
+    job = payload.get("job")
+    if isinstance(job, dict) and job.get("job_id"):
+        return str(job["job_id"])
+    return str(payload.get("job_id") or "")
 
 
 def last_assistant_text(events: list[dict]) -> str:
@@ -164,15 +219,9 @@ def run(rep, should_stop: Callable[[], bool]) -> None:
         # 不支持该字段的提供商会在服务端报错后自动去掉重试一次。
         if provider == "zhipu":
             body["thinking"] = {"type": "disabled"}
-        url = final_base_url + "/chat/completions"
-        req = urllib.request.Request(
-            url, data=json.dumps(body).encode("utf-8"), method="POST",
-            headers={"Content-Type": "application/json",
-                     "Authorization": f"Bearer {api_key}"})
         for attempt in (0, 1):
             try:
-                with urllib.request.urlopen(req, timeout=120) as r:
-                    resp = json.loads(r.read().decode("utf-8"))
+                resp = _post_chat_completions(final_base_url, api_key, body)
                 content = str((resp.get("choices") or [{}])[0].get("message", {}).get("content", ""))
                 letters = [ch for ch in content.upper() if ch in "ABCDEF"]
                 for letter in letters:
@@ -183,12 +232,12 @@ def run(rep, should_stop: Callable[[], bool]) -> None:
             except Exception as exc:  # noqa: BLE001
                 if attempt == 0 and "thinking" in body:
                     body.pop("thinking")
-                    req = urllib.request.Request(
-                        url, data=json.dumps(body).encode("utf-8"), method="POST",
-                        headers={"Content-Type": "application/json",
-                                 "Authorization": f"Bearer {api_key}"})
                     continue
                 rep.note(f"决策体异常（fallback 首选项）：{exc}")
+        if not options:
+            # 与主程序契约一致：开局/回合后 state 应携带 options；
+            # 空选项说明开局或状态投影异常，显式报错而不是抛 IndexError。
+            raise RuntimeError("本回合无可选项（state.options 为空），无法决策")
         return options[0]["key"], "决策失败默认首项"
 
     def public_clean(state: dict | None, label: str) -> bool:
@@ -224,16 +273,51 @@ def run(rep, should_stop: Callable[[], bool]) -> None:
     if should_stop():
         return
 
-    rep.phase("阶段1", "上传原著与开局")
-    session_id, upload_id = _upload_novel(base, _resolve_txt(cfg))
+    rep.phase("阶段1", "上传原著与全书准备")
+    session_id, upload_id, book_id = _upload_novel(base, _resolve_txt(cfg))
     rep.session_id = session_id
     rep.check("上传TXT:成功", bool(session_id and upload_id), f"session={session_id[:12]}…")
+
+    # 强化开局硬门禁：必须先跑完全书准备（fullbook）并等 READY，
+    # 再携带 book_id + preparation_job_id 开局（与主程序 server 端门禁同源）。
+    prep_timeout = int(cfg.get("prep_timeout") or 3600)
+    code, pjob = _http(base, "POST", f"/api/books/{book_id}/preparation-jobs", {
+        "idempotency_key": f"playtest-{book_id[:12]}-{int(time.time())}",
+        "mode": "fullbook", "provider": provider, "base_url": base_url or None,
+        "api_key": api_key, "model": model}, timeout=300)
+    job_id = _job_id_of(pjob)
+    rep.check("全书准备:任务创建", code == 202 and bool(job_id),
+              f"code={code} job={job_id[:12]}…")
+    if code != 202 or not job_id:
+        rep.error = "全书准备任务创建失败，终止检验"
+        return
+    prep_deadline = time.time() + prep_timeout
+    prep_status, prep_progress = "", ""
+    while time.time() < prep_deadline:
+        if should_stop():
+            return
+        code, jb = _http(base, "GET", f"/api/preparation-jobs/{job_id}", timeout=120)
+        job = jb.get("job") or jb if isinstance(jb, dict) else {}
+        prep_status = str(job.get("status") or "")
+        progress = job.get("progress") or {}
+        prep_progress = f"{progress.get('done_units', '?')}/{progress.get('total_units', '?')} {job.get('stage', '')}"
+        if prep_status in ("READY", "FAILED", "CANCELLED"):
+            break
+        rep.emit("phase_live", {"text": f"全书准备进行中：{prep_progress}"})
+        time.sleep(5)
+    rep.check("全书准备:READY", prep_status == "READY", f"status={prep_status} {prep_progress}")
+    if prep_status != "READY":
+        rep.error = f"全书准备未就绪（{prep_status}），终止检验"
+        return
+
     # 开局角色设定：与工具包同级的纯工具默认值（中性名字，不绑定任何具体作品）。
     start_body: dict[str, Any] = {
         "provider": provider, "base_url": base_url or None,
         "api_key": api_key, "model": model,
         "thinking_mode": thinking_mode, "thinking_param": "",
-        "mode": "强化模式", "novel_upload_id": upload_id,
+        "session_id": session_id,
+        "mode": "强化模式", "book_id": book_id,
+        "preparation_job_id": job_id,
         "role": cfg.get("role") or "漂泊者", "timepoint": "故事开篇",
         "difficulty": "D4 普通",
         "golden_finger": cfg.get("golden_finger") or "残卷箴言（洞悉一丝先机）",

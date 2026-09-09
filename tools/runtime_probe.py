@@ -11,19 +11,47 @@ import json
 import sys
 import time
 from pathlib import Path
-from urllib.request import Request, urlopen
+from urllib.parse import urlsplit
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 from urllib.error import HTTPError, URLError
 
 
 BASE_URL = "http://127.0.0.1:8010"
 SESSION_ID = None  # 从日志中提取
 
+_LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def _check_base_url(url: str) -> None:
+    """探测目标边界：仅允许 http 回环地址，禁止指向内网/云元数据。"""
+    parts = urlsplit(url)
+    if parts.scheme != "http" or parts.hostname not in _LOOPBACK_HOSTS:
+        raise SystemExit(f"探测目标仅允许本机回环 http 地址: {url!r}")
+
+
+class _NoRedirect(HTTPRedirectHandler):
+    """拒绝跟随重定向：回环目标不会合法重定向，跟随只会放大 SSRF 面。"""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: D102
+        return None
+
+
+def _safe_path(path: str) -> str:
+    """路径必须是站内 /api/ 相对路径，防止拼接出跨源 URL。"""
+    if not path.startswith("/api/") or "://" in path or "@" in path:
+        raise ValueError(f"非法探测路径: {path!r}")
+    return path
+
+
+_check_base_url(BASE_URL)
+_OPENER = build_opener(_NoRedirect())
+
 
 def http_get(path: str) -> tuple[int, dict | list | None]:
     """发送 GET 请求"""
     try:
-        req = Request(f"{BASE_URL}{path}", headers={"Content-Type": "application/json"})
-        with urlopen(req, timeout=10) as resp:
+        req = Request(f"{BASE_URL}{_safe_path(path)}", headers={"Content-Type": "application/json"})
+        with _OPENER.open(req, timeout=10) as resp:
             data = json.loads(resp.read().decode('utf-8'))
             return resp.status, data
     except HTTPError as e:
@@ -40,12 +68,12 @@ def http_post(path: str, body: dict) -> tuple[int, dict | list | None]:
     """发送 POST 请求"""
     try:
         req = Request(
-            f"{BASE_URL}{path}",
+            f"{BASE_URL}{_safe_path(path)}",
             data=json.dumps(body).encode('utf-8'),
             headers={"Content-Type": "application/json"},
             method="POST"
         )
-        with urlopen(req, timeout=30) as resp:
+        with _OPENER.open(req, timeout=30) as resp:
             data = json.loads(resp.read().decode('utf-8'))
             return resp.status, data
     except HTTPError as e:

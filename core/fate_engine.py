@@ -2,9 +2,9 @@
 """书中行 · 命运引擎 — 模型接入与规则装配。
 
 职责：
-- 读取作品库（rules/work_library.md）与运行时规则（rules/runtime.md、强化时叠加 rules/enhanced.md）。
-- 解析作品库（当前约 1099 个 W 编号条目）供界面选择。
-- 扫描 personas/standard 与 personas/enhanced 作为魂穿性格模型。
+- 读取泛化运行时规则（rules/runtime.md、强化时叠加 rules/enhanced.md）。
+- 默认作品目录为空；仅在显式提供文件路径时解析用户自己的作品档案。
+- 默认不扫描具名性格文件；角色选择来自用户导入/创建的数据库记录。
 - 按开局设定装配 system prompt，并通过 OpenAI 兼容协议调用模型（流式输出）。
 
 提示词文案不内嵌在本文件，统一放在 prompts/ 下的小文件里，经 prompts.load/render 装配。
@@ -14,6 +14,7 @@ import json
 import os
 import re
 import sys
+from pathlib import Path
 
 from core import prompts
 
@@ -152,11 +153,17 @@ def normalize_profile(profile=None):
     return profile
 
 
+def _read_profiles_file(path):
+    resolved = Path(path)
+    if ".." in resolved.parts:
+        raise ValueError("配置文件路径不允许包含 ..")
+    return json.loads(resolved.read_text(encoding="utf-8"))
+
+
 def load_profiles(path):
     """读取非敏感 profiles；兼容旧格式但丢弃所有长期凭据字段。"""
     try:
-        with open(path, encoding="utf-8") as f:
-            raw = json.load(f)
+        raw = _read_profiles_file(path)
     except (OSError, ValueError, TypeError):
         raw = {}
 
@@ -173,6 +180,13 @@ def load_profiles(path):
     return {"默认": safe_profile(raw)}, "默认"
 
 
+def _write_profiles_file(path, payload):
+    target = Path(path)
+    if ".." in target.parts:
+        raise ValueError("配置文件路径不允许包含 ..")
+    target.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def save_profiles(path, profiles, active_profile="默认"):
     """保存非敏感模型设置；API Key 必须通过环境变量或本次界面输入提供。"""
     safe_profiles = {}
@@ -181,8 +195,7 @@ def save_profiles(path, profiles, active_profile="默认"):
         safe_profiles[name] = {key: item for key, item in profile.items()
                                if key not in {"api_key", "deepseek_api_key", "token", "secret"}}
     payload = {"active_profile": active_profile, "profiles": safe_profiles}
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
+    _write_profiles_file(path, payload)
 
 
 def make_client(api_key, provider="deepseek", base_url=None):
@@ -326,8 +339,8 @@ def _to_path(f):
     兼容 str 路径、带 .path 的 FileData、带 .name 的对象。"""
     if f is None:
         return None
-    if isinstance(f, str):
-        return f
+    if isinstance(f, (str, os.PathLike)):
+        return os.fspath(f)
     return getattr(f, "path", None) or getattr(f, "name", None)
 
 
@@ -353,17 +366,15 @@ def read_upload_text(path, cap=None):
     return raw
 
 
-def load_rules():
-    """读取作品库资产（带缓存，不修改内容）。"""
-    global _rules_cache
-    if _rules_cache is None:
-        with open(WORK_LIBRARY_PATH, encoding="utf-8") as f:
-            _rules_cache = f.read()
-    return _rules_cache
+def load_rules(path=None):
+    """默认作品库为空；仅显式读取用户提供的档案文件，不回退到捆绑资产。"""
+    if path is None:
+        return ""
+    return read_upload_text(path)
 
 
 def invalidate_rules_cache():
-    """作品库被写入（上传蒸馏入库）后调用：下次 list_works/get_work_block 重新读盘。"""
+    """保留旧调用接口并清除历史缓存；默认目录始终为空，显式文件实时读取。"""
     global _rules_cache
     _rules_cache = None
 
@@ -386,9 +397,9 @@ def load_runtime_rules(enhanced=False):
     return text
 
 
-def list_works():
-    """返回作品库条目列表，形如 'W01 《青云试剑录》'。过滤掉原创题材占位条目。"""
-    text = load_rules()
+def list_works(path=None):
+    """默认返回空目录；显式文件按 W 编号解析，过滤原创题材占位条目。"""
+    text = load_rules(path)
     return [f"{m.group(1)} 《{m.group(2)}》"
             for m in re.finditer(r"^### (W\d+) · 《([^》]+)》", text, re.M)
             if "原创题材" not in m.group(2)]
@@ -477,14 +488,12 @@ def _unique_model_labels(items):
 
 
 def list_character_models():
-    """扫描角色性格模型，返回 [(显示标签, 文件路径), ...]。
-    超高还原增强层（personas/enhanced）在前并标注（超高还原），
-    标准层（personas/standard）在后；同层同名版本以稳定后缀区分。"""
-    enhanced = _unique_model_labels(_scan_models(ENHANCED_MODEL_DIR, suffix="（超高还原）"))
-    standard = _unique_model_labels(_scan_models(STANDARD_MODEL_DIR))
-    enhanced.sort(key=lambda lp: _order_key(lp[0]))
-    standard.sort(key=lambda lp: _order_key(lp[0]))
-    return enhanced + standard
+    """Retired file selector; active character choices come from the DB pool.
+
+    Preserve the list API without reactivating legacy persona files.
+    Explicit import tools may still use _scan_models.
+    """
+    return []
 
 
 def _extract(text, start_marker, level):
@@ -497,12 +506,12 @@ def _extract(text, start_marker, level):
     return text[i:end].strip()
 
 
-def get_work_block(work_label):
-    """按 'W01 《青云试剑录》' 中的编号取出该作品档案块。"""
+def get_work_block(work_label, path=None):
+    """仅从显式文件按 W 编号取档案块；默认不注入预载作品。"""
     if not work_label:
         return ""
     wid = work_label.split(" ")[0]
-    return _extract(load_rules(), f"### {wid} ·", "### ")
+    return _extract(load_rules(path), f"### {wid} ·", "### ")
 
 
 def _truncate_middle(text, cap):

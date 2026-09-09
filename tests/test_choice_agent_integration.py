@@ -70,8 +70,10 @@ class ChoiceAgentIntegrationTests(unittest.TestCase):
                {"text": "在坊市低价收购灵砂", "factor": "金手指"},
                {"text": "质问坊市司主簿登记簿去向", "factor": "性格"},
                {"text": "独坐码头看潮起潮落", "factor": "性格"}]
-        fixed = [dict(item, text="用祖传铜钱向当铺换玉符")
-                 if item["text"].startswith("直接使用") else item for item in bad]
+        # 真正的修复必须同时改文本并清除未来知识标志；只换文案不清标志的
+        # 候选仍会被 agent 剔除，宁可空榜也不得 fail-open 放行。
+        fixed = [dict(item, text="用祖传铜钱向当铺换玉符", requires_future_knowledge=False)
+                 if item["text"].startswith("直接使用") else dict(item) for item in bad]
 
         def fixing_model(prompt: str) -> str:
             payload = fixed if "必须替换为当前可执行的行动" in prompt else bad

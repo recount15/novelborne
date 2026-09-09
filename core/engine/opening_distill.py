@@ -820,6 +820,277 @@ def _anchor_name_entries(anchor_reports: Sequence[Mapping[str, Any]],
     return names
 
 
+FULLBOOK_CHARACTER_VERSION = 'fullbook-rich-v2-blocks'
+FULLBOOK_SOURCE_SLICE_CHARS = 3000
+FULLBOOK_MODEL_PROMPT_CHARS = 24000
+
+
+def publish_fullbook_characters(book_dir: str | Path, model: Model, *,
+                                publisher: Optional[Callable[[Mapping[str, Any]], dict]] = None,
+                                progress: Optional[Callable[[dict], None]] = None,
+                                cancelled: Optional[Callable[[], bool]] = None) -> List[dict]:
+    """Sequential, checkpointed extraction across every identity/source block.
+
+    No book-wide identity or source-size cap. Each source slice is <=3000 code
+    points and each complete model prompt <=24000 code points. Every slice gets
+    one rich and one semantic call, cached independently. Aggregation is local,
+    retaining all facts and v2 semantic candidates without a whole-book prompt.
+    All candidates validate before publication. The injected single-card
+    publisher must commit and return {saved: True, record: complete_record}.
+    Default publication is idempotent by stable extraction ID + content hash.
+    Individual DB commits cannot be rolled back as a batch; partial success is
+    durable and resumable, never sufficient for task READY.
+    """
+    from core.services.book_prepare_service import (
+        verify_preparation, _hash, _read_json, _atomic_json, PreparationCancelled)
+    prepared = verify_preparation(book_dir, mode='fullbook')
+    if not prepared.get('ready'):
+        raise ValueError('fullbook evidence is not ready')
+    root = Path(book_dir)
+    identities = prepared['identity_report']['identities']
+    if not identities:
+        raise ValueError('fullbook requires resolved character identities')
+    mentions = {e['mention_id']: e for e in prepared['entities'] if e['kind'] == 'character'}
+
+    def checkpoint(stage, completed=0, **extra):
+        if progress:
+            progress(dict(stage=stage, completed_units=completed,
+                          total_units=len(identities), unit_kind='character', **extra))
+        if cancelled and cancelled():
+            raise PreparationCancelled()
+
+    def validate(card, identity, chapters, evidence):
+        if not isinstance(card, Mapping) or card.get('name') not in identity['names']:
+            raise ValueError('rich card must identify the resolved source person')
+        if structured.validate(CHARACTER_CARD_SPECS, card):
+            raise ValueError('rich character schema failed')
+        for field in ('desire', 'fear', 'voice', 'background'):
+            if not isinstance(card.get(field), str) or not card[field].strip():
+                raise ValueError('critical rich character field missing')
+        semantic, errors = character_semantic_distiller.validate_distilled_fields(
+            card, {c['idx']: c['text'] for c in chapters})
+        if semantic is None or errors:
+            raise ValueError('rich character semantics lack source evidence')
+        if card.get('evidence') != evidence or card.get('schema_version') != 2:
+            raise ValueError('character provenance changed')
+        if (not isinstance(card.get('profile'), Mapping) or not card['profile'].get('identity')
+                or not isinstance(card.get('semantic'), Mapping)
+                or set(card['semantic']) != set(character_semantic_distiller.SEMANTIC_FIELDS)
+                or card.get('quality', {}).get('state') != 'ready'):
+            raise ValueError('rich v2 structure missing')
+        facts = card.get('facts')
+        if not isinstance(facts, list) or not facts:
+            raise ValueError('character requires evidenced facts')
+        by_id = {e['evidence_id']: e for e in evidence}
+        for fact in facts:
+            if (fact.get('status') != 'confirmed' or fact.get('knowledge_holder_id') != card['id']
+                    or not isinstance(fact.get('value'), str) or not fact['value']
+                    or not fact.get('evidence_ids')
+                    or any(key not in by_id or fact['value'] not in by_id[key]['quote']
+                           for key in fact['evidence_ids'])):
+                raise ValueError('character fact is not literal source evidence')
+        return dict(card, **semantic)
+
+    checkpoint('EXTRACTING_CHARACTERS')
+    candidates = []
+    for identity in identities:
+        checkpoint('EXTRACTING_CHARACTERS', len(candidates))
+        if not identity.get('ready'):
+            raise ValueError('character identity unresolved')
+        evidence = [dict(mentions[key], evidence_id=key, book_id=prepared['book_id'],
+                         quote=mentions[key]['excerpt'], source_hash=prepared['source_hash'])
+                    for key in identity['mention_ids']]
+        numbers = sorted({e['chapter_no'] for e in evidence})
+        chapters = [{'idx': n, 'text': (root / 'chapters' / ('%04d.txt' % n)).read_text(encoding='utf-8')}
+                    for n in numbers]
+        # Chapter text stays local; model calls see only bounded source slices.
+        slices = []
+        character_blocks = {e['block_id'] for e in evidence}
+        for block in prepared['blocks']:
+            if block['block_id'] not in character_blocks:
+                continue
+            text = next(c['text'] for c in chapters if c['idx'] == block['chapter_no'])
+            for start in range(block['start'], block['end'], FULLBOOK_SOURCE_SLICE_CHARS):
+                end = min(start + FULLBOOK_SOURCE_SLICE_CHARS, block['end'])
+                excerpt = text[start:end]
+                eid = _hash([identity['identity_id'], block['block_id'], start, end, prepared['source_hash']])
+                slices.append({'idx': block['chapter_no'], 'text': excerpt,
+                               'evidence': dict(evidence_id=eid, book_id=prepared['book_id'],
+                                                source_hash=prepared['source_hash'],
+                                                block_id=block['block_id'], chapter_no=block['chapter_no'],
+                                                start=start, end=end, quote=excerpt)})
+        # Retain exact mention evidence plus full source slices for facts and
+        # semantics that extend beyond the original entity mention excerpt.
+        evidence.extend(s['evidence'] for s in slices)
+        identity_key = _hash({'preparation': prepared['preparation_id'],
+                              'identity': identity['identity_id'], 'version': FULLBOOK_CHARACTER_VERSION})
+        path = root / 'preparation' / 'characters' / (identity_key + '.json')
+        source = dict(origin='source_extracted', book_id=prepared['book_id'],
+                      source_hash=prepared['source_hash'], extraction_run_id=prepared['preparation_id'],
+                      model_version=prepared['config']['model_version'],
+                      prompt_version=prepared['config']['prompt_version'],
+                      extraction_version=FULLBOOK_CHARACTER_VERSION,
+                      identity_id=identity['identity_id'], chapter_numbers=numbers)
+        cached = _read_json(path)
+        card = cached.get('card')
+        try:
+            card = validate(card, identity, chapters, evidence)
+            if (card.get('source') != source or card.get('id') != 'extracted_' + identity_key
+                    or cached.get('card_hash') != _hash(card)):
+                raise ValueError('character cache compatibility mismatch')
+        except (ValueError, TypeError, KeyError):
+            fields = ('name', 'gender', 'original_position', 'slot_keys',
+                      'desire', 'fear', 'voice', 'background')
+            parts = []
+            def bounded_model(prompt):
+                if len(prompt) > FULLBOOK_MODEL_PROMPT_CHARS:
+                    raise ValueError('model prompt exceeded per-call budget')
+                return model(prompt)
+
+            def validate_part(part, section):
+                raw = part['raw']
+                if raw.get('name') not in identity['names']:
+                    raise ValueError('slice identity mismatch')
+                if not isinstance(raw.get('facts'), list):
+                    raise ValueError('slice requires explicit facts inventory')
+                for fact in raw['facts']:
+                    if (not isinstance(fact, Mapping) or fact.get('evidence_id') != section['evidence']['evidence_id']
+                            or not isinstance(fact.get('value'), str) or not fact['value']
+                            or fact['value'] not in section['text']):
+                        raise ValueError('slice fact lacks exact evidence')
+                sem = part['semantic']
+                # Empty dimensions are an explicit lack of evidence for this
+                # slice, not a failure. Aggregate readiness remains strict.
+                for field in character_semantic_distiller.SEMANTIC_FIELDS:
+                    dimension, errors = character_semantic_distiller.normalize_dimension(
+                        sem.get(field), source_by_chapter={section['idx']: section['text']}, strict=False)
+                    if errors or dimension != sem.get(field):
+                        raise ValueError('slice semantic evidence invalid')
+                return part
+
+            for slice_no, section in enumerate(slices):
+                checkpoint('EXTRACTING_CHARACTERS', len(candidates),
+                           identity_id=identity['identity_id'], completed_source_blocks=slice_no,
+                           total_source_blocks=len(slices))
+                part_path = path.parent / identity_key / (section['evidence']['evidence_id'] + '.json')
+                cached_part = _read_json(part_path)
+                try:
+                    part = validate_part(cached_part['part'], section)
+                    if cached_part.get('hash') != _hash(part):
+                        raise ValueError('slice cache changed')
+                except (ValueError, TypeError, KeyError):
+                    prompt = ('FULLBOOK_RICH_CHARACTER_V1\n仅依据本原文块抽取已消歧人物信息。'
+                              'name必须是identity.names之一。desire/fear/voice/background缺证据则省略，不得杜撰。'
+                              'facts必须是数组，每项{evidence_id,value}，value必须逐字属于证据quote，'
+                              '仅提取人物明确知道的事实；没有则返回空数组。\n'
+                              + structured.spec_prompt(CHARACTER_CARD_SPECS) + '\n'
+                              + json.dumps({'identity': {'identity_id': identity['identity_id'],
+                                            'names': [next((n for n in identity['names'] if n in section['text']), identity['names'][0])]},
+                                            'chapters': [{'idx': section['idx'], 'text': section['text']}],
+                                            'evidence': [section['evidence']]}, ensure_ascii=False))
+                    raw = anchor_distiller._parse_model_output(bounded_model(prompt))
+                    raw = {k: raw[k] for k in (*fields, 'facts') if k in raw}
+                    checkpoint('EXTRACTING_CHARACTERS', len(candidates))
+                    # Reuse semantic prompt and exact-evidence normalization,
+                    # allowing unknown dimensions in a single source slice.
+                    semantic_prompt = character_semantic_distiller.build_prompt(raw, section['text'])
+                    semantic_prompt += ('\n本块缺乏证据的维度返回{rules:[],evidence:[]}，不得猜测。'
+                                        '\nsource_chapter_no=' + str(section['idx']))
+                    response = anchor_distiller._parse_model_output(bounded_model(semantic_prompt))
+                    sem = {}
+                    for field in character_semantic_distiller.SEMANTIC_FIELDS:
+                        sem[field], errors = character_semantic_distiller.normalize_dimension(
+                            response.get(field), source_by_chapter={section['idx']: section['text']}, strict=False)
+                        if errors:
+                            raise ValueError('invalid source slice semantics')
+                    part = validate_part({'raw': raw, 'semantic': sem}, section)
+                    _atomic_json(part_path, {'part': part, 'hash': _hash(part)})
+                parts.append(part)
+                checkpoint('EXTRACTING_CHARACTERS', len(candidates),
+                           identity_id=identity['identity_id'], completed_source_blocks=slice_no + 1,
+                           total_source_blocks=len(slices), source_checkpoint=section['evidence']['evidence_id'])
+            card = {'name': identity['names'][0], 'evidence_chapter': numbers[0]}
+            # Compatibility scalar summaries select first evidenced candidate;
+            # the v2 profile retains every source-local candidate below.
+            for part in parts:
+                for field in fields:
+                    if field != 'name' and field not in card and part['raw'].get(field):
+                        card[field] = part['raw'][field]
+            semantic = {f: {'rules': [], 'evidence': []} for f in character_semantic_distiller.SEMANTIC_FIELDS}
+            semantic_v2 = {f: [] for f in semantic}
+            facts = []
+            for section, part in zip(slices, parts):
+                ref = section['evidence']['evidence_id']
+                for fact in part['raw']['facts']:
+                    facts.append(dict(fact_id=_hash([identity_key, ref, fact]), domain='source',
+                                      predicate='known_source_fact', value=fact['value'],
+                                      subject_id='extracted_' + identity_key,
+                                      knowledge_holder_id='extracted_' + identity_key,
+                                      evidence_ids=[ref], status='confirmed'))
+                for field, dimension in part['semantic'].items():
+                    semantic[field]['rules'].extend(dimension['rules'])
+                    semantic[field]['evidence'].extend(dimension['evidence'])
+                    semantic_v2[field].extend(dict(value=rule, evidence_ids=[ref], epistemic_kind='inference',
+                                                   missing_reason='source-local interpretation; may conflict with other periods')
+                                              for rule in dimension['rules'])
+            # Legacy semantic projection is bounded by its existing schema;
+            # semantic_v2 above remains complete across all validated slices.
+            semantic, errors = character_semantic_distiller.validate_distilled_fields(
+                semantic, {c['idx']: c['text'] for c in chapters})
+            if semantic is None or errors:
+                raise ValueError('critical aggregate character semantics missing')
+            card.update(semantic)
+            facts = list({fact['fact_id']: fact for fact in facts}.values())
+            card.update(schema_version=2, facts=facts, semantic=semantic_v2,
+                        profile={'identity': {'name': card.get('name'), 'identity_id': identity['identity_id']},
+                                 **{domain: [dict(value=part['raw'][field],
+                                                  evidence_ids=[section['evidence']['evidence_id']],
+                                                  epistemic_kind='inference')
+                                             for section, part in zip(slices, parts) if part['raw'].get(field)]
+                                    for domain, field in (('motivations', 'desire'), ('boundaries', 'fear'),
+                                                          ('background', 'background'))}}, relationships=[],
+                        id='extracted_' + identity_key, character_id='extracted_' + identity_key,
+                        work=str(prepared['book_id']), source=source, evidence=evidence,
+                        aliases=identity['names'], quality={'state': 'ready', 'checks': ['exact-source', 'semantic-schema']})
+            card = validate(card, identity, chapters, evidence)
+            _atomic_json(path, {'card': card, 'card_hash': _hash(card)})
+        candidates.append(card)
+        checkpoint('EXTRACTING_CHARACTERS', len(candidates))
+
+    # The source may have changed during model calls. Publish nothing on failure.
+    if not verify_preparation(root, mode='fullbook').get('ready'):
+        raise ValueError('source changed during rich extraction')
+    checkpoint('VALIDATING')
+    if publisher is None:
+        from core.engine import character_library, character_db
+
+        def publisher(card):
+            previous = character_db.get_character_record(card['id'])
+            if previous and previous.get('extraction_content_hash') == card['extraction_content_hash']:
+                return {'saved': True, 'record': previous}
+            return character_library.save_card(card)
+
+    records = []
+    for card in candidates:
+        checkpoint('VALIDATING', len(records))
+        payload = dict(card, extraction_content_hash=_hash(card))
+        result = publisher(payload)
+        record = result.get('record') if isinstance(result, Mapping) else None
+        if (not isinstance(record, Mapping) or result.get('saved') is not True
+                or record.get('id') != card['id'] or type(record.get('revision')) is not int
+                or record.get('source') != card['source']
+                or record.get('evidence') != card['evidence']
+                or any(record.get(field) != card.get(field) for field in
+                       ('schema_version', 'profile', 'semantic', 'relationships', 'facts', 'quality', 'name', 'desire', 'fear', 'voice', 'background',
+                        *character_semantic_distiller.SEMANTIC_FIELDS))):
+            raise ValueError('publisher did not commit the complete validated character')
+        records.append(dict(record))
+        checkpoint('VALIDATING', len(records),
+                   character_counts={'expected_cards': len(candidates), 'verified_cards': len(records)},
+                   published_character={'character_id': record['id'], 'revision': record['revision']})
+    return records
+
+
 def run_opening_pipeline(book_dir: str | Path,
                          work_title: str,
                          model: Model,
@@ -828,6 +1099,8 @@ def run_opening_pipeline(book_dir: str | Path,
                          progress: Optional[Callable[[dict], None]] = None,
                          library_path: Optional[str | Path] = None,
                          save_characters_fn: Optional[CharacterSaver] = None,
+                         mode: str = "window", target_chapter: int = 1,
+                         publish_characters: bool = False,
                          ) -> Dict[str, Any]:
     """开局蒸馏与角色入库流水线主入口（详见模块 docstring）。
 
@@ -837,6 +1110,49 @@ def run_opening_pipeline(book_dir: str | Path,
     anchors（各章 status 与 origin）/ timings / errors。任何子调用失败都走
     中文降级路径，整体绝不抛错中断。
     """
+    from core.services.book_prepare_service import normalize_mode, verify_preparation, _read_json
+    mode = normalize_mode(mode)
+    if mode == 'fullbook':
+        prepared = verify_preparation(book_dir, mode=mode, target_chapter=target_chapter)
+        if not prepared['ready']:
+            raise ValueError('fullbook preparation is not verified: %s' % prepared['errors'])
+        def publish_one(card):
+            results = save_characters_fn([card])
+            if not isinstance(results, list) or len(results) != 1:
+                raise ValueError('fullbook publisher requires complete committed records')
+            return results[0]
+
+        def character_progress(detail):
+            if progress:
+                progress(detail)
+
+        rich_cards = publish_fullbook_characters(
+            book_dir, model, publisher=publish_one if save_characters_fn else None,
+            progress=character_progress) if publish_characters else []
+        # Legacy consumption stays model-free. Durable jobs call the publisher
+        # directly and never use this compatibility report as their READY gate.
+        # Consume every verified block, not the legacy four-chapter character
+        # sample. Entity mentions remain evidence records, never invented cards.
+        grouped = {}
+        for record in prepared['blocks']:
+            result = _read_json(Path(book_dir) / 'preparation' / 'blocks' / (record['cache_key'] + '.json'))['result']
+            grouped.setdefault(record['chapter_no'], []).append(result['anchor'])
+        anchors = []
+        for number, values in grouped.items():
+            # Keep bounded chapter anchors compatible with the existing engine;
+            # the complete block evidence remains in preparation, untruncated.
+            merged = dict(values[0])
+            for key in ('events', 'characters', 'foreshadowing', 'quotes'):
+                merged[key] = [item for value in values for item in value[key]][:12]
+            _write_anchor(_anchor_dir(book_dir), number, merged)
+            anchors.append({'chapter': number, 'status': 'done', 'origin': 'verified_blocks'})
+        return {'ok': True, 'work_title': work_title, 'chapter_count': len(grouped),
+                'chapters_ahead': len(grouped), 'plot': {'summary': '\n'.join(
+                    a['summary'] for values in grouped.values() for a in values)},
+                'plot_degraded': False, 'selected_chapters': list(grouped),
+                'anchors': anchors, 'characters': rich_cards, 'character_saved_count': len(rich_cards),
+                'entities': prepared['entities'],
+                'work_entry': None, 'timings': {}, 'errors': [], 'preparation': prepared}
     started = time.perf_counter()
     work_title = (work_title or "").strip().strip("《》") or "未命名作品"
     report: Dict[str, Any] = {
@@ -880,7 +1196,11 @@ def run_opening_pipeline(book_dir: str | Path,
     ahead = max(1, min(int(chapters_ahead or 3), MAX_CHAPTERS_AHEAD, len(chapters)))
     report["chapters_ahead"] = ahead
     texts = {int(c.get("idx") or 0): str(c.get("text") or "") for c in chapters}
-    window = [int(c.get("idx") or 0) for c in chapters[:ahead]]
+    target_positions = [i for i, c in enumerate(chapters) if int(c.get('idx') or 0) == int(target_chapter)]
+    if not target_positions:
+        errors.append('目标章节不存在')
+        return _finish()
+    window = [int(c.get("idx") or 0) for c in chapters[target_positions[0]:target_positions[0] + ahead]]
     anchor_dir = _anchor_dir(book_dir)
     _emit_progress(progress, "start", chapters=len(chapters), ahead=ahead)
 

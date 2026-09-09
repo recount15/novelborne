@@ -13,8 +13,10 @@ def events(resp):
     return out
 
 def main():
-    p=argparse.ArgumentParser(); p.add_argument('--key',default=os.getenv('FATE_API_KEY','')); p.add_argument('--book',default=r'C:\baidunetdiskdownload\西游记 上卷.txt'); p.add_argument('--base-url',default='https://hapiopen.cc/v1'); p.add_argument('--model',default='gpt-5.4-mini'); p.add_argument('--keep-runtime',action='store_true'); a=p.parse_args()
+    p=argparse.ArgumentParser(); p.add_argument('--key',default=os.getenv('FATE_API_KEY','')); p.add_argument('--book',default=''); p.add_argument('--base-url',default=''); p.add_argument('--model',default='gpt-5.4-mini'); p.add_argument('--keep-runtime',action='store_true'); a=p.parse_args()
     if not a.key: raise SystemExit('missing --key or FATE_API_KEY')
+    if not a.book: raise SystemExit('missing --book (TXT path)')
+    if not a.base_url: raise SystemExit('missing --base-url (OpenAI-compatible endpoint)')
     runtime=Path(tempfile.mkdtemp(prefix='novelborne-smoke-')); os.environ['FATE_VAR_DIR']=str(runtime); os.environ['FATE_DISTILL_WORKERS']='1'
     try:
         db=runtime/'db'/'fate_engine.db'; db.parent.mkdir(parents=True); sqlite3.connect(db).close()
@@ -46,5 +48,8 @@ def main():
         ex=c.post(f'/api/sessions/{sid}/export-novel',json={'provider':'custom','base_url':a.base_url,'api_key':a.key,'model':a.model},timeout=1800); assert ex.status_code==200,ex.text
         report={'ok':True,'round':st['round'],'save_stage':st['save_stage'],'options':[x['key'] for x in st['options']],'runtime':str(runtime)}; print(json.dumps(report,ensure_ascii=False))
     finally:
-        if not a.keep_runtime: shutil.rmtree(runtime,ignore_errors=True)
+        if not a.keep_runtime:
+            # runtime 由 tempfile.mkdtemp 生成；删除前仍校验确实位于系统临时目录内
+            if str(runtime.resolve()).startswith(str(Path(tempfile.gettempdir()).resolve()) + os.sep):
+                shutil.rmtree(runtime, ignore_errors=True)
 if __name__=='__main__': main()

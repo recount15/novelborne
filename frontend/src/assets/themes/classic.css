@@ -1,0 +1,173 @@
+/* Classic: letterpress, laid paper and vermilion binding. */
+html:not([data-theme]), html[data-theme="classic"] {
+  color-scheme: light;
+  /* Classic: warm paper palette; clean surfaces shared by every theme. */
+  --fe-bg: #f3edde;
+  --fe-bg-image: none;
+  --fe-panel: #fdfaf2;
+  --fe-panel-2: #efe8d8;
+  --fe-panel-3: #ece4d0;
+  --fe-border: #ddd2bc;
+  --fe-border-strong: #c2b6a0;
+  --fe-ink: #2c2925;
+  /* 辅助/警示文字对比度对纸面 ≥4.5:1（AA），色相不变（T10-1/2） */
+  --fe-ink-3: #6d6250;
+  --fe-ink-2: #6f6758;
+  --fe-accent: #b63a2b;
+  --fe-accent-strong: #8d2c20;
+  --fe-accent-ink: #ffffff;
+  --fe-accent-soft: #faece8;
+  --fe-ok: #137c6c;
+  --fe-warn: #8a5f10;
+  --fe-danger: #8d2c20;
+  --fe-focus-ring: #b63a2b;
+  --fe-shadow-1: 0 1px 3px rgb(36 35 33 / 10%);
+  --fe-shadow-2: 0 8px 24px rgb(36 35 33 / 12%);
+  --fe-font-sans: var(--font-sans);
+  --fe-font-serif: var(--font-serif);
+  --fe-radius: 8px;
+  /* Shared consumers: fields and coarse-pointer controls. */
+  --fe-touch-target: 44px;
+  --fe-motion: 140ms;
+  --fe-decor-stage: linear-gradient(175deg, #f7f2e4 0%, #f3edde 55%, #eae2cf 100%);
+  --fe-decor-overlay: none;
+}
+
+html:not([data-theme]) {
+  --fe-decor-overlay: repeating-linear-gradient(0deg, #8a7041 0 1px, transparent 1px 9px), repeating-linear-gradient(92deg, transparent 0 43px, #a08b67 44px, transparent 45px 89px);
+  --fe-motif-size: 180px 180px;
+  --fe-motif-opacity: .055;
+  --fe-motif-mobile-opacity: .035;
+  --fe-binding: #a84937;
+}
+html:not([data-theme]) .app-root .book-page {
+  border-radius: 2px 8px 8px 2px;
+  box-shadow: -5px 0 0 var(--fe-panel-3), -6px 0 0 var(--fe-border), 0 8px 28px rgb(69 47 23 / 8%);
+  background: linear-gradient(90deg, rgb(139 112 67 / 8%), transparent 14px), var(--fe-panel);
+}
+html:not([data-theme]) .app-root .narrative-chapter {
+  font-weight: 650;
+  letter-spacing: .055em;
+  text-wrap: balance;
+}
+html:not([data-theme]) .app-root .seal-logo {
+  border-radius: 35% 42% 38% 44%;
+  box-shadow: inset 0 0 0 2px rgb(255 250 239 / 15%);
+}
+html:not([data-theme]) .app-root .workdesk-heading {
+  color: var(--fe-ink);
+  font-family: var(--fe-font-serif);
+}
+html:not([data-theme]) .app-root .option-key {
+  border-radius: 2px;
+  font-family: var(--fe-font-serif);
+  font-weight: 700;
+}
+html:not([data-theme]) .app-root .option-card.selected {
+  box-shadow: inset 3px 0 var(--fe-binding);
+}
+html:not([data-theme]) .reader-shell {
+  box-shadow: 0 24px 70px rgb(40 29 15 / 22%);
+}
+html:not([data-theme]) .reader-stage {
+  background: var(--fe-panel-2);
+}
+html:not([data-theme]) .reader-page {
+  box-shadow: -4px 0 0 var(--fe-border), -8px 0 0 var(--fe-panel-3);
+}
+html:not([data-theme]) .reader-head {
+  background: var(--fe-panel);
+  color: var(--fe-ink);
+}
+html:not([data-theme]) .reader-tool.active {
+  color: var(--fe-accent);
+  background: var(--fe-accent-soft);
+}
+html:not([data-theme]) .designer-header {
+  background: var(--fe-panel);
+  box-shadow: 0 4px 20px rgb(75 51 23 / 5%);
+}
+html:not([data-theme]) .designer-title {
+  font-family: var(--fe-font-serif);
+  letter-spacing: .04em;
+}
+html:not([data-theme]) .persona-block {
+  background: var(--fe-panel);
+  border-radius: 2px 8px 8px 2px;
+}
+html:not([data-theme]) .quality-badge {
+  border-radius: 3px;
+  font-variant-numeric: tabular-nums;
+}
+html:not([data-theme]) .app-root .chat-bubble.player .bubble-text {
+  background: var(--fe-accent-soft);
+  color: var(--fe-ink);
+  border-radius: 12px 12px 3px 12px;
+}
+html:not([data-theme]) .app-root .chat-bubble.character .bubble-text {
+  background: var(--fe-panel);
+  color: var(--fe-ink);
+  border-radius: 3px 12px 12px;
+}
+html:not([data-theme]) .generation-state {
+  background: var(--fe-panel-2);
+  border-radius: 3px;
+}
+html:not([data-theme]) .theme-progress__track {
+  border-radius: 1px;
+}
+html:not([data-theme]) .theme-badge {
+  border-radius: 2px;
+  letter-spacing: .02em;
+}
+html:not([data-theme]) .field[aria-invalid="true"] {
+  border-color: var(--fe-danger);
+}
+html:not([data-theme]) .app-root .pool-empty {
+  color: var(--fe-ink-2);
+  font-family: var(--fe-font-serif);
+  line-height: 1.8;
+}
+@media (hover: hover) {
+  html:not([data-theme]) .reader-tool:hover:not(:disabled) {
+    background: var(--fe-panel-2);
+    color: var(--fe-accent);
+  }
+}
+@media (max-width: 599px) {
+  html:not([data-theme]) .app-root .book-page {
+    box-shadow: -2px 0 0 var(--fe-border);
+    background: var(--fe-panel);
+  }
+  html:not([data-theme]) .reader-page {
+    box-shadow: none;
+  }
+  html:not([data-theme]) .app-root .mobile-panel-toolbar {
+    background: var(--fe-panel);
+    color: var(--fe-ink-2);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-theme]) .reader-page {
+    animation: none;
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  html:not([data-theme]) .app-root .book-page,
+  html:not([data-theme]) .reader-page {
+    box-shadow: none;
+    background: Canvas;
+    color: CanvasText;
+  }
+}
+
+/* Signature: classic — original local vectors; masks inherit semantic ink.
+ * Consumers: stage corner, heading emblem, cover gutter and identity outline. */
+html:not([data-theme]) {
+  --fe-signature-art: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20100%20100%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%271.7%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M18%2012v76m8-68h7m-7%2030h7m-7%2030h7M70%2070h20v20H70zM70%2070l20%2020M38%2024h9m-7%205h13m-15%205h7%27%2F%3E%3C%2Fsvg%3E");
+  --fe-signature-small: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20100%20100%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%271.7%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M32%2018v64m0-34h20m-20%205h20%27%2F%3E%3C%2Fsvg%3E");
+  --fe-signature-radius: 2px 9px 9px 2px;
+  --fe-signature-edge: double;
+  --fe-signature-opacity: 0.045;
+}

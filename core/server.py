@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import logging
 import os
 import re
 import socket
@@ -42,6 +43,7 @@ from core import engine  # noqa: E402
 from core.services import registries  # noqa: E402  (跨层共享注册表，中立层)
 from core.services import ask_service  # noqa: E402  (ask 端点业务逻辑，Phase 3b)
 from core.services import chat_service  # noqa: E402  (角色闲聊服务，Phase F)
+from core.services import copilot_service  # noqa: E402  (Copilot 助手服务)
 from core.engine.distill import distill_model  # noqa: E402  (从老版 app._distill_model 提炼)
 from core.api.contracts import gradio_state_from_output, public_state, stream_event_from_gradio  # noqa: E402
 from core.api import save_contract  # noqa: E402
@@ -50,7 +52,9 @@ from core.api.operations import OperationJournal  # noqa: E402
 from core.engine import catalog  # noqa: E402
 from core.engine import character_designer  # noqa: E402
 from core.engine import gf_designer  # noqa: E402
-from core.services.book_prepare_service import prepare_book  # noqa: E402
+from core.services.book_prepare_service import prepare_book, verify_preparation  # noqa: E402
+from core.services.scene_locator_service import locate_scene, select_scene, project_scene_initial_state  # noqa: E402
+from core.services.book_library_service import list_playable_books, mark_book_played  # noqa: E402
 from core.services.context_retrieval_service import retrieve_context  # noqa: E402
 from core.services import pre_game_service  # noqa: E402
 from core.services import golden_finger_service  # noqa: E402
@@ -63,7 +67,7 @@ FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
 sessions = SessionManager(PROJECT_ROOT)
 operation_journal = OperationJournal(PROJECT_ROOT / "var" / "operations.jsonl")
 question_service = structured_question_service.StructuredQuestionService()
-app = FastAPI(title="书中行 API", version="2.2.0")
+app = FastAPI(title="书中行 API", version="3.0.0")
 _cors_origins = [item.strip() for item in os.getenv("FATE_CORS_ORIGINS", "").split(",") if item.strip()]
 if _cors_origins:
     app.add_middleware(
@@ -86,13 +90,26 @@ class StartRequest(BaseModel):
     mode: str = "基础模式"
     work: str | None = None
     novel_upload_id: str | None = None
+    book_id: str | None = None
+    chapter_selection: dict[str, Any] | None = None
     fragment: str = ""
     role: str = ""
     protagonist_gender: str = "unknown"
     timepoint: str = "故事开篇"
+    # 原著准备策略：window（普通）| fullbook（强化）；缺省由后端按 mode 推导。
+    preparation_mode: str | None = None
+    preparation_job_id: str | None = None
+    # 目标开局章节：剧情定位确认后的第 N 章（默认第 1 章）。
+    target_chapter: int = Field(default=1, ge=1, le=100000)
+    # 剧情定位确认结果（select 路由返回，不含大体积投影）：时点/知识截止/
+    # 截点前事实随开局提交接入准备窗口与时点初始化（T09）。
+    scene_selection: dict[str, Any] | None = None
     difficulty: str = "D4 普通"
     golden_finger: str | None = None
     golden_finger_proposal: dict[str, Any] = Field(default_factory=dict)
+    # 推荐金手指的完整规格（含 cost/cooldown/limits）：推荐项的标签只是显示，
+    # 开局注入必须使用与用户所见一致的完整规格（D03）。
+    golden_finger_spec: dict[str, Any] | None = None
     persona_preset: str = "自定义（在下方文本框描述）"
     persona_custom: str = ""
     persona_upload_id: str | None = None
@@ -104,6 +121,8 @@ class StartRequest(BaseModel):
     heroine_mode: str = "单女主"
     enable_nemesis: bool = False
     nemesis_select: str = ""
+    # 宿敌可选身体身份姓名：非空时直接作为宿敌身份（与名册「手动填写优先」一致）。
+    nemesis_identity: str = ""
     nemesis_upload_id: str | None = None
     convergence: str = "较高"
     # 故事丰富度：玩家拖动的单回合叙事体量刻度（300–1000）。
@@ -150,6 +169,16 @@ class AnswerQuestionRequest(BaseModel):
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
+
+
+class CopilotChatRequest(BaseModel):
+    """Copilot 对话请求：会话凭据优先，无对局时用请求体凭据。"""
+    messages: list[dict[str, Any]] = Field(min_length=1, max_length=40)
+    session_id: str | None = None
+    provider: str | None = None
+    base_url: str | None = None
+    api_key: str | None = None
+    model: str | None = None
 
 
 class QuestOfferRequest(BaseModel):
@@ -213,8 +242,9 @@ class DesignerGenerateRequest(BaseModel):
 
 
 class DesignerSaveRequest(BaseModel):
-    persona_markdown: str = Field(min_length=1, max_length=fe.MAX_PERSONA_CHARS)
-    filename: str = Field(min_length=1, max_length=80)
+    persona_markdown: str = Field(default="", max_length=fe.MAX_PERSONA_CHARS)
+    filename: str = Field(default="", max_length=80)
+    card: dict[str, Any] | None = None
 
 
 class CharacterLibraryUpsertRequest(BaseModel):
@@ -226,13 +256,13 @@ class CharacterLibraryUpsertRequest(BaseModel):
     desire: str = ""
     fear: str = ""
     abilities: list[str] | str = ""
-    relationship_vector: dict[str, Any] | str = ""
+    relationship_vector: dict[str, Any] | list[Any] | str = ""
     knowledge_scope: list[str] | str = ""
     voice: str = ""
     unacceptable_actions: list[str] | str = ""
     background: str = ""
     skill_ids: list[str] | str = ""
-    source: str = ""
+    source: str | dict[str, Any] = ""
     gender: str = "unknown"
     original_position: str = ""
     source_medium: str = ""
@@ -242,6 +272,33 @@ class CharacterLibraryUpsertRequest(BaseModel):
     mainline_type: str = ""
     partner_type: str = ""
     nemesis_type: str = ""
+
+    id: str | None = None
+    character_id: str | None = None
+    target_id: str | None = None
+    schema_version: int | str | None = None
+    revision: int | None = Field(default=None, ge=0)
+    base_revision: int | None = Field(default=None, ge=0)
+    idempotency_key: str | None = Field(default=None, max_length=128)
+    aliases: list[str] = Field(default_factory=list)
+    profile: dict[str, Any] = Field(default_factory=dict)
+    semantic: dict[str, Any] = Field(default_factory=dict)
+    facts: list[dict[str, Any]] = Field(default_factory=list)
+    relationships: list[dict[str, Any]] = Field(default_factory=list)
+    evidence: list[dict[str, Any]] = Field(default_factory=list)
+    quality: dict[str, Any] = Field(default_factory=dict)
+    mind_model: dict[str, Any] = Field(default_factory=dict)
+    decision_policy: dict[str, Any] = Field(default_factory=dict)
+    voice_transfer: dict[str, Any] = Field(default_factory=dict)
+    behavior_boundaries: dict[str, Any] = Field(default_factory=dict)
+    distill_level: str = "normal"
+    persona_markdown: str = Field(default="", max_length=fe.MAX_PERSONA_CHARS)
+    one_line: str = ""
+    decision_principle: str | list[str] | dict[str, Any] = ""
+    voice_samples: str | list[Any] = ""
+    ability_limits: str | list[Any] | dict[str, Any] = ""
+    references: str | list[Any] | dict[str, Any] = ""
+    model_config = {"extra": "forbid"}
 
 
 class CharacterLibraryImportRequest(BaseModel):
@@ -354,9 +411,10 @@ def bootstrap_payload() -> dict[str, Any]:
         for label, path in fe.list_character_models()
     ]
     pool, shadowed = engine.character_library.merged_pool_cached()
+    works = list(fe.list_works())
     return {
         "providers": _provider_payload(),
-        "works": list(fe.list_works()),
+        "works": works,
         "skills": _skills_payload(),
         "character_pools": _characters_payload(pool),
         "custom_character_ids": sorted(
@@ -400,14 +458,14 @@ def bootstrap_payload() -> dict[str, Any]:
         # 类 Agent 模式的说明文案统一下发，前端不做硬编码。
         "story_agent_mode": {
             "label": "类 Agent 生成",
-            "note": "开启后每回合先起草，再经质检自检与定向修订后才提交；质量更稳但耗时与 token 约为两倍。仅强化模式生效。",
+            "note": "适用于所有模式，与原著准备策略独立。开启后执行多阶段、受并发上限约束的生成与校验；可能增加耗时和模型调用费用。",
         },
         "golden_finger_library": [
             {"id": item["id"], "label": item["label"]}
             for item in gf_designer.list_specs()
         ],
         "counts": {
-            "works": len(list(fe.list_works())),
+            "works": len(works),
             "character_pools": len(pool),
             "personas": len(list(fe.PERSONAS)),
             "character_models": len(models),
@@ -638,6 +696,34 @@ def _upload_or_404(session, upload_id: str | None) -> str | None:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+def _apply_frame_state(
+    data: dict[str, Any],
+    session,
+    *,
+    stage: str,
+    durable_seen: bool,
+    operation: str,
+    usable_previous: bool,
+) -> None:
+    """帧内状态收尾：持久化成功后帧使用权威会话状态的公开投影快照。
+
+    帧禁止与 session.state 别名（D01）：投影是深拷贝并完成脱敏，
+    帧内补写的 save_stage/game_ready 只作用于快照，不写回会话。
+    未持久化的增量帧保持增量字段，不做全量投影（避免用部分状态
+    计算聚合值）。
+    """
+    if not isinstance(data.get("state"), dict):
+        return
+    if durable_seen and isinstance(session.state, dict):
+        data["state"] = public_state(session.state)
+    data["state"]["save_stage"] = stage
+    data["state"]["game_ready"] = bool(
+        durable_seen
+        or stage in ("opening", "committed")
+        or (operation != "start" and usable_previous)
+    )
+
+
 def _stream_response(
     session,
     generator: Iterator[Any],
@@ -645,6 +731,7 @@ def _stream_response(
     operation: str,
     api_key_on_commit: str | None = None,
     client_request_id: str | None = None,
+    played_book_dir: Path | None = None,
 ) -> StreamingResponse:
     def body() -> Iterator[bytes]:
         previous_assistant = ""
@@ -665,7 +752,16 @@ def _stream_response(
                 pass
         
         try:
-            for output in generator:
+            iterator = iter(generator)
+            frame_number = 0
+            while True:
+                # Legacy app callbacks propose state; only this boundary saves it.
+                with engine.persistence.defer_candidate_saves():
+                    try:
+                        output = next(iterator)
+                    except StopIteration:
+                        break
+                frame_number += 1
                 raw_state = gradio_state_from_output(output)
                 event = stream_event_from_gradio(output)
                 data = event.data
@@ -718,16 +814,30 @@ def _stream_response(
                         durable_state["save_stage"] = stage
                         durable_state["game_ready"] = True
                         durable_state["session_id"] = session.session_id
-                        session.state = durable_state
-                        durable_seen = True
-                        start_committed = True
                         try:
                             engine.persistence.save_state(
                                 durable_state,
                                 root=fe.WRITABLE_DIR,
                                 start_params=durable_state.get("start_params"),
                                 session_id=session.session_id,
+                                request_id=f"{client_request_id}:{frame_number}" if client_request_id else None,
+                                expected_revision=int(session.state.get("revision") or 0) if session.state else 0,
                             )
+                            session.state = durable_state
+                            durable_seen = True
+                            start_committed = True
+                            if operation == "start" and played_book_dir is not None:
+                                # 已玩作品库：开局权威提交后写 played 标记
+                                # （投影写入；库列表展示前还会做磁盘复验）。
+                                # 书目录取自本次请求已解析的 book_id/上传路径，
+                                # 不读持久化 start_params——其中不含 novel_file。
+                                # 失败只记日志：标记缺失不应回滚已提交的开局。
+                                try:
+                                    mark_book_played(played_book_dir, session.session_id)
+                                except (OSError, ValueError) as exc:
+                                    logging.getLogger("uvicorn.error").warning(
+                                        "[playable] played 标记写入失败 %s：%s",
+                                        played_book_dir, exc)
                         except (OSError, TypeError, ValueError) as exc:
                             session.state = previous_state
                             durable_seen = False
@@ -737,13 +847,13 @@ def _stream_response(
                         pass
                     if operation == "start" and api_key_on_commit is not None and durable_seen:
                         session.api_key = api_key_on_commit
-                    if isinstance(data.get("state"), dict):
-                        data["state"]["save_stage"] = stage
-                        data["state"]["game_ready"] = bool(
-                            durable_seen
-                            or stage in ("opening", "committed")
-                            or (operation != "start" and save_contract.is_usable_state(previous_state))
-                        )
+                    _apply_frame_state(
+                        data, session,
+                        stage=stage,
+                        durable_seen=durable_seen,
+                        operation=operation,
+                        usable_previous=save_contract.is_usable_state(previous_state),
+                    )
                 if operation != "start" or start_committed:
                     data["session_id"] = session.session_id
                 data["operation"] = operation
@@ -966,38 +1076,62 @@ def recommend_golden_fingers(request: GoldenFingerContext) -> dict[str, Any]:
 def propose_golden_finger(request: GoldenFingerProposalRequest) -> dict[str, Any]:
     try:
         nemesis_d = request.nemesis_d if request.nemesis_d is not None else 10.0 - _difficulty_int(request.difficulty)
-        
-        # Try new service first for deterministic validation
+
+        # 新校验分支：必须构造完整草稿（cost/cooldown 缺玩家输入时按难度规则
+        # 取默认值），否则 quality_gate 必然拒绝、分支形同虚设（D02）。
+        # 玩家自然语言常缺「可观察动作」标记词：先按原文效果校验，软性
+        # 不合格时用「信息」模板包装重试一次；违禁文本包装后仍会被机制
+        # 门拦截，回落 legacy 并留痕。
+        fallback: dict[str, Any] = {}
         if request.text:
             try:
-                # Build a minimal pre-game state for validation
                 prepared = {"script": request.text, "title": "Proposal"}
                 difficulty_label = request.difficulty if isinstance(request.difficulty, str) else f"D{_difficulty_int(request.difficulty)}"
+                level = _difficulty_int(request.difficulty)
                 budget = golden_finger_service.deterministic_budget(prepared, difficulty_label)
-                
-                # Parse as draft spec
-                draft = {"composition": "信息", "difficulty": difficulty_label, 
-                         "name": "自定义", "effect": request.text[:200]}
-                
-                # Validate with new service
+                attempt = max(1, int(request.attempt or 1))
                 from core.engine.gf_designer import compose_spec
-                spec = compose_spec(draft)
-                validation = golden_finger_service.validate_spec(
-                    spec.to_dict(), difficulty_label, budget
-                )
-                
-                if validation["ok"]:
-                    return {
-                        "proposal": validation["spec"],
-                        "validated": True,
-                        "budget": budget,
-                        "issues": validation["issues"]
-                    }
-            except Exception:  # noqa: BLE001
-                pass  # Fall back to legacy path
-        
+
+                truncated = request.text[:200]
+                drafts = [
+                    {"composition": "信息", "difficulty": difficulty_label,
+                     "name": "自定义", "effect": truncated,
+                     "cost": "精神负荷",
+                     "cooldown": "每场景一次" if level <= 3 else "每日一次"},
+                    {"composition": "信息", "difficulty": difficulty_label,
+                     "name": f"自定义·{request.text[:12]}",
+                     "fuels": [{"name": request.text[:18]}],
+                     "cost": "精神负荷",
+                     "cooldown": "每场景一次" if level <= 3 else "每日一次"},
+                ]
+                validation: dict[str, Any] = {}
+                defaulted = ["composition", "cost", "cooldown"]
+                for index, draft in enumerate(drafts):
+                    spec = compose_spec(draft)
+                    validation = golden_finger_service.validate_spec(
+                        spec.to_dict(), difficulty_label, budget
+                    )
+                    if validation["ok"]:
+                        if index == 1:
+                            defaulted = defaulted + ["name", "effect"]
+                        return {
+                            "status": "await_confirmation",
+                            "attempt": attempt,
+                            "remaining": max(0, engine.MAX_ATTEMPTS - attempt),
+                            "spec": validation["spec"],
+                            "issues": list(validation["issues"]),
+                            "budget": budget,
+                            "defaulted_fields": defaulted,
+                            "gf": round(engine.gf_scale(nemesis_d), 4),
+                            "nemesis_d": round(float(nemesis_d), 2),
+                        }
+                fallback = {"fallback_reason": "确定性校验未通过："
+                            + "；".join(validation.get("issues") or ["未知原因"])[:200]}
+            except Exception as exc:  # noqa: BLE001 校验分支异常显式留痕后回落
+                fallback = {"fallback_reason": f"校验分支异常：{exc}"}
+
         # Legacy path
-        return engine.propose_custom(
+        result = engine.propose_custom(
             request.text,
             world=request.world,
             persona=request.persona,
@@ -1005,6 +1139,9 @@ def propose_golden_finger(request: GoldenFingerProposalRequest) -> dict[str, Any
             attempt=request.attempt,
             nemesis_d=nemesis_d,
         )
+        if isinstance(result, dict) and fallback:
+            result.update(fallback)
+        return result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -1012,7 +1149,25 @@ def propose_golden_finger(request: GoldenFingerProposalRequest) -> dict[str, Any
 @app.post("/api/golden-fingers/confirm")
 def confirm_golden_finger(request: GoldenFingerConfirmRequest) -> dict[str, Any]:
     try:
-        return engine.confirm_custom(request.proposal, True)
+        proposal = request.proposal
+        if not isinstance(proposal, dict) or proposal.get("status") != "await_confirmation":
+            raise ValueError("无可确认的自定义金手指提案")
+        spec = proposal.get("spec")
+        if not isinstance(spec, dict) or not str(spec.get("name") or "").strip():
+            raise ValueError("提案缺少完整规格，无法确认")
+        # 服务端对提交内容重新校验：客户端 status 只能表达意图，
+        # 成败由服务端 validate_spec 决定（D04）。
+        source = str(spec.get("source") or "")
+        match = re.search(r":D(\d+)", source)
+        difficulty = f"D{match.group(1)}" if match else ""
+        validation = golden_finger_service.validate_spec(spec, difficulty)
+        if not validation.get("ok"):
+            raise ValueError("确认失败：" + "；".join(
+                str(item) for item in (validation.get("issues") or [])[:5]))
+        result = engine.confirm_custom(proposal, True)
+        if isinstance(result, dict):
+            result["validated"] = True
+        return result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -1133,8 +1288,7 @@ def gf_designer_load_spec(spec_id: str) -> dict[str, Any]:
     try:
         record = gf_designer.load_spec(spec_id)
     except gf_designer.DesignerError as exc:
-        status = 404 if "找不到" in str(exc) else 400
-        raise HTTPException(status_code=status, detail=str(exc)) from exc
+        raise _character_library_http_error(exc) from exc
     return {"spec": record, "id": record["id"], "label": record.get("label") or gf_designer.spec_label(record)}
 
 
@@ -1260,27 +1414,18 @@ def character_designer_generate(request: DesignerGenerateRequest) -> dict[str, A
 
 @app.post("/api/character-designer/save")
 def character_designer_save(request: DesignerSaveRequest) -> dict[str, Any]:
-    """保存 persona 到 personas/standard；同名自动加 -2/-3 后缀。
-
-    fe._scan_models 不带缓存，每次 /api/bootstrap 实时扫描目录，
-    因此保存后下一次 bootstrap 的 character_models 即可见，无需失效处理。
-    """
-    if not re.search(r"[0-9A-Za-z一-鿿_\-]", request.filename):
-        raise HTTPException(status_code=400, detail="文件名不含任何合法字符（中文/字母/数字/_/-）")
-    filename = character_designer.suggest_filename(request.filename)
-    directory = Path(fe.STANDARD_MODEL_DIR)
-    with _DESIGNER_SAVE_LOCK:
-        directory.mkdir(parents=True, exist_ok=True)
-        candidate = directory / f"{filename}.md"
-        suffix = 2
-        while candidate.exists():
-            candidate = directory / f"{filename}-{suffix}.md"
-            suffix += 1
-        try:
-            candidate.write_text(request.persona_markdown, encoding="utf-8")
-        except OSError as exc:
-            raise HTTPException(status_code=400, detail=f"persona 写入失败：{exc}") from exc
-    return {"label": candidate.stem, "path": candidate.name}
+    """Compatibility adapter: persona and complete card commit to the same DB."""
+    raw = dict(request.card or {})
+    raw.setdefault("name", request.filename.strip())
+    raw.setdefault("role", "主角")
+    if request.persona_markdown:
+        raw["persona_markdown"] = request.persona_markdown
+    try:
+        parsed = CharacterLibraryUpsertRequest.model_validate(raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="角色卡字段无效") from exc
+    result = character_library_create(parsed)
+    return {**result, "label": result["card"]["name"], "message": "已保存到角色数据库"}
 
 
 # ---------------------------------------------------------------------------
@@ -1289,8 +1434,10 @@ def character_designer_save(request: DesignerSaveRequest) -> dict[str, Any]:
 
 def _library_card_payload(card, *, shadowed: set[str] | None = None) -> dict[str, Any]:
     """把 CharacterCard 转成带来源标记的响应体。"""
-    is_user = card.id.startswith("user-")
-    is_override = (not is_user) and (engine.character_library.OVERRIDES_DIR / f"{card.id}.json").is_file()
+    from core.engine import character_db
+    source_type = character_db.get_character_source_type(card.id)
+    is_user = source_type == "user"
+    is_override = source_type == "override"
     kind = "user" if is_user else ("override" if is_override else "built_in")
     payload = {
         "id": card.id,
@@ -1324,7 +1471,8 @@ def _library_card_payload(card, *, shadowed: set[str] | None = None) -> dict[str
         "deletable": kind != "built_in",
         "replaces_built_in": card.id in (shadowed or set()),
     }
-    return payload
+    record = character_db.get_character_record(card.id) or {}
+    return {**payload, **record, "origin": kind}
 
 
 @app.get("/api/character-library")
@@ -1336,18 +1484,30 @@ def character_library_list() -> dict[str, Any]:
     return {"cards": cards, "shadowed_built_in": sorted(shadowed)}
 
 
+def _character_library_http_error(exc):
+    text = str(exc)
+    if "冲突" in text:
+        return HTTPException(status_code=409, detail={"code": "revision_conflict", "message": text, "retryable": False})
+    if "找不到" in text:
+        return HTTPException(status_code=404, detail={"code": "not_found", "message": text, "retryable": False})
+    from core.engine.character_db import DatabaseError
+    if isinstance(exc.__cause__, DatabaseError):
+        return HTTPException(status_code=500, detail={"code": "storage_error", "message": "角色数据库保存失败", "retryable": True})
+    return HTTPException(status_code=422, detail={"code": "invalid_card", "message": text, "retryable": False})
+
+
 @app.post("/api/character-library")
 def character_library_create(request: CharacterLibraryUpsertRequest,
                              replace_built_in: bool = False) -> dict[str, Any]:
     """新增用户卡；replace_built_in=true 且提供 target_id 时替换内置卡。"""
     try:
         saved = engine.character_library.save_card(
-            request.model_dump(), replace_built_in=replace_built_in)
+            request.model_dump(exclude_unset=True), replace_built_in=replace_built_in)
     except engine.character_library.LibraryError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise _character_library_http_error(exc) from exc
     record = saved["record"]
-    return {"card": {**record, "origin": saved["origin"],
-                     "editable": True, "deletable": True}}
+    return {"saved": True, "character_id": record["id"], "revision": record["revision"],
+            "card": {**record, "origin": saved["origin"], "editable": True, "deletable": True}}
 
 
 @app.put("/api/character-library/{card_id}")
@@ -1356,13 +1516,13 @@ def character_library_update(card_id: str,
     """更新用户卡或内置替换卡；编辑内置卡即自动转为替换语义。"""
     try:
         saved = engine.character_library.update_card(
-            card_id, request.model_dump())
+            card_id, request.model_dump(exclude_unset=True))
     except engine.character_library.LibraryError as exc:
         status = 404 if "找不到" in str(exc) else 400
         raise HTTPException(status_code=status, detail=str(exc)) from exc
     record = saved["record"]
-    return {"card": {**record, "origin": saved["origin"],
-                     "editable": True, "deletable": True}}
+    return {"saved": True, "character_id": record["id"], "revision": record["revision"],
+            "card": {**record, "origin": saved["origin"], "editable": True, "deletable": True}}
 
 
 @app.delete("/api/character-library/{card_id}")
@@ -1428,6 +1588,15 @@ def _extract_character_rows(data: Any) -> list[dict[str, Any]]:
     return []
 
 
+@app.get("/api/character-library/{card_id}")
+def character_library_detail(card_id: str, revision: int | None = None) -> dict[str, Any]:
+    from core.engine.character_db import get_character_record
+    record = get_character_record(card_id, revision)
+    if record is None:
+        raise HTTPException(status_code=404, detail="角色卡或修订不存在")
+    return {"character_id": record["id"], "revision": record.get("revision"), "card": record}
+
+
 @app.post("/api/uploads")
 async def upload(
     file: UploadFile = File(...),
@@ -1443,8 +1612,15 @@ async def upload(
         session = sessions.create(session_id)
         content = await read_upload(file)
         result = sessions.put_upload(session, file.filename, content, kind=kind, extension=suffix)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if kind == "novel" and suffix == ".txt":
+            source_path = sessions.upload_path(session, result["upload_id"])
+            split = engine.chapter_tools.split_file(source_path, book_id=Path(source_path).stem,
+                                                     output_root=fe.WRITABLE_DIR)
+            if not split.get("chapters"):
+                raise ValueError("原著 TXT 未识别到可阅读章节")
+            result["book_id"] = split["book_id"]
+    except (ValueError, OSError, UnicodeError) as exc:
+        raise HTTPException(status_code=400, detail="上传或 TXT 切章失败，请检查文件内容") from exc
     return {"session_id": session.session_id, "upload": result}
 
 
@@ -1467,12 +1643,18 @@ def _resolve_book_dir(book_id: str) -> Path:
         raise HTTPException(status_code=400, detail="book_id 只能是单层目录名")
     if not books_root.is_dir():
         raise HTTPException(status_code=404, detail="未找到切章书库，请先上传并成功切章")
+    def confined(path: Path) -> Path:
+        resolved = path.resolve()
+        if not resolved.is_relative_to(books_root.resolve()):
+            raise HTTPException(status_code=400, detail="书目路径超出书库范围")
+        return resolved
+
     exact = books_root / book_id
     if exact.is_dir():
-        return exact
+        return confined(exact)
     matches = [p for p in books_root.iterdir() if p.is_dir() and p.name.startswith(book_id)]
     if len(matches) == 1:
-        return matches[0]
+        return confined(matches[0])
     raise HTTPException(status_code=404, detail=f"未找到书目：{book_id}（匹配 {len(matches)} 个）")
 
 
@@ -1592,14 +1774,368 @@ def user_book_chapter_anchors(book_id: str, chapter_index: int) -> dict[str, Any
     return {"book_id": book_dir.name, "chapter_index": chapter_index, "anchor": anchor, "characters": characters}
 
 
+class _ModelCallRequest(BaseModel):
+    """需要临时模型调用的请求公共字段；API Key 只在请求内存中使用，不落盘。"""
+    api_key: str = ""
+    provider: str = "deepseek"
+    base_url: str | None = None
+    model: str | None = None
+
+
+class LocateRequest(_ModelCallRequest):
+    query: str = Field(min_length=1, max_length=2000)
+    limit: int = Field(default=10, ge=1, le=100)
+    # semantic=True 时用模型做全书语义候选（逐块、证据坐标强校验、需 API Key）。
+    semantic: bool = False
+
+
+class LocateSelectRequest(_ModelCallRequest):
+    candidate: dict[str, Any]
+    timepoint: str = "during"
+    # project_facts=True 时基于截点前证据做时点角色初始状态投影（需 API Key）。
+    project_facts: bool = False
+
+
+def _request_model_callable(provider: str, base_url: str | None, api_key: str,
+                            model_name: str | None):
+    """按请求内凭据构建临时模型调用闭包；不写任何持久配置。"""
+    config = fe.provider_config(provider, base_url)
+    name = model_name or (config.get("models") or [fe.DEFAULT_MODEL])[0]
+    client = fe.make_client(api_key, provider, base_url or None)
+    return lambda prompt: distill_model(client, name, prompt, None, provider)
+
+
+class PrepareBookRequest(_ModelCallRequest):
+    mode: str = Field(default="window", pattern="^(window|fullbook)$")
+    opening_chapters: int = Field(default=3, ge=1, le=12)
+    target_chapter: int = Field(default=1, ge=1, le=100000)
+    model_version: str | None = None
+
+
+class PreparationJobRequest(PrepareBookRequest):
+    idempotency_key: str = Field(min_length=1, max_length=200)
+
+
+_preparation_jobs = None
+_preparation_jobs_lock = threading.RLock()
+
+
+def _get_preparation_jobs():
+    """Configure persistence only on first use, never during module import."""
+    global _preparation_jobs
+    with _preparation_jobs_lock:
+        if _preparation_jobs is None:
+            from core.services.preparation_jobs_service import PreparationJobsService
+            _preparation_jobs = PreparationJobsService(Path(fe.WRITABLE_DIR) / "preparation_jobs.sqlite3")
+        return _preparation_jobs
+
+
+def _close_preparation_jobs():
+    global _preparation_jobs
+    with _preparation_jobs_lock:
+        if _preparation_jobs is not None:
+            _preparation_jobs.close()
+            _preparation_jobs = None
+
+
+# Compose with the existing lifespan rather than replacing its startup/shutdown.
+from contextlib import asynccontextmanager
+_previous_book_workflows_lifespan = app.router.lifespan_context
+
+
+@asynccontextmanager
+async def _book_workflows_lifespan(application):
+    async with _previous_book_workflows_lifespan(application) as state:
+        try:
+            yield state
+        finally:
+            _close_preparation_jobs()
+
+
+app.router.lifespan_context = _book_workflows_lifespan
+
+
+def _preparation_model(request: _ModelCallRequest, *, required: bool):
+    key = request.api_key.strip()
+    if not key:
+        if required:
+            raise HTTPException(status_code=400, detail="模型调用需要 API Key")
+        return None
+    try:
+        return _request_model_callable(request.provider, request.base_url, key, request.model)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="模型配置无效") from exc
+
+
+def _preparation_model_version(request: PrepareBookRequest) -> str:
+    if request.model_version:
+        return request.model_version
+    if request.model:
+        return request.model
+    if request.mode == "fullbook":
+        config = fe.provider_config(request.provider, request.base_url)
+        return (config.get("models") or [fe.DEFAULT_MODEL])[0]
+    return "unspecified"
+
+
+def _workflow_error(exc: Exception) -> HTTPException:
+    # Never reflect exceptions/configuration strings containing credentials.
+    if isinstance(exc, KeyError) or getattr(exc, "code", None) == "thread_not_found":
+        return HTTPException(status_code=404, detail="工作流资源不存在")
+    if isinstance(exc, (ValueError, RuntimeError)):
+        return HTTPException(status_code=409, detail={"code": getattr(exc, "code", "WORKFLOW_CONFLICT"),
+            "message": "工作流状态或参数冲突，请检查输入与当前状态"})
+    return HTTPException(status_code=503, detail="工作流暂不可用")
+
+
 @app.post("/api/books/{book_id}/prepare")
-def prepare_user_book(book_id: str, opening_chapters: int = 3) -> dict[str, Any]:
-    """构建可恢复的长篇索引与开局就绪包，不把整本正文送入模型。"""
+def prepare_user_book(book_id: str, request: PrepareBookRequest) -> dict[str, Any]:
+    """Synchronous compatibility endpoint; credentials live in JSON bodies."""
+    book_dir = _resolve_book_dir(book_id)
+    model = _preparation_model(request, required=True) if request.mode == "fullbook" else None
+    try:
+        return prepare_book(book_dir, mode=request.mode, model=model,
+                            model_version=_preparation_model_version(request),
+                            target_chapter=request.target_chapter, opening_chapters=request.opening_chapters)
+    except Exception as exc:
+        raise _workflow_error(exc) from exc
+
+
+@app.post("/api/books/{book_id}/preparation-jobs", status_code=202)
+def create_preparation_job(book_id: str, request: PreparationJobRequest) -> dict[str, Any]:
+    book_dir = _resolve_book_dir(book_id)
+    model = _preparation_model(request, required=True) if request.mode == "fullbook" else None
+    try:
+        service = _get_preparation_jobs()
+        job = service.create(book_dir, idempotency_key=request.idempotency_key,
+                             mode=request.mode, target_chapter=request.target_chapter,
+                             opening_chapters=request.opening_chapters,
+                             model_version=_preparation_model_version(request))
+        if job["status"] == "QUEUED":
+            service.start(job["job_id"], model=model)
+        return service.get(job["job_id"])
+    except Exception as exc:
+        raise _workflow_error(exc) from exc
+
+
+@app.get("/api/preparation-jobs/{job_id}")
+def get_preparation_job(job_id: str) -> dict[str, Any]:
+    try:
+        return _get_preparation_jobs().get(job_id)
+    except Exception as exc:
+        raise _workflow_error(exc) from exc
+
+
+@app.get("/api/preparation-jobs/{job_id}/events")
+def preparation_job_events(job_id: str, after: int = 0) -> dict[str, Any]:
+    if after < 0:
+        raise HTTPException(status_code=422, detail="after 必须为非负序号")
+    try:
+        return {"events": _get_preparation_jobs().events(job_id, after=after)}
+    except Exception as exc:
+        raise _workflow_error(exc) from exc
+
+
+@app.post("/api/preparation-jobs/{job_id}/cancel")
+def cancel_preparation_job(job_id: str) -> dict[str, Any]:
+    try:
+        return _get_preparation_jobs().cancel(job_id)
+    except Exception as exc:
+        raise _workflow_error(exc) from exc
+
+
+@app.post("/api/preparation-jobs/{job_id}/resume", status_code=202)
+def resume_preparation_job(job_id: str, request: _ModelCallRequest) -> dict[str, Any]:
+    try:
+        service = _get_preparation_jobs()
+        job = service.get(job_id)
+        configuration = service.configuration(job_id)
+        version = configuration.get("model_version")
+        if request.model and version and request.model != version:
+            raise ValueError("resume model differs from original")
+        model_request = request.model_copy(update={"model": version or request.model})
+        model = _preparation_model(model_request, required=configuration.get("mode") == "fullbook")
+        service.resume(job_id, model=model, model_version=version)
+        return service.get(job_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _workflow_error(exc) from exc
+
+
+class ChapterStartRequest(BaseModel):
+    chapter_no: int = Field(ge=1, le=100000)
+    source_hash: str | None = None
+
+
+@app.post("/api/books/{book_id}/chapter-start")
+def reader_chapter_start(book_id: str, request: ChapterStartRequest) -> dict[str, Any]:
+    from core.services.reader_start_service import prepare_chapter_start
     book_dir = _resolve_book_dir(book_id)
     try:
-        return prepare_book(book_dir, opening_chapters=max(1, min(12, opening_chapters)))
+        return prepare_chapter_start(book_dir, book_dir.name, request.chapter_no,
+                                     expected_source_hash=request.source_hash)
+    except Exception as exc:
+        raise _workflow_error(exc) from exc
+
+
+class ReaderChatThreadRequest(BaseModel):
+    character_id: str = Field(min_length=1, max_length=200)
+    chapter_no: int = Field(ge=1, le=100000)
+    card_revision: int | None = Field(default=None, ge=1)
+    source_hash: str | None = None
+
+
+class ReaderChatMessageRequest(_ModelCallRequest):
+    message: str = Field(min_length=1, max_length=4000)
+    request_id: str = Field(min_length=1, max_length=200)
+
+
+_reader_chat = None
+
+
+def _get_reader_chat():
+    global _reader_chat
+    with _preparation_jobs_lock:
+        if _reader_chat is None:
+            from core.services.reader_chat_service import ReaderChatService
+            _reader_chat = ReaderChatService()
+        return _reader_chat
+
+
+def _reader_thread(thread_id: str) -> dict[str, Any]:
+    thread = _get_reader_chat().get_thread(thread_id)
+    if thread.get("scope") != "reader":
+        raise HTTPException(status_code=409, detail="非阅读域会话")
+    # Local single-user server: only threads attached to this instance's book root.
+    _resolve_book_dir(thread.get("context", {}).get("book_id", ""))
+    return thread
+
+
+@app.get("/api/books/{book_id}/reader-chat/roster")
+def reader_chat_roster(book_id: str, chapter_no: int = 1) -> dict[str, Any]:
+    book_dir = _resolve_book_dir(book_id)
+    if chapter_no < 1:
+        raise HTTPException(status_code=422, detail="chapter_no 必须为正整数")
+    try:
+        return _get_reader_chat().list_roster(book_dir, chapter_no)
+    except Exception as exc:
+        raise _workflow_error(exc) from exc
+
+
+@app.post("/api/books/{book_id}/reader-chat/threads")
+def create_reader_chat_thread(book_id: str, request: ReaderChatThreadRequest) -> dict[str, Any]:
+    book_dir = _resolve_book_dir(book_id)
+    try:
+        return _get_reader_chat().create_thread(book_dir, request.character_id, request.chapter_no,
+            card_revision=request.card_revision, source_hash=request.source_hash)
+    except Exception as exc:
+        raise _workflow_error(exc) from exc
+
+
+@app.get("/api/reader-chat/threads/{thread_id}")
+def get_reader_chat_thread(thread_id: str) -> dict[str, Any]:
+    try:
+        return _reader_thread(thread_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _workflow_error(exc) from exc
+
+
+@app.post("/api/reader-chat/threads/{thread_id}/messages")
+def send_reader_chat_message(thread_id: str, request: ReaderChatMessageRequest) -> dict[str, Any]:
+    try:
+        _reader_thread(thread_id)
+        model = _preparation_model(request, required=True)
+        return _get_reader_chat().send_message(thread_id, request.message,
+            request_id=request.request_id, model_fn=model)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _workflow_error(exc) from exc
+
+
+@app.get("/api/books/{book_id}/preparation")
+def book_preparation_status(book_id: str, mode: str = "window",
+                            target_chapter: int = 1) -> dict[str, Any]:
+    """查看当前准备覆盖与身份校验状态（只读，不触发模型调用）。"""
+    book_dir = _resolve_book_dir(book_id)
+    try:
+        return verify_preparation(book_dir, mode=mode, target_chapter=max(1, int(target_chapter)))
     except (OSError, ValueError) as exc:
-        raise HTTPException(status_code=400, detail=f"原著准备失败：{exc}") from exc
+        raise HTTPException(status_code=400, detail=f"准备状态读取失败：{exc}") from exc
+
+
+@app.post("/api/books/{book_id}/locate")
+def locate_book_scene(book_id: str, request: LocateRequest) -> dict[str, Any]:
+    """原文证据定位开局场景；候选含章节/块坐标、歧义与时点标记。"""
+    book_dir = _resolve_book_dir(book_id)
+    model = None
+    if request.semantic:
+        key = request.api_key.strip()
+        if not key:
+            raise HTTPException(status_code=400, detail="语义定位需要模型调用，请提供 API Key")
+        try:
+            model = _request_model_callable(request.provider, request.base_url, key, request.model)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        return {"candidates": locate_scene(book_dir, request.query, limit=request.limit, model=model)}
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"场景定位失败：{exc}") from exc
+
+
+@app.post("/api/books/{book_id}/locate/select")
+def select_book_scene(book_id: str, request: LocateSelectRequest) -> dict[str, Any]:
+    """确认开局位置与时点：返回证据、知识截止与时点限定初始事实。"""
+    book_dir = _resolve_book_dir(book_id)
+    model = None
+    if request.project_facts:
+        key = request.api_key.strip()
+        if not key:
+            raise HTTPException(status_code=400, detail="时点状态投影需要模型调用，请提供 API Key")
+        try:
+            model = _request_model_callable(request.provider, request.base_url, key, request.model)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        selected = select_scene(book_dir, request.candidate, request.timepoint)
+        if request.project_facts:
+            selected["initial_state"] = project_scene_initial_state(book_dir, selected, model=model)
+        return selected
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"开局位置确认失败：{exc}") from exc
+
+
+@app.get("/api/library/playable")
+def playable_library() -> dict[str, Any]:
+    """只列出已玩过且当前准备校验通过的作品（可复用开局，不删原著）。"""
+    root = Path(fe.WRITABLE_DIR) / "books"
+    if not root.is_dir():
+        return {"books": []}
+    try:
+        return {"books": list_playable_books(root)}
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"作品库读取失败：{exc}") from exc
+
+
+@app.get("/api/books/{book_id}/search/occurrences")
+def search_book_occurrences(book_id: str, q: str, mode: str = "exact",
+                            page: int = 1, page_size: int = 20,
+                            ignore_punctuation: bool = False,
+                            ignore_whitespace: bool = False) -> dict[str, Any]:
+    from core.services.book_search_service import search_occurrences, SearchQueryError, BookSourceError
+    book_dir = _resolve_book_dir(book_id)
+    try:
+        return search_occurrences(book_dir, q, book_id=book_id, mode=mode,
+                                  page=page, page_size=page_size,
+                                  ignore_punctuation=ignore_punctuation,
+                                  ignore_whitespace=ignore_whitespace)
+    except SearchQueryError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except BookSourceError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.get("/api/books/{book_id}/search")
@@ -1657,8 +2193,75 @@ def _resolve_roster_uploads(session, rows: list[dict[str, Any]] | None) -> list[
     return resolved
 
 
+def _validated_gf_spec(spec: Any) -> dict[str, Any] | None:
+    """开局推荐规格的服务端形状校验（D03）：不完整直接拒绝，不静默丢字段。"""
+    if spec is None:
+        return None
+    if not isinstance(spec, dict):
+        raise HTTPException(status_code=400, detail="golden_finger_spec 必须是规格对象")
+    required = ("name", "cost", "cooldown", "effect", "limits")
+    missing = [key for key in required if not str(spec.get(key) or "").strip()]
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail="金手指规格不完整，缺少字段：" + "、".join(missing))
+    return spec
+
+
 @app.post("/api/sessions/start")
 def start(request: StartRequest) -> StreamingResponse:
+    book_dir = _resolve_book_dir(request.book_id) if request.book_id else None
+    if book_dir is not None and (request.novel_upload_id or request.work):
+        raise HTTPException(status_code=422, detail="book_id 不可与上传原著或 work 同时指定")
+    try:
+        config = fe.provider_config(request.provider or "deepseek", request.base_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="模型提供方配置无效") from exc
+    gf_spec = _validated_gf_spec(request.golden_finger_spec)
+    fullbook = request.preparation_mode == "fullbook" or request.mode.startswith("强化")
+    if fullbook:
+        if book_dir is None or not request.preparation_job_id:
+            raise HTTPException(status_code=409, detail="请先完成当前原著的全书准备任务，再提交 book_id 与 preparation_job_id 开局")
+        try:
+            from core.services.preparation_jobs_service import _source
+            service = _get_preparation_jobs()
+            identity = service.book_identity(request.preparation_job_id)
+            job = service.get(request.preparation_job_id)
+            prepared_config = service.configuration(request.preparation_job_id)
+            if (Path(identity["book_path"]).resolve() != book_dir.resolve()
+                    or identity["source_hash"] != _source(book_dir)
+                    or job.get("status") != "READY" or prepared_config.get("mode") != "fullbook"
+                    or identity["book_id"] != book_dir.name
+                    or not job.get("character_counts", {}).get("verified_cards")
+                    or job.get("gap_report", {}).get("card_publication") != "complete"
+                    or job.get("gap_report", {}).get("rich_character_extraction") != "complete"
+                    or not job.get("published_characters")):
+                raise ValueError("fullbook publication not ready")
+        except Exception as exc:
+            raise HTTPException(status_code=409, detail="当前原著全书准备尚未完成、已过期或未发布角色，请重新准备") from exc
+    scene_selection = None
+    target_chapter = request.target_chapter
+    if request.chapter_selection and request.scene_selection:
+        raise HTTPException(status_code=422, detail="仅可指定一种开局位置")
+    selection = request.chapter_selection or request.scene_selection
+    if selection:
+        if book_dir is None:
+            raise HTTPException(status_code=422, detail="开局位置必须指定 book_id")
+        try:
+            if request.chapter_selection or selection.get("kind") == "chapter_start":
+                from core.services.reader_start_service import prepare_chapter_start
+                evidence = selection.get("evidence", selection)
+                if not evidence.get("source_hash"):
+                    raise ValueError("chapter selection requires source hash")
+                intent = prepare_chapter_start(book_dir, book_dir.name, evidence.get("chapter_no"),
+                                               expected_source_hash=evidence["source_hash"])
+                scene_selection = intent["scene_selection"]
+            else:
+                scene_selection = select_scene(book_dir, selection.get("candidate", {}),
+                                               selection.get("timepoint", "during"))
+            target_chapter = int(scene_selection["knowledge_cutoff"]["chapter_no"])
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise HTTPException(status_code=409, detail="开局场景证据无效或已过期，请重新选择") from exc
     try:
         session = sessions.create(request.session_id)
     except ValueError as exc:
@@ -1667,7 +2270,6 @@ def start(request: StartRequest) -> StreamingResponse:
         raise HTTPException(status_code=409, detail="该 session 正在处理另一个请求")
     candidate_api_key = request.api_key.strip()
     provider = request.provider or "deepseek"
-    config = fe.provider_config(provider, request.base_url)
     # 单女主/单宿敌由后端强制：宿敌本身是单选+单上传，这里只校验女主名册。
     if not str(request.heroine_mode or "").startswith("多") and len(request.heroine_roster) > 1:
         sessions.release(session)
@@ -1683,7 +2285,13 @@ def start(request: StartRequest) -> StreamingResponse:
     except HTTPException:
         sessions.release(session)
         raise
-    if request.mode.startswith("强化"):
+    # 已玩标记目标目录：book_id 开局直接用解析出的书目录；上传开局用
+    # books/<上传文件名主干>（上传 novel TXT 时已同步切章落盘）。
+    played_book_dir = (
+        book_dir if book_dir is not None
+        else (Path(fe.WRITABLE_DIR) / "books" / Path(novel_path).stem if novel_path else None)
+    )
+    if request.mode.startswith("强化") and book_dir is None:
         if not novel_path or Path(novel_path).suffix.lower() != ".txt":
             sessions.release(session)
             raise HTTPException(status_code=400, detail="强化模式必须先上传完整 TXT 原著")
@@ -1714,16 +2322,21 @@ def start(request: StartRequest) -> StreamingResponse:
         thinking_mode=request.thinking_mode,
         thinking_param=request.thinking_param,
         mode=request.mode,
-        work=None if request.mode.startswith("强化") else (request.work or (fe.list_works() or [None])[0]),
+        work=None if request.mode.startswith("强化") or book_dir is not None else request.work,
         novel_file=novel_path,
+        book_dir=str(book_dir) if book_dir is not None else None,
         novel_display_name=novel_display_name,
         fragment=request.fragment,
         role=request.role,
         protagonist_gender=request.protagonist_gender,
         timepoint=request.timepoint,
+        preparation_mode=request.preparation_mode,
+        target_chapter=target_chapter,
+        scene_selection=scene_selection,
         difficulty=request.difficulty,
         gf=request.golden_finger or (fe.GOLDEN_FINGERS[0] if fe.GOLDEN_FINGERS else "无（凡人开局）"),
         gf_custom=request.golden_finger_proposal,
+        gf_spec=gf_spec,
         persona_preset=request.persona_preset,
         persona_custom=request.persona_custom,
         persona_file=persona_path,
@@ -1740,6 +2353,7 @@ def start(request: StartRequest) -> StreamingResponse:
         nemesis_select=request.nemesis_select,
         nemesis_file=nemesis_path,
         nemesis_display_name=nemesis_display_name,
+        nemesis_identity=request.nemesis_identity,
         convergence=request.convergence,
         story_richness=request.story_richness,
         paper_tier=request.paper_tier,
@@ -1753,7 +2367,7 @@ def start(request: StartRequest) -> StreamingResponse:
         raise HTTPException(status_code=400, detail=f"开局初始化失败：{exc}") from exc
     return _stream_response(
         session, generator, operation="start", api_key_on_commit=candidate_api_key,
-        client_request_id=request.client_request_id)
+        client_request_id=request.client_request_id, played_book_dir=played_book_dir)
 
 
 @app.post("/api/sessions/{session_id}/messages")
@@ -2572,6 +3186,152 @@ def export_save_novel(save_id: str, request: ExportNovelRequest) -> dict[str, An
 
 if (FRONTEND_DIST / "assets").is_dir():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="frontend-assets")
+
+
+# —— Copilot 助手：状态总览 / 文档检索 / 白名单工具对话 ——
+
+
+@app.get("/api/copilot/overview")
+def copilot_overview(session_id: str | None = None) -> dict[str, Any]:
+    """面板初始化数据：对局快照 + 功能入口目录 + 工具清单 + 手册目录。"""
+    state = None
+    if session_id:
+        session = sessions.get(session_id)
+        if session is not None:
+            state = session.state
+    return {
+        "snapshot": copilot_service.state_snapshot(state),
+        "entries": copilot_service.ENTRIES,
+        "tools": [{"name": t["name"], "desc": t["desc"]} for t in copilot_service.TOOLS.values()],
+        "doc_sections": copilot_service.doc_catalog(),
+    }
+
+
+@app.get("/api/copilot/docs")
+def copilot_docs(q: str = "") -> dict[str, Any]:
+    """用户手册检索：无关键词时返回前几节节选。"""
+    return {"query": q, "results": copilot_service.search_docs(q)}
+
+
+def _copilot_tool_actions(session, request: CopilotChatRequest) -> dict[str, Any]:
+    """构建操作工具闭包：只在 chat 端点持有会话锁期间被调用。
+
+    只包裹已有端点同源逻辑（存/读/准备/托管/任务/导出），不新增权限面；
+    无对局时这些闭包不会被注入，服务层会向模型返回「当前不可用」。
+    """
+    actions: dict[str, Any] = {}
+    if session is None or not save_contract.is_usable_state(session.state):
+        return actions
+    state = session.state
+
+    def _save_game(save_id: str = "latest") -> dict[str, Any]:
+        engine.persistence.save_state(
+            state, save_id=str(save_id or "latest")[:96], root=fe.WRITABLE_DIR,
+            start_params=state.get("start_params"), session_id=session.session_id)
+        return {"saved": True, "save_id": str(save_id or "latest")[:96]}
+
+    def _load_save(save_id: str) -> dict[str, Any]:
+        restored = engine.persistence.load_state_strict(
+            str(save_id or ""), root=fe.WRITABLE_DIR)
+        if not restored or not restored.get("system"):
+            raise ValueError(f"未找到存档 {save_id}")
+        restored = _normalize_restored_state(restored, session.session_id)
+        if not save_contract.is_usable_state(restored):
+            raise ValueError("存档一致性错误：无法恢复为正式对局")
+        session.state = restored
+        return {"loaded": True, "save_id": str(save_id),
+                "round": restored.get("round"), "mode": restored.get("mode")}
+
+    def _create_preparation_job(book_id: str, mode: str = "window") -> dict[str, Any]:
+        book_dir = _resolve_book_dir(str(book_id or ""))
+        job_mode = "fullbook" if str(mode) == "fullbook" else "window"
+        service = _get_preparation_jobs()
+        job = service.create(
+            book_dir, idempotency_key=f"copilot-{uuid.uuid4().hex[:16]}",
+            mode=job_mode, model_version="copilot")
+        if job["status"] == "QUEUED":
+            provider = str(request.provider or state.get("provider") or "deepseek")
+            config = fe.provider_config(provider, request.base_url or state.get("base_url"))
+            model = request.model or state.get("model") or (config.get("models") or [fe.DEFAULT_MODEL])[0]
+            service.start(job["job_id"], model=model)
+        return {"job_id": job["job_id"], "status": job["status"], "mode": job_mode}
+
+    def _autoplay_choice() -> dict[str, Any]:
+        options = state.get("options") or []
+        if not options:
+            raise ValueError("当前没有可选选项，无法托管")
+        provider = state.get("provider") or "deepseek"
+        config = fe.provider_config(provider, state.get("base_url"))
+        model = state.get("model") or (config.get("models") or [fe.DEFAULT_MODEL])[0]
+        client = fe.make_client(session.api_key, provider,
+                                state.get("base_url") or config["base_url"])
+        prompt = engine.autoplay.build_autoplay_prompt(state, options, state.get("history"))
+        text = distill_model(client, model, prompt, state.get("request_kwargs"), provider)
+        choice = engine.autoplay.parse_autoplay_choice(text, options)
+        return {"choice": choice["choice"], "reason": choice["reason"]}
+
+    def _quest_accept() -> dict[str, Any]:
+        engine.quest.accept(state)
+        return {"quest": state["quest"]}
+
+    def _quest_decline() -> dict[str, Any]:
+        box = state.get("quest") if isinstance(state.get("quest"), dict) else {}
+        if box.get("status") != "offered":
+            raise ValueError("当前没有可婉拒的任务 offer")
+        state["quest"] = {"status": "none"}
+        return {"quest": state["quest"]}
+
+    def _export_novel(style: str = "faithful") -> dict[str, Any]:
+        creds = {"provider": state.get("provider"), "base_url": state.get("base_url"),
+                 "api_key": session.api_key, "model": state.get("model")}
+        result = _run_export(state, str(style or "faithful"), creds)
+        return {"chapters": len(result.get("chapters") or []),
+                "chars": len(result.get("full_text") or ""),
+                "manifest": result.get("manifest")}
+
+    actions.update(save_game=_save_game, load_save=_load_save,
+                   create_preparation_job=_create_preparation_job,
+                   autoplay_choice=_autoplay_choice,
+                   quest_accept=_quest_accept, quest_decline=_quest_decline,
+                   export_novel=_export_novel)
+    return actions
+
+
+@app.post("/api/copilot/chat")
+def copilot_chat(request: CopilotChatRequest) -> dict[str, Any]:
+    """Copilot 对话：工具循环在服务端执行（白名单注册表），凭据不落日志。"""
+    session = None
+    if request.session_id:
+        session = _session_or_404(request.session_id)
+        if not sessions.acquire(session):
+            raise HTTPException(status_code=409, detail="该 session 正在处理另一个请求")
+    try:
+        provider = str((session and session.state.get("provider"))
+                       or request.provider or "deepseek")
+        base_url = (session and session.state.get("base_url")) or request.base_url
+        api_key = str((session and session.api_key) or request.api_key or "").strip()
+        if not api_key:
+            raise HTTPException(
+                status_code=400, detail="缺少 API Key：请先在 AI 配置中填写，或使用进行中对局的凭据")
+        config = fe.provider_config(provider, base_url)
+        model = str(request.model or (session and session.state.get("model"))
+                    or (config.get("models") or [fe.DEFAULT_MODEL])[0])
+        ctx = {
+            "state": session.state if session is not None else None,
+            "writable_root": fe.WRITABLE_DIR,
+            "actions": _copilot_tool_actions(session, request),
+        }
+        try:
+            return copilot_service.handle_chat(
+                request.messages, ctx, provider=provider, base_url=base_url,
+                api_key=api_key, model=model)
+        except copilot_service.CopilotClientError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except copilot_service.CopilotUpstreamError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+    finally:
+        if session is not None:
+            sessions.release(session)
 
 
 # —— 真实检验监控管线：浏览器页面实时观看（工具包 tools/playtest_kit） ——

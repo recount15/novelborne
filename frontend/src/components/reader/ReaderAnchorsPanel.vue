@@ -9,7 +9,7 @@ defineProps<{ anchor: UserBookAnchor | null; loading?: boolean; currentChapterIn
   <div class="reader-insight-panel">
     <div class="drawer-head"><strong><Anchor :size="14" /> 本章锚点</strong><span>第 {{ currentChapterIndex }} 章</span></div>
     <div v-if="loading" class="anchor-empty"><LoaderCircle class="animate-spin" :size="22" /><p>正在读取剧情锚点</p></div>
-    <div v-else-if="!anchor" class="anchor-empty"><CircleAlert :size="22" /><p>本章暂无剧情锚点</p><small>锚点蒸馏完成后会显示在这里</small></div>
+    <div v-else-if="!anchor" class="anchor-empty"><CircleAlert :size="22" /><p>本章暂无剧情锚点</p><small>蒸馏到本章后会自动显示，无需重开阅读器</small></div>
     <div v-else class="insight-content">
       <h3>{{ anchor.title || `第 ${currentChapterIndex} 章` }}</h3>
       <p v-if="anchor.summary" class="insight-summary">{{ anchor.summary }}</p>

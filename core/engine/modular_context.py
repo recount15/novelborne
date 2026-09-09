@@ -150,29 +150,8 @@ def _anchor_text(state: Mapping[str, Any], supplied: str) -> str:
 
 
 def _character_contracts(state: Mapping[str, Any], active_members: Sequence[Any]) -> str:
-    members = list(active_members or ())
-    if not members:
-        raw = state.get("active_members") or state.get("active_characters") or ()
-        members = list(raw) if isinstance(raw, (list, tuple)) else []
-    summaries = _mapping(state.get("active_summaries"))
-    lines: list[str] = []
-    for item in members:
-        if isinstance(item, Mapping):
-            name = _clip(item.get("name") or item.get("character") or "", 80)
-            contract = {key: item.get(key) for key in (
-                "role", "role_type", "participation", "skill", "background",
-                "character_card", "contract", "speech_style", "goal", "fear")
-                        if item.get(key) not in (None, "", [], {})}
-        else:
-            name, contract = _clip(item, 80), {}
-        if not name:
-            continue
-        summary = summaries.get(name, "")
-        suffix = _json(contract, 650)
-        if summary:
-            suffix += ("；" if suffix else "") + _clip(summary, 350)
-        lines.append(f"- {name}" + (f"：{suffix}" if suffix else ""))
-    return "\n".join(lines)
+    from core.services.role_context_projection import project_role_context
+    return project_role_context(state, active_members)["block"]
 
 
 def build_modular_context(state: Mapping[str, Any] | None, message: str = "",

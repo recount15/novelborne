@@ -1,85 +1,25 @@
 # -*- mode: python ; coding: utf-8 -*-
-import hashlib
+import importlib.util
 import os
 from pathlib import Path
+import tempfile
+from PyInstaller.config import CONF
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 ROOT = Path(os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(SPEC)), os.pardir)))  # noqa: F821
 
-_DATA_FILES = (
-    'layered_corpus.json',
-    'skills_catalog.json',
-    'tropes_biz.json',
-    'tropes_combat.json',
-    'tropes_life.json',
-    'tropes_manifest.json',
-    'tropes_mystery.json',
-    'tropes_romance.json',
-)
-_PROMPT_FILES = (
-    'agent_revise.md', 'agent_self_check.md', 'answer_polish.md',
-    'character_patch.md', 'directives_register.md', 'eval_archive.md',
-    'nemesis_block.md', 'opening_anchor_merge.md', 'opening_anchor_verify.md',
-    'opening_archive.md', 'opening_characters.md', 'opening_check.md',
-    'opening_nemesis_note.md', 'opening_plot_merge.md', 'opening_plot_sample.md',
-    'opening_settings.md', 'option_repair.md', 'options_gen.md', 'pacing_hint.md',
-    'paper_director.md', 'paper_polish.md', 'paper_segment.md', 'quality_judge.md',
-    'quality_rewrite.md', 'rounds_rule.md', 'rounds_rule_enhanced.md',
-    'rounds_rule_fragment.md', 'segment_refill.md', 'structured_question.md',
-    'system_header.md', 'uploaded_work.md', 'work_archive_distill.md',
-)
-_RULE_FILES = (
-    'enhanced.md', 'golden_finger.md', 'runtime.md', 'state_memory.md',
-    'work_library.md', 'worldbook.md',
-)
-_PAPER_FILES = tuple(
-    f'{size}_l{level}_{stage}.json'
-    for size, levels in (('small', range(1, 4)), ('large', range(4, 7)))
-    for level in levels
-    for stage in ('setup', 'climax', 'free')
-)
-_PUBLIC_ASSET_FILES = (
-    *(f'data/{name}' for name in _DATA_FILES),
-    'lore/default_worldbook.json',
-    *(f'papers/{name}' for name in _PAPER_FILES),
-    *(f'prompts/{name}' for name in _PROMPT_FILES),
-    *(f'rules/{name}' for name in _RULE_FILES),
-)
-_APPROVED_SHA256 = {
-    # This file is mutated by local distillation. Package only the reviewed,
-    # tracked public baseline and never a user's working copy.
-    'rules/work_library.md': '2bc3e7079aeda813d5284a78b0ae924d3055413dd809d02bc604bb7f2303c34b',
-}
+# 公开资产门禁（D12）：单一事实来源在 build/asset_gate.py（可独立干跑测试）。
+# 公开基线哈希永远生效；私有本地哈希仅在环境变量
+# FATEENGINE_ALLOW_PRIVATE_ASSETS=1 显式开启时覆盖（公开打包脚本不得设置）。
+_gate_spec = importlib.util.spec_from_file_location(
+    'asset_gate', str(ROOT / 'build' / 'asset_gate.py'))
+_gate = importlib.util.module_from_spec(_gate_spec)
+_gate_spec.loader.exec_module(_gate)
+
 _FRONTEND_SUFFIXES = {
     '.css', '.html', '.ico', '.jpeg', '.jpg', '.js', '.json', '.png',
     '.svg', '.ttf', '.webp', '.woff', '.woff2',
 }
-
-
-def _sha256(path):
-    digest = hashlib.sha256()
-    with path.open('rb') as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b''):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _public_asset_datas():
-    result = []
-    asset_root = ROOT / 'assets'
-    for relative_name in _PUBLIC_ASSET_FILES:
-        source = asset_root / relative_name
-        if not source.is_file() or source.is_symlink():
-            raise SystemExit(f'Required public asset is missing or unsafe: assets/{relative_name}')
-        expected = _APPROVED_SHA256.get(relative_name)
-        if expected and _sha256(source) != expected:
-            raise SystemExit(
-                f'Public asset hash mismatch: assets/{relative_name}. '
-                'Restore or explicitly review and update the approved hash before release.'
-            )
-        target = (Path('assets') / Path(relative_name).parent).as_posix()
-        result.append((str(source), target))
-    return result
 
 
 def _frontend_datas():
@@ -100,11 +40,20 @@ def _frontend_datas():
     return result
 
 
-datas = _public_asset_datas() + _frontend_datas() + [(str(ROOT / 'LICENSE'), 'LICENSE')]
+datas = _gate.public_asset_datas(
+    ROOT, allow_private=_gate.private_override_enabled()) \
+    + _frontend_datas() + [(str(ROOT / 'LICENSE'), 'LICENSE')]
 binaries = []
 hiddenimports = ['core', 'core.server', 'core.app', 'core.fate_engine']
+# Hooks may import core in isolated subprocesses. Never inherit the owner's DB.
+# Keep this build-only runtime outside datas; the launcher selects its own at runtime.
+_hook_root = Path(CONF['workpath']).resolve() / 'hook-runtimes'
+_hook_root.relative_to(ROOT.resolve())  # Packaging side effects must stay in workspace.
+_hook_root.mkdir(parents=True, exist_ok=True)
+os.environ['FATE_VAR_DIR'] = tempfile.mkdtemp(prefix='empty-', dir=str(_hook_root))
 # core.engine and related packages use lazy imports that static analysis misses.
-for _pkg in ('core.engine', 'core.api', 'core.ui', 'core.memory', 'core.lore', 'core.prompts'):
+for _pkg in ('core.engine', 'core.api', 'core.ui', 'core.memory', 'core.lore', 'core.prompts',
+             'core.services'):
     hiddenimports += collect_submodules(_pkg)
 # FastAPI + Vue production runtime. Gradio remains source-only.
 for _pkg in ('openai', 'fastapi', 'uvicorn', 'multipart', 'httpx', 'pydantic',
@@ -152,6 +101,7 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
 )
+
 coll = COLLECT(
     exe,
     a.binaries,

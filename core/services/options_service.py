@@ -51,12 +51,12 @@ _AI_ORIGIN_RE = re.compile(
     r"(?:作为(?:一个)?AI|作为人工智能|AI生成|人工智能生成|由AI提供|模型生成|语言模型|无法替你决定)",
     re.IGNORECASE)
 #: 清洗后保留的最少条数：不足此数视为生成失败（宁缺毋滥，保留自由输入）。
-MIN_AI_OPTIONS = 4
+LEGAL_OPTION_COUNT = turn_grader.OPTION_COUNT  # 合法榜恒为 6 条 A–F
 
 
 def build_options_prompt(action: str, factors_block: str, context_tail: str,
                          scene: str = "", blueprint_brief: str = "",
-                         variant: int = 0) -> str:
+                         variant: int = 0, *, state: Mapping[str, Any] | None = None) -> str:
     """装配选项生成卷提示词（@@KEY@@ 占位符由 core.prompts.render 渲染）。
 
     ``scene`` 为当前章原文节选（~1500 字）：选项必须扎根其中的人/物/局势。
@@ -82,6 +82,12 @@ def build_options_prompt(action: str, factors_block: str, context_tail: str,
     brief = str(blueprint_brief or "").strip()
     if brief:
         rendered += ("\n\n【本回合蓝图节拍（选项须与之衔接）】" + brief[:400])
+    if state is not None:
+        from core.services.role_context_projection import project_role_context
+        roles = project_role_context(state)
+        if not roles["ok"]:
+            raise ValueError("role_projection_failed: " + ",".join(roles["omissions"]))
+        rendered += "\n\n【行动前提：只使用角色已知事实，不得假定未知关系或能力】\n" + roles["block"]
     return rendered + variant_hint
 
 
@@ -179,16 +185,20 @@ def _normalize_fallback(items: Sequence[Any], factors: Sequence[Any]) -> List[Di
     return normalized
 
 
-def _fallback_from_narrative(narrative: str) -> List[Dict[str, str]]:
-    """回退链：正文残存选项（正文为模型产物，属 AI 选项）→ 弹性修复补足。"""
+def _fallback_from_narrative(narrative: str) -> tuple[List[Dict[str, str]], bool]:
+    """回退链：正文残存选项（正文为模型产物，属 AI 选项）→ 弹性修复补足。
+
+    返回 (选项, 是否发生合成)。``repair_options`` 返回二元组，此前未解包
+    导致弹性修复整体失效（D05）。
+    """
     parsed = engine.parse_options(narrative or "")
     if len(parsed) >= 6:
-        return parsed[:6]
+        return parsed[:6], False
     if parsed:
-        repaired = engine.repair_options(narrative or "", parsed)
+        repaired, synthesized = engine.repair_options(narrative or "", parsed)
         if repaired:
-            return list(repaired)[:6]
-    return []
+            return list(repaired)[:6], synthesized
+    return [], False
 
 
 def _choice_candidates(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -223,11 +233,13 @@ def _apply_choice_agent(items: List[Dict[str, Any]], meta: Dict[str, Any]) -> Li
         dropped = [str(c.get("key")) for c in candidates
                    if str(c.get("key")) not in {str(k.get("key")) for k in kept}]
         if dropped:
-            # 剔除后不足 6 条无法直接应用：记录被剔除项，交由批改重试链替换。
+            # 剔除后不足 6 条（D06）：返回已过滤的安全子集，禁止 fail-open
+            # 把被剔除项原样放回；记录 dropped_keys 交由批改重试链替换补齐。
             shadow["applied"] = False
             shadow["dropped_keys"] = dropped
             meta["choice_agent"] = shadow
-            return items
+            allowed_keys = {str(c.get("key")) for c in kept}
+            return [item for item in items if str(item.get("key")) in allowed_keys]
     shadow["applied"] = False
     meta["choice_agent"] = shadow
     return items
@@ -239,15 +251,20 @@ def generate_options(client, model: str, request_kwargs: dict | None = None,
                      scene: str = "", narrative: str = "",
                      factors: Optional[Sequence[Any]] = None,
                      model_fn: Optional[Model] = None, attempts: int = 2,
-                     blueprint_brief: str = "", variant: int = 0) -> Dict[str, Any]:
+                     blueprint_brief: str = "", variant: int = 0,
+                     state: Mapping[str, Any] | None = None) -> Dict[str, Any]:
     """生成恰好 6 条结构化选项；返回 {options, source, meta}。
 
     source ∈ model（结构化生成，经 grade_options 校验或清洗保序）/ narrative
     （正文回退——正文为模型产物）/ none（均失败，options 为空，由调用方保留
     自由输入；**绝不以模板句充数**）。绝不抛错——失败信息在 meta/error。
     """
-    prompt = build_options_prompt(action, factors_block, context_tail, scene,
-                                  blueprint_brief=blueprint_brief, variant=variant)
+    try:
+        prompt = build_options_prompt(action, factors_block, context_tail, scene,
+                                      blueprint_brief=blueprint_brief, variant=variant, state=state)
+    except ValueError as exc:
+        return {"options": [], "source": "none", "meta": {"role_projection_error": str(exc)},
+                "error": str(exc)}
     budgeted = parallel.budget_model(
         model_fn or (lambda p: distill_model(client, model, p, request_kwargs, provider)),
         parallel.PRIORITY_TURN)
@@ -278,6 +295,9 @@ def generate_options(client, model: str, request_kwargs: dict | None = None,
             retry_data, retry_meta = None, {"transport_error": str(exc)}
         meta = dict(meta or {})
         meta["grade_retry"] = retry_meta or {}
+        # 保留首轮剔除记录（D06 可追溯）：重试应用会覆写 choice_agent。
+        if isinstance(meta.get("choice_agent"), dict):
+            meta["choice_agent_initial"] = meta["choice_agent"]
         retry_items = parse_option_items(
             (retry_data or {}).get("options") or []) if retry_data else []
         retry_items = _apply_choice_agent(retry_items, meta)
@@ -293,13 +313,16 @@ def generate_options(client, model: str, request_kwargs: dict | None = None,
                 item["factors"] = engine.match_option_factors(item["text"], factors or [])
             return {"options": _strip_agent_flags(items), "source": "model", "meta": meta}
         sanitized = _sanitize_option_items(items)
-        if len(sanitized) >= MIN_AI_OPTIONS:
+        if len(sanitized) >= turn_grader.OPTION_COUNT:
             for item in sanitized:
                 item["factors"] = engine.match_option_factors(item["text"], factors or [])
             return {"options": _strip_agent_flags(sanitized), "source": "model", "meta": meta,
                     "warnings": warnings or grade.errors}
-    fallback = _normalize_fallback(_fallback_from_narrative(narrative), factors)
+    fallback_raw, repair_synthesized = _fallback_from_narrative(narrative)
+    fallback = _normalize_fallback(fallback_raw, factors)
     if len(fallback) >= 6:
+        meta = dict(meta or {})
+        meta["narrative_repair"] = {"synthesized": bool(repair_synthesized)}
         return {"options": fallback[:6], "source": "narrative", "meta": meta}
     return {"options": [], "source": "none", "meta": meta,
             "error": "结构化生成与正文回退均未产出合格选项（AI-only：不出模板选项）",
@@ -321,4 +344,4 @@ def render_display_block(options: Sequence[Any]) -> str:
 
 
 __all__ = ["build_options_prompt", "parse_option_items", "generate_options",
-           "render_display_block", "_sanitize_option_items", "MIN_AI_OPTIONS"]
+           "render_display_block", "_sanitize_option_items", "LEGAL_OPTION_COUNT"]

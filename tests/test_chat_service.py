@@ -37,6 +37,27 @@ class TestGetRoster:
         assert roster[0]["name"] == "李寻欢"
 
 
+class TestSceneParticipants:
+    """P4：场景 NPC 闲聊名单——活跃角色与场景 NPC 合并、去重。"""
+
+    def test_scene_npcs_merged_into_roster(self):
+        state = {
+            "active_members": [{"name": "李寻欢", "voice": "潇洒"}],
+            "scene_participants": ["龙啸云", "林仙儿", "", "李寻欢"],
+        }
+        roster = chat_service.get_roster(state)
+        names = [row["name"] for row in roster]
+        assert names == ["李寻欢", "龙啸云", "林仙儿"]
+        npc = next(row for row in roster if row["name"] == "龙啸云")
+        assert npc["voice"] == "", "无自选卡的 NPC 留空，由提示词回退"
+
+    def test_scene_npcs_usable_without_active_members_key(self):
+        state = {"companions": [{"name": "苏叶"}], "scene_participants": ["铁传甲"]}
+        roster = chat_service.get_roster(state)
+        names = [row["name"] for row in roster]
+        assert "苏叶" in names and "铁传甲" in names
+
+
 class TestChatQuality:
     """闲聊质量门测试。"""
     

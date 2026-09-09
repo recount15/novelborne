@@ -1,423 +1,171 @@
-/* ============================================================
- * Theme: cyber · 赛博朋克（暗色）
- * 午夜蓝黑底 · 霓虹青主行动色 + 品红点缀 · 电路网格纹理 · 霓虹辉光阴影
- * 圆角 4px（硬边）· 动效 160ms · color-scheme: dark
- * 红线自查：仅 [data-theme="cyber"] 前缀 + .theme-decor 钩子；
- *          纹理全部内联 SVG data-URI / CSS 渐变；26 键契约齐备；
- *          正文 --fe-ink(#e6ecf7) on --fe-bg(#0d0f1a) ≈ 15.6:1，
- *          on --fe-panel(#141828) ≈ 13.8:1；--fe-ink-2(#aeb9d6) ≈ 8.0:1；
- *          --fe-ink-3(#8a96b8) ≈ 5.1:1（10px 小字达标）；
- *          --fe-accent-ink(#00131a) on --fe-accent(#22d3ee) ≈ 9.8:1；
- *          --fe-ok(#4ade80) ≈ 9.5:1、--fe-warn(#fbbf24) ≈ 10.3:1、
- *          --fe-danger(#fb7185) ≈ 7.4:1（均对暗底）
- * ============================================================ */
-
+/* Cyber: circuit perimeter and terminal metadata; clean reading surfaces. */
 [data-theme="cyber"] {
   color-scheme: dark;
-
-  /* ---- 表面：午夜蓝黑 + 电路板走线纹理 ---- */
   --fe-bg: #0d0f1a;
-  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96'%3E%3Cg fill='none' stroke='%2322d3ee' stroke-opacity='0.05' stroke-width='1'%3E%3Cpath d='M0 24h40v24h32M24 0v40h24v32M96 72H56V48'/%3E%3C/g%3E%3Cg fill='%23ff2d95' fill-opacity='0.07'%3E%3Ccircle cx='40' cy='24' r='1.6'/%3E%3Ccircle cx='24' cy='40' r='1.6'/%3E%3Ccircle cx='56' cy='72' r='1.6'/%3E%3C/g%3E%3C/svg%3E");
+  --fe-bg-image: none;
   --fe-panel: #141828;
   --fe-panel-2: #1b2136;
   --fe-panel-3: #232a44;
-
-  /* ---- 描边：暗蓝金属 + 霓虹青重点 ---- */
   --fe-border: #2b3352;
   --fe-border-strong: #22d3ee;
-
-  /* ---- 文字：冷白荧幕系 ---- */
   --fe-ink: #e6ecf7;
   --fe-ink-2: #aeb9d6;
-  --fe-ink-3: #8a96b8;
-
-  /* ---- 行动色：霓虹青（按下墨色为深海黑青） ---- */
+  --fe-ink-3: #8f9abb;
   --fe-accent: #22d3ee;
   --fe-accent-strong: #67e3f5;
   --fe-accent-ink: #00131a;
   --fe-accent-soft: #0e2f3a;
-
-  /* ---- 语义色：荧光三原 ---- */
   --fe-ok: #4ade80;
   --fe-warn: #fbbf24;
   --fe-danger: #fb7185;
-
-  /* ---- 焦点与阴影：霓虹辉光 ---- */
   --fe-focus-ring: #ff2d95;
-  --fe-shadow-1: 0 0 0 1px rgba(34, 211, 238, 0.08), 0 2px 8px rgba(0, 0, 0, 0.5);
-  --fe-shadow-2: 0 0 18px rgba(34, 211, 238, 0.18), 0 0 4px rgba(255, 45, 149, 0.14), 0 12px 32px rgba(0, 0, 0, 0.6);
-
-  /* ---- 字体：终端感等宽优先 ---- */
-  --fe-font-sans: "Cascadia Code", "JetBrains Mono", "Sarasa Mono SC", "Microsoft YaHei", system-ui, sans-serif;
-  --fe-font-serif: "Cascadia Code", "Noto Serif SC", "Microsoft YaHei", serif;
-
-  /* ---- 形状与动效：硬边快速 ---- */
-  --fe-radius: 4px;
-  --fe-motion: 160ms;
-
-  /* ---- 装饰：霓虹地平线舞台 + 扫描线/雨丝叠加 ---- */
+  --fe-shadow-1: 0 2px 8px rgb(0 0 0 / 8%);
+  --fe-shadow-2: 0 12px 32px rgb(0 0 0 / 16%);
+  --fe-font-sans: var(--font-sans);
+  --fe-font-serif: var(--font-serif);
+  --fe-radius: 8px;
+  --fe-motion: 140ms;
   --fe-decor-stage: linear-gradient(180deg, #0b0d17 0%, #10142a 58%, #1a1038 86%, #241048 100%);
-  --fe-decor-overlay: repeating-linear-gradient(0deg, rgba(148, 220, 255, 0.024) 0 1px, transparent 1px 3px), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='340' height='340'%3E%3Cg stroke-width='1'%3E%3Cpath d='M20 340V210' stroke='%2322d3ee' stroke-opacity='0.10'/%3E%3Cpath d='M90 340V260' stroke='%23ff2d95' stroke-opacity='0.08'/%3E%3Cpath d='M300 340V180' stroke='%2322d3ee' stroke-opacity='0.07'/%3E%3Cpath d='M230 340V300' stroke='%23ff2d95' stroke-opacity='0.10'/%3E%3C/g%3E%3Cg fill='%23e6ecf7' fill-opacity='0.10'%3E%3Ccircle cx='60' cy='40' r='0.9'/%3E%3Ccircle cx='250' cy='90' r='0.7'/%3E%3Ccircle cx='150' cy='30' r='0.8'/%3E%3Ccircle cx='320' cy='50' r='0.6'/%3E%3C/g%3E%3C/svg%3E"), radial-gradient(70% 46% at 50% 108%, rgba(255, 45, 149, 0.13), transparent 70%);
+  --fe-decor-overlay: none;
 }
 
-/* .theme-decor 钩子：霓虹夜城舞台（无此元素时零副作用） */
-[data-theme="cyber"] .theme-decor {
-  background: var(--fe-decor-stage);
+html[data-theme="cyber"] {
+  --fe-decor-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320'%3E%3Cg fill='none' stroke='%2322d3ee'%3E%3Cpath d='M0 48h48l24 24v64h48M320 240h-64l-32-32v-48h-40M160 0v32l32 32h96M0 288h96l32-32'/%3E%3Ccircle cx='120' cy='136' r='4'/%3E%3Ccircle cx='184' cy='160' r='4'/%3E%3C/g%3E%3Cg fill='%23ff2d95'%3E%3Ccircle cx='288' cy='64' r='3'/%3E%3Ccircle cx='128' cy='256' r='3'/%3E%3C/g%3E%3C/svg%3E");
+  --fe-motif-size: 320px 320px;
+  --fe-motif-opacity: .14;
+  --fe-motif-mobile-opacity: .08;
+  --fe-terminal-font: "Cascadia Code", "Consolas", var(--fe-font-sans);
 }
-
-[data-theme="cyber"] .theme-decor::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image: var(--fe-decor-overlay);
-  background-repeat: repeat, repeat, no-repeat;
-  background-size: auto, 340px 340px, 100% 100%;
+html[data-theme="cyber"] .app-root .book-page {
+  border-radius: 4px;
+  box-shadow: -2px 0 0 rgb(34 211 238 / 42%), 0 14px 40px rgb(0 0 0 / 24%);
+  background: var(--fe-panel);
 }
-
-/* 页角图样：左上 HUD 角框（霓虹青准星），右下电路汇聚角（品红节点）。
-   ::before 专用于角饰（::after 已承载氛围叠加），z-index -1 不压内容。 */
-[data-theme="cyber"] .theme-decor::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='170' height='170'%3E%3Cg fill='none' stroke='%2322d3ee' stroke-width='2'%3E%3Cpath d='M14 60V22a8 8 0 018-8h38' stroke-opacity='0.28'/%3E%3Cpath d='M30 74V40a6 6 0 016-6h34' stroke-opacity='0.14'/%3E%3C/g%3E%3Cg stroke='%23ff2d95' stroke-width='1.6'%3E%3Cpath d='M52 52h16M60 44v16' stroke-opacity='0.30'/%3E%3C/g%3E%3Ccircle cx='60' cy='52' r='10' fill='none' stroke='%2322d3ee' stroke-opacity='0.20' stroke-width='1.4'/%3E%3C/svg%3E"),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='210' height='210'%3E%3Cg fill='none' stroke='%2322d3ee' stroke-width='1.8'%3E%3Cpath d='M196 150v38a8 8 0 01-8 8h-46M196 196h-90M150 196v-40h-44' stroke-opacity='0.22'/%3E%3C/g%3E%3Cg fill='%23ff2d95'%3E%3Ccircle cx='150' cy='156' r='3' fill-opacity='0.30'/%3E%3Ccircle cx='106' cy='156' r='2.4' fill-opacity='0.22'/%3E%3Ccircle cx='106' cy='196' r='2.4' fill-opacity='0.22'/%3E%3C/g%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: left top, right bottom;
-  background-size: 170px auto, 210px auto;
+html[data-theme="cyber"] .app-root .seal-logo {
+  border-radius: 4px 10px 4px 10px;
 }
-
-/* ============================================================
- * 2. 顶栏与火漆徽印细节定制
- * ============================================================ */
-[data-theme="cyber"] .app-header,
-[data-theme="cyber"] .app-titlebar {
-  background: color-mix(in srgb, var(--fe-panel) 93%, var(--fe-accent-soft));
-  border-bottom: 1px solid var(--fe-border);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
-  backdrop-filter: blur(8px);
+html[data-theme="cyber"] .app-root .app-header {
+  background: var(--fe-panel);
+  box-shadow: 0 1px 0 rgb(34 211 238 / 18%);
 }
-
-[data-theme="cyber"] .seal-logo {
-  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--fe-accent) 85%, #fff), var(--fe-accent) 55%, var(--fe-accent-strong));
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.25), 0 2px 6px rgba(0, 0, 0, 0.22);
-  color: var(--fe-accent-ink);
-}
-
-[data-theme="cyber"] .seal-logo::after {
-  border-color: var(--fe-accent);
-  opacity: 0.75;
-}
-
-[data-theme="cyber"] .title-loom {
-  color: var(--fe-ink-3);
-  font-family: var(--fe-font-sans);
-}
-
-[data-theme="cyber"] .status-badge {
-  background: color-mix(in srgb, var(--fe-accent) 12%, var(--fe-panel));
-  border-color: color-mix(in srgb, var(--fe-accent) 32%, var(--fe-border));
+html[data-theme="cyber"] .app-root .title-loom {
+  font-family: var(--fe-terminal-font);
   color: var(--fe-ink-2);
 }
-
-/* ============================================================
- * 3. 叙事正文、书页纸质感与鉴藏水印印章
- * ============================================================ */
-[data-theme="cyber"] .story-panel {
-  background: color-mix(in srgb, var(--fe-bg) 85%, var(--fe-panel-2));
+html[data-theme="cyber"] .app-root .option-key {
+  font-family: var(--fe-terminal-font);
+  border-radius: 2px;
+  font-variant-numeric: tabular-nums;
 }
-
-[data-theme="cyber"] .book-page {
-  background: linear-gradient(175deg, #111628 0%, #0d1220 100%);
-  border: 1px solid var(--fe-border);
-  border-radius: calc(var(--fe-radius) + 2px);
-  box-shadow: inset 24px 0 30px -28px color-mix(in srgb, var(--fe-ink-3) 25%, transparent), var(--fe-shadow-2);
-  position: relative;
+html[data-theme="cyber"] .app-root .option-card.selected {
+  box-shadow: inset 3px 0 var(--fe-accent);
 }
-
-/* 书页右下专属隐约鉴藏水印 */
-[data-theme="cyber"] .book-page::after {
-  content: "⚡ CYBER_MATRIX";
-  position: absolute;
-  right: 28px;
-  bottom: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border-radius: 999px;
-  border: 1.5px dashed color-mix(in srgb, var(--fe-accent) 35%, transparent);
-  color: color-mix(in srgb, var(--fe-accent) 35%, var(--fe-ink-3));
-  font-family: var(--fe-font-serif);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 2px;
-  pointer-events: none;
-  user-select: none;
-  transform: rotate(-6deg);
-  background: color-mix(in srgb, var(--fe-accent-soft) 25%, transparent);
+html[data-theme="cyber"] .reader-shell {
+  background: var(--fe-panel);
+  box-shadow: 0 24px 80px rgb(0 0 0 / 45%);
 }
-
-[data-theme="cyber"] .narrative-chapter {
+html[data-theme="cyber"] .reader-head {
+  background: var(--fe-panel);
+  color: var(--fe-ink);
+  box-shadow: 0 1px 0 rgb(34 211 238 / 22%);
+}
+html[data-theme="cyber"] .reader-stage {
+  background: radial-gradient(ellipse at 0 100%, rgb(34 211 238 / 6%), transparent 55%), var(--fe-bg);
+}
+html[data-theme="cyber"] .reader-progress {
+  font-family: var(--fe-terminal-font);
+  font-variant-numeric: tabular-nums;
+}
+html[data-theme="cyber"] .reader-tool.active {
   color: var(--fe-accent);
-  font-family: var(--fe-font-serif);
-  border-bottom: 1px dashed color-mix(in srgb, var(--fe-accent) 40%, var(--fe-border));
-  padding-bottom: 6px;
-  margin-bottom: 18px;
-  letter-spacing: 0.05em;
-}
-
-[data-theme="cyber"] .narrative-para {
-  color: var(--fe-ink);
-  font-family: var(--fe-font-serif);
-  line-height: 1.95;
-}
-
-[data-theme="cyber"] .drop-cap {
-  color: var(--fe-accent);
-  font-family: var(--fe-font-serif);
-  text-shadow: 1px 1px 0 color-mix(in srgb, var(--fe-accent-soft) 80%, transparent);
-}
-
-[data-theme="cyber"] .kraft-note {
-  background: color-mix(in srgb, var(--fe-accent-soft) 45%, var(--fe-panel-2));
-  border: 1px solid var(--fe-border);
-  color: var(--fe-ink);
-  box-shadow: var(--fe-shadow-1);
-}
-
-/* ============================================================
- * 4. 选项卡片与行动指令微交互（A-F 键位高辨识度质感）
- * ============================================================ */
-[data-theme="cyber"] .option-card {
-  background: var(--fe-panel);
-  border: 1px solid var(--fe-border);
-  border-left-width: 4px;
-  border-radius: var(--fe-radius);
-  transition: transform var(--fe-motion) ease, border-color var(--fe-motion) ease, box-shadow var(--fe-motion) ease, background-color var(--fe-motion) ease;
-}
-
-[data-theme="cyber"] .option-card:hover:not(:disabled) {
-  border-color: var(--fe-border-strong);
-  background: color-mix(in srgb, var(--fe-panel) 90%, var(--fe-accent-soft));
-  transform: translateY(-2px);
-  box-shadow: var(--fe-shadow-2);
-}
-
-[data-theme="cyber"] .option-card.selected {
-  background: color-mix(in srgb, var(--fe-accent) 12%, var(--fe-panel));
-  border-color: var(--fe-accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fe-accent) 30%, transparent);
-}
-
-[data-theme="cyber"] .option-key {
-  border-radius: calc(var(--fe-radius) - 2px);
-  font-family: var(--fe-font-sans);
-  background: color-mix(in srgb, var(--fe-panel) 80%, var(--fe-accent-soft));
-}
-
-[data-theme="cyber"] .opt-a { border-left-color: var(--fe-accent); }
-[data-theme="cyber"] .opt-a .option-key { border-color: var(--fe-accent); color: var(--fe-accent); }
-
-[data-theme="cyber"] .opt-b { border-left-color: var(--fe-ok); }
-[data-theme="cyber"] .opt-b .option-key { border-color: var(--fe-ok); color: var(--fe-ok); }
-
-[data-theme="cyber"] .opt-c { border-left-color: var(--fe-warn); }
-[data-theme="cyber"] .opt-c .option-key { border-color: var(--fe-warn); color: var(--fe-warn); }
-
-[data-theme="cyber"] .opt-d { border-left-color: var(--fe-ink-2); }
-[data-theme="cyber"] .opt-d .option-key { border-color: var(--fe-ink-2); color: var(--fe-ink-2); }
-
-[data-theme="cyber"] .opt-e { border-left-color: var(--fe-danger); }
-[data-theme="cyber"] .opt-e .option-key { border-color: var(--fe-danger); color: var(--fe-danger); }
-
-[data-theme="cyber"] .opt-f { border-left-color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); }
-[data-theme="cyber"] .opt-f .option-key { border-color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); }
-
-[data-theme="cyber"] .options-placeholder {
-  border: 1.5px dashed var(--fe-border);
-  background: color-mix(in srgb, var(--fe-panel) 60%, transparent);
-  color: var(--fe-ink-3);
-  border-radius: var(--fe-radius);
-}
-
-/* ============================================================
- * 5. 侧栏卡片、表单组件与按钮细节
- * ============================================================ */
-[data-theme="cyber"] .panel-left,
-[data-theme="cyber"] .panel-right {
-  background: var(--fe-panel-2);
-  border-color: var(--fe-border);
-}
-
-[data-theme="cyber"] .field {
-  background: var(--fe-panel);
-  border: 1px solid var(--fe-border);
-  color: var(--fe-ink);
-  border-radius: var(--fe-radius);
-}
-
-[data-theme="cyber"] .field:focus {
-  border-color: var(--fe-focus-ring);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fe-focus-ring) 20%, transparent);
-}
-
-[data-theme="cyber"] .small-action {
-  border-radius: var(--fe-radius);
-  border: 1px solid var(--fe-border);
-  background: var(--fe-panel);
-  color: var(--fe-ink-2);
-}
-
-[data-theme="cyber"] .small-action:hover:not(:disabled) {
-  border-color: var(--fe-border-strong);
-  background: var(--fe-panel-2);
-  color: var(--fe-ink);
-}
-
-[data-theme="cyber"] .small-action.primary {
-  background: var(--fe-accent);
-  border-color: var(--fe-accent);
-  color: var(--fe-accent-ink);
-}
-
-[data-theme="cyber"] .small-action.primary:hover:not(:disabled) {
-  background: var(--fe-accent-strong);
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--fe-accent) 35%, transparent);
-}
-
-[data-theme="cyber"] .start-button {
-  background: linear-gradient(135deg, var(--fe-accent), var(--fe-accent-strong));
-  color: var(--fe-accent-ink);
-  border-radius: var(--fe-radius);
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--fe-accent) 30%, transparent);
-}
-
-[data-theme="cyber"] .tier-btn {
-  background: var(--fe-panel);
-  border-color: var(--fe-border);
-  color: var(--fe-ink-2);
-  border-radius: var(--fe-radius);
-}
-
-[data-theme="cyber"] .tier-btn-active {
-  border-color: var(--fe-accent);
   background: var(--fe-accent-soft);
-  color: var(--fe-accent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fe-accent) 30%, transparent);
 }
-
-[data-theme="cyber"] .pool-card {
+html[data-theme="cyber"] .designer-header {
   background: var(--fe-panel);
-  border-color: var(--fe-border);
-  border-radius: var(--fe-radius);
+  box-shadow: 0 1px 0 rgb(34 211 238 / 22%);
 }
-
-[data-theme="cyber"] .pool-card.selected {
-  border-color: var(--fe-accent);
-  background: color-mix(in srgb, var(--fe-accent) 10%, var(--fe-panel));
+html[data-theme="cyber"] .step-dot {
+  border-radius: 4px;
+  font-family: var(--fe-terminal-font);
 }
-
-[data-theme="cyber"] .section-toggle {
+html[data-theme="cyber"] .persona-block {
+  background: var(--fe-panel);
+  border-radius: 4px;
+}
+html[data-theme="cyber"] .app-root .chat-bubble.player .bubble-text {
+  background: var(--fe-accent-soft);
   color: var(--fe-ink);
+  border-radius: 10px 10px 2px 10px;
 }
-
-/* ============================================================
- * 6. 时间线、角色闲聊与答疑小卡片
- * ============================================================ */
-[data-theme="cyber"] .anchor-timeline {
-  border-bottom: 1px solid var(--fe-border);
-  background: color-mix(in srgb, var(--fe-panel) 90%, var(--fe-bg));
-}
-
-[data-theme="cyber"] .tl-node {
-  background: var(--fe-panel);
-  border: 1px solid var(--fe-border);
-  color: var(--fe-ink-2);
-}
-
-[data-theme="cyber"] .tl-node.tl-current {
-  border-color: var(--fe-accent);
-  color: var(--fe-accent);
-  box-shadow: 0 0 0 1px var(--fe-accent);
-}
-
-[data-theme="cyber"] .chat-bubble.player .bubble-text {
-  background: color-mix(in srgb, var(--fe-accent) 14%, var(--fe-panel));
-  border: 1px solid color-mix(in srgb, var(--fe-accent) 26%, var(--fe-panel));
+html[data-theme="cyber"] .app-root .chat-bubble.character .bubble-text {
+  background: var(--fe-panel-2);
   color: var(--fe-ink);
+  border-radius: 2px 10px 10px;
 }
-
-[data-theme="cyber"] .chat-bubble.character .bubble-text {
+html[data-theme="cyber"] .generation-state {
+  border-radius: 4px;
   background: var(--fe-panel-2);
-  border: 1px solid var(--fe-border);
+}
+html[data-theme="cyber"] .theme-progress__track {
+  border-radius: 1px;
+}
+html[data-theme="cyber"] .theme-progress__amount {
+  font-family: var(--fe-terminal-font);
+}
+html[data-theme="cyber"] .theme-badge {
+  border-radius: 2px;
+  font-variant-numeric: tabular-nums;
+}
+html[data-theme="cyber"] .field[aria-invalid="true"] {
+  border-color: var(--fe-danger);
+}
+html[data-theme="cyber"] .app-root .pool-empty {
   color: var(--fe-ink-2);
-}
-
-[data-theme="cyber"] .ask-card {
   background: var(--fe-panel);
-  border: 1px solid var(--fe-border);
-  border-radius: var(--fe-radius);
+}
+html[data-theme="cyber"] .error-banner {
+  background: color-mix(in srgb, var(--fe-danger) 8%, var(--fe-panel));
+  color: var(--fe-danger);
+}
+@media (hover: hover) {
+  html[data-theme="cyber"] .reader-tool:hover:not(:disabled) {
+    background: var(--fe-accent-soft);
+    color: var(--fe-accent);
+  }
+}
+@media (max-width: 599px) {
+  html[data-theme="cyber"] .app-root .book-page {
+    box-shadow: -1px 0 0 rgb(34 211 238 / 28%);
+  }
+  html[data-theme="cyber"] .app-root .mobile-panel-toolbar {
+    background: var(--fe-panel);
+    color: var(--fe-ink-2);
+  }
+  html[data-theme="cyber"] .reader-shell {
+    box-shadow: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme="cyber"] .reader-stage {
+    animation: none;
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  html[data-theme="cyber"] .app-root .book-page,
+  html[data-theme="cyber"] .reader-stage {
+    box-shadow: none;
+    background: Canvas;
+    color: CanvasText;
+  }
 }
 
-[data-theme="cyber"] .ask-body {
-  border-top-color: var(--fe-border);
-}
-
-/* ============================================================
- * 7. 手机端适配：底部导航栏与选项/主题抽屉
- * ============================================================ */
-[data-theme="cyber"] .app-bottom-nav {
-  background: color-mix(in srgb, var(--fe-panel) 95%, var(--fe-bg));
-  border-top: 1px solid var(--fe-border);
-}
-
-[data-theme="cyber"] .mobile-tab.active {
-  color: var(--fe-accent);
-}
-
-[data-theme="cyber"] .mobile-options-sheet section,
-[data-theme="cyber"] .mobile-theme-sheet section {
-  background: var(--fe-panel);
-  border-top: 1.5px solid var(--fe-border);
-  box-shadow: var(--fe-shadow-2);
-}
-
-[data-theme="cyber"] .mobile-panel-toolbar {
-  background: color-mix(in srgb, var(--fe-panel) 95%, var(--fe-accent-soft));
-  border-bottom: 1px solid var(--fe-border);
-  color: var(--fe-ink-2);
-}
-
-[data-theme="cyber"] .mobile-panel-toolbar button {
-  border-color: var(--fe-border);
-  background: var(--fe-panel-2);
-  color: var(--fe-accent);
-}
-
-/* ============================================================
- * 8. 自定义精细滚动条
- * ============================================================ */
-[data-theme="cyber"] .scrollbar {
-  scrollbar-color: var(--fe-border-strong) transparent;
-  scrollbar-width: thin;
-}
-
-[data-theme="cyber"] ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-[data-theme="cyber"] ::-webkit-scrollbar-thumb {
-  background: var(--fe-border-strong);
-  border-radius: 999px;
-}
-
-[data-theme="cyber"] ::-webkit-scrollbar-thumb:hover {
-  background: var(--fe-accent);
+/* Signature: cyber — original local vectors; masks inherit semantic ink.
+ * Consumers: stage corner, heading emblem, cover gutter and identity outline. */
+html[data-theme="cyber"] {
+  --fe-signature-art: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20100%20100%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%271.7%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M12%2020h25l14%2014v27h22m-61%2021h18l17-17V46m21-33v14l17%2017v34M69%2061a4%204%200%201%200%208%200a4%204%200%201%200-8%200M81%2082h8%27%2F%3E%3C%2Fsvg%3E");
+  --fe-signature-small: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20100%20100%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%271.7%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M15%2024h25l20%2020v30h20m-4%200a4%204%200%201%200%208%200a4%204%200%201%200-8%200%27%2F%3E%3C%2Fsvg%3E");
+  --fe-signature-radius: 0 12px 0 12px;
+  --fe-signature-edge: solid;
+  --fe-signature-opacity: 0.06;
 }

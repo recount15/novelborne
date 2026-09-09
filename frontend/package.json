@@ -1,11 +1,13 @@
 {
   "name": "fate-engine-frontend",
   "private": true,
-  "version": "2.2.0",
+  "version": "3.0.0",
   "type": "module",
+  "license": "AGPL-3.0-or-later",
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
+    "test": "node --test tests/*.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

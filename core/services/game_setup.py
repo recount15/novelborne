@@ -39,7 +39,7 @@ class WorkSourceError(ValueError):
 
 
 def resolve_work_source(mode, work, novel_file, fragment, novel_display_name,
-                        *, gf_confirmed=True):
+                        *, gf_confirmed=True, book_dir=None, target_chapter=1):
     """作品来源解析（原 on_start C 块）。
 
     强化模式严格要求完整 TXT；作品库档案只服务基础模式。
@@ -48,6 +48,25 @@ def resolve_work_source(mode, work, novel_file, fragment, novel_display_name,
     ``gf_confirmed`` 为当前金手指就绪态，仅用于错误 state 的该键。
     """
     enhanced = bool(mode and str(mode).startswith("强化"))
+    if book_dir is not None:
+        from pathlib import Path
+        from core.services.reader_start_service import read_book_source
+        try:
+            root = Path(book_dir).resolve(strict=True)
+            books = (Path(fe.WRITABLE_DIR) / 'books').resolve()
+            if not root.is_relative_to(books) or root.parent != books or novel_file or work:
+                raise ValueError('ambiguous or unsafe source')
+            source = read_book_source(root, target_chapter)
+            chapter_index = dict(source['inventory'])
+            chapter_index['book_id'] = root.name
+            novel_excerpt = source['texts'][target_chapter][:fe.MAX_NOVEL_EXCERPT]
+            if not enhanced and fragment:
+                novel_excerpt += '\n\n# 普通模式指定片段\n' + str(fragment).strip()
+            return chapter_index, novel_excerpt, (novel_display_name or root.name), None
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise WorkSourceError('现有原著或目标章节不可用，请重新选择。',
+                                  {'system': '', 'history': [], 'plot_ready': False,
+                                   'gf_confirmed': bool(gf_confirmed), 'chapter_index': None}) from exc
     novel_name, novel_excerpt, work_label = None, None, None
     chapter_index = None
     uploaded_path = fe._to_path(novel_file) if novel_file else None
@@ -90,11 +109,14 @@ def resolve_work_source(mode, work, novel_file, fragment, novel_display_name,
 
 
 def resolve_nemesis(enable_nemesis, mode, nemesis_file, nemesis_select,
-                    nemesis_display_name, char_path):
-    """宿敌人格解析（原 on_start E 块）：上传 MD ＞ 角色模型 ＞ 自定义文本。
+                    nemesis_display_name, char_path, nemesis_identity=""):
+    """宿敌人格解析（原 on_start E 块）：上传 MD ＞ 手填身份 ＞ 角色模型 ＞ 自定义文本。
 
     仅强化模式生效；未启用时返回 ``(None, None)``。
     ``char_path`` 为 {显示标签: 文件路径} 的角色模型映射（app.CHAR_PATH）。
+    ``nemesis_identity`` 为可选的手填身体身份姓名：非空时直接作为宿敌身份，
+    与伙伴/伴侣名册「手动填写优先」一致（nemesis_select 退为魂描述）；
+    为空时维持原语义——卡/性格只是「魂」，身份由穿越落定从原著分配。
     """
     nemesis_label, nemesis_persona = None, None
     if not bool(enable_nemesis and mode.startswith("强化")):
@@ -104,6 +126,9 @@ def resolve_nemesis(enable_nemesis, mode, nemesis_file, nemesis_select,
         display = (nemesis_display_name or "").strip() or os.path.splitext(
             os.path.basename(nemesis_file))[0]
         nemesis_label = display + "（上传宿敌）"
+    elif str(nemesis_identity or "").strip():
+        nemesis_label = str(nemesis_identity).strip()
+        nemesis_persona = (nemesis_select or "").strip()
     elif nemesis_select in char_path:
         nemesis_persona = fe.read_character_model(char_path[nemesis_select])
         nemesis_label = nemesis_select
@@ -139,6 +164,13 @@ def assemble_roster(rows, count, slot_label, default_prefix):
             packed["character_model"] = row.get("character_model", "")
             packed["character_model_source"] = row.get("character_model_source", "")
             packed["character_card"] = dict(row.get("character_card") or {})
+            card = packed["character_card"]
+            cid = row.get("character_id") or card.get("character_id")
+            revision = row.get("card_revision", card.get("revision"))
+            if isinstance(cid, str) and cid.strip():
+                packed["character_id"] = cid
+                if type(revision) is int and revision >= 0:
+                    packed["card_revision"] = revision
             packed["persona_preset"] = str(row.get("persona_preset") or "").strip()
             if _name_pending:
                 packed["name_pending"] = True

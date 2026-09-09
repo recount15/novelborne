@@ -1,417 +1,1096 @@
-/* ============================================================
- * Theme: desert · 苍莽大漠（light）
- * 丝路大漠鸣沙 · 暖赭砂金与胡杨古褐 · 丝路星盘罗经与沙丘波痕
- * 系统级深度美化：体量超 280 行，全局各组件全方位差异化，双端体验极佳
- * ============================================================ */
-
-[data-theme="desert"] {
+/* Caravan atlas: dune contours, sun compass, sandstone folios and waystations.
+   Seven real interfaces; ornaments stay outside opaque content surfaces. */
+html[data-theme="desert"] {
   color-scheme: light;
-
-  /* ---- 基础色盘与背景纹理 ---- */
-  --fe-bg: #faf2e4;
-  --fe-bg-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='40' viewBox='0 0 80 40'%3E%3Cpath d='M0 30Q20 15 40 25T80 20' fill='none' stroke='%23c46d29' stroke-opacity='0.045' stroke-width='1.2'/%3E%3C/svg%3E");
-  --fe-panel: #fdf9f2;
-  --fe-panel-2: #f2e4cb;
-  --fe-panel-3: #e6d3b3;
-
-  /* ---- 描边与边框层级 ---- */
-  --fe-border: #dbc39e;
-  --fe-border-strong: #b59465;
-
-  /* ---- 文本与阅读墨色 ---- */
+  --fe-bg: #faf0df;
+  --fe-bg-image: none;
+  --fe-panel: #fff9ee;
+  --fe-panel-2: #f1e2c9;
+  --fe-panel-3: #e5cfac;
+  --fe-border: #c6ac88;
+  --fe-border-strong: #98724b;
   --fe-ink: #382512;
-  --fe-ink-2: #6c4d2d;
-  --fe-ink-3: #9e784f;
-
-  /* ---- 品牌主行动色 ---- */
-  --fe-accent: #c46d29;
-  --fe-accent-strong: #9c521b;
+  --fe-ink-2: #624325;
+  --fe-ink-3: #694c30;
+  --fe-accent: #8b5024;
+  --fe-accent-strong: #6f3e1a;
   --fe-accent-ink: #ffffff;
-  --fe-accent-soft: #fcecd9;
-
-  /* ---- 状态与语义色 ---- */
-  --fe-ok: #3b7a54;
-  --fe-warn: #c46d29;
-  --fe-danger: #b33224;
-
-  /* ---- 交互光晕与阴影深度 ---- */
-  --fe-focus-ring: #c46d29;
-  --fe-shadow-1: 0 2px 8px rgba(0,0,0,0.06);
-  --fe-shadow-2: 0 14px 34px rgba(0,0,0,0.12), 0 3px 8px rgba(0,0,0,0.04);
-
-  /* ---- 字体及排版风格 ---- */
-  --fe-font-sans: 'Inter', 'PingFang SC', sans-serif;
-  --fe-font-serif: 'LXGW WenKai GB', 'Noto Serif SC', serif;
-
-  /* ---- 圆角与微动效 ---- */
-  --fe-radius: 8px;
-  --fe-motion: 190ms;
-
-  /* ---- 舞台多重环境光照与纹理叠层 ---- */
-  --fe-decor-stage: radial-gradient(85% 65% at 75% 15%, #fcecd9 0%, transparent 68%), radial-gradient(75% 65% at 20% 85%, color-mix(in srgb, #c46d29 12%, #fdf9f2) 0%, transparent 70%), linear-gradient(175deg, #faf2e4 0%, #f2e4cb 100%);
-  --fe-decor-overlay: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='40' viewBox='0 0 80 40'%3E%3Cpath d='M0 30Q20 15 40 25T80 20' fill='none' stroke='%23c46d29' stroke-opacity='0.045' stroke-width='1.2'/%3E%3C/svg%3E");
+  --fe-accent-soft: #f5e4ce;
+  --fe-ok: #315b3b;
+  --fe-warn: #7e491e;
+  --fe-danger: #9c3021;
+  --fe-focus-ring: var(--fe-accent);
+  --fe-shadow-1: 0 3px 0 #dbc39e, 0 9px 20px #65402312;
+  --fe-shadow-2: 0 18px 52px #38251226;
+  --fe-font-sans: var(--font-sans);
+  --fe-font-serif: var(--font-serif);
+  --fe-radius: 10px 24px 10px 10px;
+  --fe-motion: 140ms;
+  --fe-touch-target: 44px;
+  --fe-decor-stage: var(--fe-bg);
+  --fe-decor-overlay: none;
+  --fe-motif-size: 240px 240px;
+  --fe-motif-repeat: no-repeat;
+  --fe-motif-opacity: .055;
+  --fe-motif-mobile-opacity: .0275;
+  --fe-atlas-art: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 240' fill='none' stroke='%23382512' stroke-width='1.5'%3E%3Cpath d='M0 140Q55 50 126 116T240 100M0 156Q70 80 138 132T240 118M0 177Q87 111 158 150T240 142'/%3E%3Ccircle cx='185' cy='43' r='22'/%3E%3Cpath d='M185 13v9m0 42v9m-30-30h9m42 0h9M178 49l7-18 7 18-7-5z'/%3E%3C/svg%3E");
+  --fe-atlas-small: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96' fill='none' stroke='%23382512' stroke-width='1.5'%3E%3Cpath d='M0 72Q28 34 60 60T96 56'/%3E%3C/svg%3E");
+  --fe-atlas-key: 50% 50% 5px 5px;
+  --fe-atlas-edge: double;
 }
-
-/* ============================================================
- * 1. 舞台背景与特色矢量纹样（多角联动与环境质感）
- * ============================================================ */
-[data-theme="desert"] .theme-decor {
-  background: var(--fe-decor-stage);
-  isolation: isolate;
+/* Studio: manuscript, actions, facts, inquiry, empty and mobile surfaces. */
+html[data-theme="desert"] .app-root .story-panel {
   position: relative;
+  isolation: isolate;
+  background: var(--fe-bg);
 }
-
-[data-theme="desert"] .theme-decor::after {
+html[data-theme="desert"] .app-root .story-panel.theme-decor::before {
   content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image: var(--fe-decor-overlay), radial-gradient(circle at 90% 10%, rgba(196,109,41,0.06) 0%, transparent 60%);
-  background-repeat: repeat, no-repeat;
-  background-size: 64px 64px, cover;
-  opacity: 0.85;
-}
-
-[data-theme="desert"] .theme-decor::before {
-  content: "";
+  display: block;
   position: absolute;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cg fill='none' stroke='%23c46d29' stroke-width='1.6' stroke-opacity='0.28'%3E%3Ccircle cx='40' cy='40' r='26'/%3E%3Ccircle cx='40' cy='40' r='38' stroke-dasharray='3 3'/%3E%3Cpath d='M40 10v60M10 40h60'/%3E%3C/g%3E%3C/svg%3E"), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cpath d='M160 150c-40-20-80-5-120-15' fill='none' stroke='%23c46d29' stroke-opacity='0.25' stroke-width='1.8'/%3E%3C/svg%3E");
+  background-image: var(--fe-atlas-art);
+  background-position: right bottom;
+  background-size: 240px 240px;
   background-repeat: no-repeat;
-  background-position: left 14px top 14px, right 14px bottom 14px;
-  background-size: 210px 210px, 190px 190px;
-  transition: opacity var(--fe-motion) ease;
+  opacity: var(--fe-motif-opacity);
 }
-
-/* ============================================================
- * 2. 顶栏与火漆徽印细节定制
- * ============================================================ */
-[data-theme="desert"] .app-header,
-[data-theme="desert"] .app-titlebar {
-  background: color-mix(in srgb, var(--fe-panel) 93%, var(--fe-accent-soft));
-  border-bottom: 1px solid var(--fe-border);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
-  backdrop-filter: blur(8px);
-}
-
-[data-theme="desert"] .seal-logo {
-  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--fe-accent) 85%, #fff), var(--fe-accent) 55%, var(--fe-accent-strong));
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.25), 0 2px 6px rgba(0, 0, 0, 0.22);
+html[data-theme="desert"] .app-root .seal-logo {
+  border: 2px solid var(--fe-accent);
+  outline: 1px solid var(--fe-border-strong);
+  outline-offset: 3px;
+  border-radius: var(--fe-atlas-key);
+  background: var(--fe-accent);
   color: var(--fe-accent-ink);
 }
-
-[data-theme="desert"] .seal-logo::after {
-  border-color: var(--fe-accent);
-  opacity: 0.75;
+html[data-theme="desert"] .app-root .titlebar-logo {
+  border-radius: var(--fe-atlas-key);
+  background: var(--fe-accent-soft);
+  color: var(--fe-accent-strong);
 }
-
-[data-theme="desert"] .title-loom {
-  color: var(--fe-ink-3);
-  font-family: var(--fe-font-sans);
-}
-
-[data-theme="desert"] .status-badge {
-  background: color-mix(in srgb, var(--fe-accent) 12%, var(--fe-panel));
-  border-color: color-mix(in srgb, var(--fe-accent) 32%, var(--fe-border));
-  color: var(--fe-ink-2);
-}
-
-/* ============================================================
- * 3. 叙事正文、书页纸质感与鉴藏水印印章
- * ============================================================ */
-[data-theme="desert"] .story-panel {
-  background: color-mix(in srgb, var(--fe-bg) 85%, var(--fe-panel-2));
-}
-
-[data-theme="desert"] .book-page {
-  background: linear-gradient(175deg, #fdfbf7 0%, #f7ede0 100%);
-  border: 1px solid var(--fe-border);
-  border-radius: calc(var(--fe-radius) + 2px);
-  box-shadow: inset 24px 0 30px -28px color-mix(in srgb, var(--fe-ink-3) 25%, transparent), var(--fe-shadow-2);
-  position: relative;
-}
-
-/* 书页右下专属隐约鉴藏水印 */
-[data-theme="desert"] .book-page::after {
-  content: "🐪 大漠孤烟";
-  position: absolute;
-  right: 28px;
-  bottom: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border-radius: 999px;
-  border: 1.5px dashed color-mix(in srgb, var(--fe-accent) 35%, transparent);
-  color: color-mix(in srgb, var(--fe-accent) 35%, var(--fe-ink-3));
-  font-family: var(--fe-font-serif);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 2px;
-  pointer-events: none;
-  user-select: none;
-  transform: rotate(-6deg);
-  background: color-mix(in srgb, var(--fe-accent-soft) 25%, transparent);
-}
-
-[data-theme="desert"] .narrative-chapter {
-  color: var(--fe-accent);
-  font-family: var(--fe-font-serif);
-  border-bottom: 1px dashed color-mix(in srgb, var(--fe-accent) 40%, var(--fe-border));
-  padding-bottom: 6px;
-  margin-bottom: 18px;
-  letter-spacing: 0.05em;
-}
-
-[data-theme="desert"] .narrative-para {
+html[data-theme="desert"] .app-root .titlebar-title {
   color: var(--fe-ink);
-  font-family: var(--fe-font-serif);
-  line-height: 1.95;
+  letter-spacing: .055em;
 }
-
-[data-theme="desert"] .drop-cap {
-  color: var(--fe-accent);
-  font-family: var(--fe-font-serif);
-  text-shadow: 1px 1px 0 color-mix(in srgb, var(--fe-accent-soft) 80%, transparent);
-}
-
-[data-theme="desert"] .kraft-note {
-  background: color-mix(in srgb, var(--fe-accent-soft) 45%, var(--fe-panel-2));
+html[data-theme="desert"] .app-root .story-prologue {
+  background: var(--fe-panel);
   border: 1px solid var(--fe-border);
-  color: var(--fe-ink);
+  border-block-start: 4px var(--fe-atlas-edge) var(--fe-border-strong);
+  border-radius: var(--fe-radius);
   box-shadow: var(--fe-shadow-1);
 }
-
-/* ============================================================
- * 4. 选项卡片与行动指令微交互（A-F 键位高辨识度质感）
- * ============================================================ */
-[data-theme="desert"] .option-card {
+html[data-theme="desert"] .app-root .prologue-kicker {
+  color: var(--fe-accent-strong);
+  letter-spacing: .12em;
+  font-weight: 700;
+}
+html[data-theme="desert"] .app-root .book-page {
   background: var(--fe-panel);
-  border: 1px solid var(--fe-border);
-  border-left-width: 4px;
+  color: var(--fe-ink);
+  border-inline-start: 3px var(--fe-atlas-edge) var(--fe-border);
   border-radius: var(--fe-radius);
-  transition: transform var(--fe-motion) ease, border-color var(--fe-motion) ease, box-shadow var(--fe-motion) ease, background-color var(--fe-motion) ease;
+  box-shadow: var(--fe-shadow-1);
 }
-
-[data-theme="desert"] .option-card:hover:not(:disabled) {
+html[data-theme="desert"] .app-root .narrative-chapter {
+  color: var(--fe-ink);
+  border-inline-start: 3px solid var(--fe-accent);
+  padding-inline-start: 12px;
+  letter-spacing: .045em;
+}
+html[data-theme="desert"] .app-root .narrative-body {
+  background: var(--fe-panel);
+  overflow-wrap: anywhere;
+}
+html[data-theme="desert"] .app-root .option-card {
+  border: 1px solid var(--fe-border-strong);
+  border-inline-start-width: 3px;
+  border-radius: var(--fe-radius);
+  background: var(--fe-panel);
+  min-height: 44px;
+  color: var(--fe-ink);
+}
+html[data-theme="desert"] .app-root .option-key {
+  border-radius: var(--fe-atlas-key);
   border-color: var(--fe-border-strong);
-  background: color-mix(in srgb, var(--fe-panel) 90%, var(--fe-accent-soft));
-  transform: translateY(-2px);
-  box-shadow: var(--fe-shadow-2);
+  color: var(--fe-ink-2);
+  background: var(--fe-panel-2);
+  font-variant-numeric: tabular-nums;
 }
-
-[data-theme="desert"] .option-card.selected {
-  background: color-mix(in srgb, var(--fe-accent) 12%, var(--fe-panel));
-  border-color: var(--fe-accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fe-accent) 30%, transparent);
+html[data-theme="desert"] .app-root .option-text {
+  overflow-wrap: anywhere;
+  line-height: 1.7;
 }
-
-[data-theme="desert"] .option-key {
-  border-radius: calc(var(--fe-radius) - 2px);
-  font-family: var(--fe-font-sans);
-  background: color-mix(in srgb, var(--fe-panel) 80%, var(--fe-accent-soft));
+html[data-theme="desert"] .app-root .status-facts {
+  background: var(--fe-panel);
+  border-inline-start: 2px solid var(--fe-border-strong);
+  padding-inline-start: 12px;
+  color: var(--fe-ink-2);
 }
-
-[data-theme="desert"] .opt-a { border-left-color: var(--fe-accent); }
-[data-theme="desert"] .opt-a .option-key { border-color: var(--fe-accent); color: var(--fe-accent); }
-
-[data-theme="desert"] .opt-b { border-left-color: var(--fe-ok); }
-[data-theme="desert"] .opt-b .option-key { border-color: var(--fe-ok); color: var(--fe-ok); }
-
-[data-theme="desert"] .opt-c { border-left-color: var(--fe-warn); }
-[data-theme="desert"] .opt-c .option-key { border-color: var(--fe-warn); color: var(--fe-warn); }
-
-[data-theme="desert"] .opt-d { border-left-color: var(--fe-ink-2); }
-[data-theme="desert"] .opt-d .option-key { border-color: var(--fe-ink-2); color: var(--fe-ink-2); }
-
-[data-theme="desert"] .opt-e { border-left-color: var(--fe-danger); }
-[data-theme="desert"] .opt-e .option-key { border-color: var(--fe-danger); color: var(--fe-danger); }
-
-[data-theme="desert"] .opt-f { border-left-color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); }
-[data-theme="desert"] .opt-f .option-key { border-color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); color: color-mix(in srgb, var(--fe-accent) 70%, var(--fe-ok)); }
-
-[data-theme="desert"] .options-placeholder {
-  border: 1.5px dashed var(--fe-border);
-  background: color-mix(in srgb, var(--fe-panel) 60%, transparent);
+html[data-theme="desert"] .app-root .ask-card {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border-strong);
+  border-radius: var(--fe-radius);
+}
+html[data-theme="desert"] .app-root .ask-note {
   color: var(--fe-ink-3);
-  border-radius: var(--fe-radius);
+  line-height: 1.7;
 }
-
-/* ============================================================
- * 5. 侧栏卡片、表单组件与按钮细节
- * ============================================================ */
-[data-theme="desert"] .panel-left,
-[data-theme="desert"] .panel-right {
-  background: var(--fe-panel-2);
-  border-color: var(--fe-border);
-}
-
-[data-theme="desert"] .field {
-  background: var(--fe-panel);
-  border: 1px solid var(--fe-border);
-  color: var(--fe-ink);
-  border-radius: var(--fe-radius);
-}
-
-[data-theme="desert"] .field:focus {
-  border-color: var(--fe-focus-ring);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fe-focus-ring) 20%, transparent);
-}
-
-[data-theme="desert"] .small-action {
-  border-radius: var(--fe-radius);
-  border: 1px solid var(--fe-border);
-  background: var(--fe-panel);
+html[data-theme="desert"] .app-root .empty-state {
   color: var(--fe-ink-2);
-}
-
-[data-theme="desert"] .small-action:hover:not(:disabled) {
-  border-color: var(--fe-border-strong);
-  background: var(--fe-panel-2);
-  color: var(--fe-ink);
-}
-
-[data-theme="desert"] .small-action.primary {
-  background: var(--fe-accent);
-  border-color: var(--fe-accent);
-  color: var(--fe-accent-ink);
-}
-
-[data-theme="desert"] .small-action.primary:hover:not(:disabled) {
-  background: var(--fe-accent-strong);
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--fe-accent) 35%, transparent);
-}
-
-[data-theme="desert"] .start-button {
-  background: linear-gradient(135deg, var(--fe-accent), var(--fe-accent-strong));
-  color: var(--fe-accent-ink);
-  border-radius: var(--fe-radius);
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--fe-accent) 30%, transparent);
-}
-
-[data-theme="desert"] .tier-btn {
   background: var(--fe-panel);
-  border-color: var(--fe-border);
-  color: var(--fe-ink-2);
+  border: 1px dashed var(--fe-border-strong);
   border-radius: var(--fe-radius);
 }
-
-[data-theme="desert"] .tier-btn-active {
-  border-color: var(--fe-accent);
-  background: var(--fe-accent-soft);
-  color: var(--fe-accent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fe-accent) 30%, transparent);
-}
-
-[data-theme="desert"] .pool-card {
+html[data-theme="desert"] .app-root .mobile-options-sheet {
   background: var(--fe-panel);
-  border-color: var(--fe-border);
-  border-radius: var(--fe-radius);
-}
-
-[data-theme="desert"] .pool-card.selected {
-  border-color: var(--fe-accent);
-  background: color-mix(in srgb, var(--fe-accent) 10%, var(--fe-panel));
-}
-
-[data-theme="desert"] .section-toggle {
-  color: var(--fe-ink);
-}
-
-/* ============================================================
- * 6. 时间线、角色闲聊与答疑小卡片
- * ============================================================ */
-[data-theme="desert"] .anchor-timeline {
-  border-bottom: 1px solid var(--fe-border);
-  background: color-mix(in srgb, var(--fe-panel) 90%, var(--fe-bg));
-}
-
-[data-theme="desert"] .tl-node {
-  background: var(--fe-panel);
-  border: 1px solid var(--fe-border);
-  color: var(--fe-ink-2);
-}
-
-[data-theme="desert"] .tl-node.tl-current {
-  border-color: var(--fe-accent);
-  color: var(--fe-accent);
-  box-shadow: 0 0 0 1px var(--fe-accent);
-}
-
-[data-theme="desert"] .chat-bubble.player .bubble-text {
-  background: color-mix(in srgb, var(--fe-accent) 14%, var(--fe-panel));
-  border: 1px solid color-mix(in srgb, var(--fe-accent) 26%, var(--fe-panel));
-  color: var(--fe-ink);
-}
-
-[data-theme="desert"] .chat-bubble.character .bubble-text {
-  background: var(--fe-panel-2);
-  border: 1px solid var(--fe-border);
-  color: var(--fe-ink-2);
-}
-
-[data-theme="desert"] .ask-card {
-  background: var(--fe-panel);
-  border: 1px solid var(--fe-border);
-  border-radius: var(--fe-radius);
-}
-
-[data-theme="desert"] .ask-body {
-  border-top-color: var(--fe-border);
-}
-
-/* ============================================================
- * 7. 手机端适配：底部导航栏与选项/主题抽屉
- * ============================================================ */
-[data-theme="desert"] .app-bottom-nav {
-  background: color-mix(in srgb, var(--fe-panel) 95%, var(--fe-bg));
-  border-top: 1px solid var(--fe-border);
-}
-
-[data-theme="desert"] .mobile-tab.active {
-  color: var(--fe-accent);
-}
-
-[data-theme="desert"] .mobile-options-sheet section,
-[data-theme="desert"] .mobile-theme-sheet section {
-  background: var(--fe-panel);
-  border-top: 1.5px solid var(--fe-border);
+  border-block-start: 3px var(--fe-atlas-edge) var(--fe-accent);
   box-shadow: var(--fe-shadow-2);
 }
-
-[data-theme="desert"] .mobile-panel-toolbar {
-  background: color-mix(in srgb, var(--fe-panel) 95%, var(--fe-accent-soft));
+html[data-theme="desert"] .app-root .mobile-options-sheet-head {
+  color: var(--fe-ink);
   border-bottom: 1px solid var(--fe-border);
+}
+html[data-theme="desert"] section[aria-label="开局证据定位"] blockquote {
+  background: var(--fe-panel);
+  color: var(--fe-ink-2);
+  border-inline-start: 3px var(--fe-atlas-edge) var(--fe-border-strong);
+  padding: 8px 12px;
+  border-radius: 0 6px 6px 0;
+  line-height: 1.8;
+}
+/* Library: work picker and reader catalogue are separate reachable entries. */
+html[data-theme="desert"] .app-root .work-picker-trigger {
+  background: var(--fe-panel);
+  color: var(--fe-ink);
+  border: 1px solid var(--fe-border-strong);
+  border-radius: var(--fe-radius);
+  min-height: 44px;
+}
+html[data-theme="desert"] .app-root .work-picker-panel {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border-strong);
+  border-block-start-width: 3px;
+  border-radius: var(--fe-radius);
+  box-shadow: var(--fe-shadow-2);
+}
+html[data-theme="desert"] .app-root .work-picker-search input {
+  background: var(--fe-panel);
+  color: var(--fe-ink);
+  border: 1px solid var(--fe-border-strong);
+  border-radius: 6px;
+  min-height: 44px;
+}
+html[data-theme="desert"] .app-root .work-option {
+  background: var(--fe-panel);
+  color: var(--fe-ink-2);
+  border-radius: var(--fe-radius);
+  min-height: 44px;
+  border-inline-start: 3px solid transparent;
+}
+html[data-theme="desert"] .app-root .picker-overlay {
+  background: color-mix(in srgb, var(--fe-ink) 25%, transparent);
+  backdrop-filter: blur(2px);
+}
+html[data-theme="desert"] .reader-drawer .drawer-head {
+  background: var(--fe-panel-2);
+  border-bottom: 2px var(--fe-atlas-edge) var(--fe-border-strong);
+  min-height: 48px;
+  gap: 12px;
+}
+html[data-theme="desert"] .reader-drawer .drawer-head strong {
+  font-family: var(--fe-font-serif);
+  color: var(--fe-ink);
+  letter-spacing: .04em;
+}
+html[data-theme="desert"] .reader-drawer .drawer-head span {
+  color: var(--fe-ink-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+html[data-theme="desert"] .reader-drawer .drawer-loading {
+  color: var(--fe-ink-2);
+  padding: 20px 14px;
+  line-height: 1.8;
+}
+html[data-theme="desert"] .reader-drawer .reader-book {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  border-radius: var(--fe-radius);
+  min-height: 58px;
+  color: var(--fe-ink);
+}
+html[data-theme="desert"] .reader-drawer .reader-book strong {
+  color: var(--fe-ink);
+  font-family: var(--fe-font-serif);
+  font-weight: 700;
+}
+html[data-theme="desert"] .reader-drawer .reader-book small {
+  color: var(--fe-ink-3);
+  font-size: 12px;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+/* Characters: identity, labels, facts, adversaries and original-book people. */
+html[data-theme="desert"] .app-root .pool-preview-card {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  border-block-start: 3px var(--fe-atlas-edge) var(--fe-border-strong);
+  border-radius: var(--fe-radius);
+  box-shadow: var(--fe-shadow-1);
+}
+html[data-theme="desert"] .app-root .pool-preview-card strong {
+  color: var(--fe-ink);
+  font-family: var(--fe-font-serif);
+  letter-spacing: .045em;
+}
+html[data-theme="desert"] .app-root .pool-preview-fields dt {
+  color: var(--fe-ink-3);
+  font-size: 12px;
+  font-weight: 600;
+}
+html[data-theme="desert"] .app-root .pool-preview-fields dd {
+  color: var(--fe-ink);
+  overflow-wrap: anywhere;
+  line-height: 1.8;
+  min-width: 0;
+}
+html[data-theme="desert"] .app-root .member-card {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  border-inline-start: 3px solid var(--fe-border-strong);
+  border-radius: var(--fe-radius);
+}
+html[data-theme="desert"] .app-root .nemesis-card {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-warn);
+  border-radius: var(--fe-radius);
+  color: var(--fe-ink);
+}
+html[data-theme="desert"] .reader-insight-panel .drawer-head {
+  background: var(--fe-panel-2);
+  border-bottom: 2px var(--fe-atlas-edge) var(--fe-border-strong);
+  color: var(--fe-ink);
+  gap: 12px;
+  flex-wrap: wrap;
+}
+html[data-theme="desert"] .reader-insight-panel .drawer-head span {
+  color: var(--fe-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+html[data-theme="desert"] .reader-insight-panel .character-item {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  border-inline-start: 3px solid var(--fe-border-strong);
+  border-radius: var(--fe-radius);
+  padding: 12px 14px;
+}
+html[data-theme="desert"] .reader-insight-panel .character-item strong {
+  color: var(--fe-ink);
+  font-family: var(--fe-font-serif);
+  letter-spacing: .035em;
+}
+html[data-theme="desert"] .reader-insight-panel .character-item p {
+  color: var(--fe-ink-2);
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+html[data-theme="desert"] .reader-insight-panel .character-empty {
+  background: var(--fe-panel);
+  color: var(--fe-ink-2);
+  border: 1px dashed var(--fe-border-strong);
+  border-radius: var(--fe-radius);
+}
+/* Designer: waystations, informed choices and publication result. */
+html[data-theme="desert"] .designer-root .designer-header {
+  height: auto;
+  min-height: 64px;
+  padding-block: 10px;
+  background: var(--fe-panel);
+  border-bottom: 3px var(--fe-atlas-edge) var(--fe-border-strong);
+  flex-wrap: wrap;
+}
+html[data-theme="desert"] .designer-root .designer-title {
+  color: var(--fe-ink);
+  padding-inline-start: 10px;
+  border-inline-start: 3px solid var(--fe-accent);
+}
+html[data-theme="desert"] .designer-root .step-bar {
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 0;
+}
+html[data-theme="desert"] .designer-root .step-dot {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--fe-atlas-key);
+  border-color: var(--fe-border-strong);
+  font-variant-numeric: tabular-nums;
   color: var(--fe-ink-2);
 }
-
-[data-theme="desert"] .mobile-panel-toolbar button {
-  border-color: var(--fe-border);
+html[data-theme="desert"] .designer-root .field {
+  background: var(--fe-panel);
+  border-color: var(--fe-border-strong);
+  color: var(--fe-ink);
+  border-radius: 6px;
+  line-height: 1.6;
+}
+html[data-theme="desert"] .designer-root .required {
+  color: var(--fe-accent-strong);
+  font-weight: 700;
+  font-size: 12px;
+}
+html[data-theme="desert"] .designer-root .corpus-card {
+  border-radius: var(--fe-radius);
+  border-inline-start: 3px var(--fe-atlas-edge) var(--fe-border-strong);
+  background: var(--fe-panel);
+  box-shadow: var(--fe-shadow-1);
+}
+html[data-theme="desert"] .designer-root .question-card {
+  background: var(--fe-panel);
+  border-block-start: 3px solid var(--fe-border-strong);
+  border-radius: var(--fe-radius);
+  padding: 16px;
+}
+html[data-theme="desert"] .designer-root .choice-card {
+  background: var(--fe-panel);
+  border-color: var(--fe-border-strong);
+  border-radius: var(--fe-radius);
+  min-height: 44px;
+  line-height: 1.7;
+}
+html[data-theme="desert"] .designer-root .choice-key {
+  border-radius: var(--fe-atlas-key);
+  width: 24px;
+  height: 24px;
+  color: var(--fe-ink-2);
   background: var(--fe-panel-2);
-  color: var(--fe-accent);
 }
-
-/* ============================================================
- * 8. 自定义精细滚动条
- * ============================================================ */
-[data-theme="desert"] .scrollbar {
-  scrollbar-color: var(--fe-border-strong) transparent;
-  scrollbar-width: thin;
+html[data-theme="desert"] .designer-root .richness-card {
+  background: var(--fe-panel);
+  color: var(--fe-ink-2);
+  border: 1px solid var(--fe-warn);
+  border-inline-start-width: 3px;
+  border-radius: var(--fe-radius);
 }
-
-[data-theme="desert"] ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+html[data-theme="desert"] .designer-root .result-heading {
+  color: var(--fe-ink);
+  font-family: var(--fe-font-serif);
+  font-size: 15px;
+  letter-spacing: .04em;
 }
-
-[data-theme="desert"] ::-webkit-scrollbar-thumb {
-  background: var(--fe-border-strong);
-  border-radius: 999px;
+html[data-theme="desert"] .designer-root .card-list {
+  background: var(--fe-panel);
+  border-color: var(--fe-border-strong);
+  border-radius: var(--fe-radius);
 }
-
-[data-theme="desert"] ::-webkit-scrollbar-thumb:hover {
+html[data-theme="desert"] .designer-root .card-list dt {
+  color: var(--fe-ink-3);
+  font-weight: 600;
+  line-height: 1.7;
+}
+html[data-theme="desert"] .designer-root .card-list dd {
+  background: var(--fe-panel);
+  color: var(--fe-ink);
+  line-height: 1.8;
+}
+html[data-theme="desert"] .designer-root .error-banner {
+  background: var(--fe-panel);
+  color: var(--fe-danger);
+  border: 1px solid var(--fe-danger);
+  border-inline-start-width: 4px;
+  border-radius: 4px;
+}
+html[data-theme="desert"] .designer-root .designer-footer {
+  background: var(--fe-panel);
+  border-top: 2px var(--fe-atlas-edge) var(--fe-border-strong);
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+}
+html[data-theme="desert"] .designer-root .btn {
+  min-height: 44px;
+  height: auto;
+  border-radius: var(--fe-radius);
+  white-space: normal;
+}
+/* Reader: preferences own font/width; opaque paper preserves all three tones. */
+html[data-theme="desert"] .reader-shell .reader-head {
+  background: var(--fe-panel);
+  border-bottom: 2px var(--fe-atlas-edge) var(--fe-border-strong);
+  gap: 12px;
+}
+html[data-theme="desert"] .reader-shell .reader-heading {
+  color: var(--fe-ink);
+  min-width: 0;
+}
+html[data-theme="desert"] .reader-shell .reader-mark {
+  border-radius: var(--fe-atlas-key);
+  outline: 1px solid var(--fe-border-strong);
+  outline-offset: 2px;
+}
+html[data-theme="desert"] .reader-shell .reader-tool {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--fe-atlas-key);
+  border-color: var(--fe-border);
+  color: var(--fe-ink-2);
+  background: var(--fe-panel);
+}
+html[data-theme="desert"] .reader-shell .reader-drawer,
+html[data-theme="desert"] .reader-shell .reader-settings {
+  background: var(--fe-panel);
+  border-color: var(--fe-border-strong);
+  border-radius: var(--fe-radius);
+  backdrop-filter: none;
+  box-shadow: var(--fe-shadow-2);
+}
+html[data-theme="desert"] .reader-shell .reader-chapter {
+  min-height: 44px;
+  border-inline-start: 3px solid transparent;
+  border-radius: var(--fe-radius);
+  color: var(--fe-ink-2);
+}
+html[data-theme="desert"] .reader-shell .reader-chapter > span {
+  border-radius: var(--fe-atlas-key);
+  border-color: var(--fe-border-strong);
+  color: var(--fe-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+html[data-theme="desert"] .reader-shell .reader-settings label {
+  color: var(--fe-ink-2);
+  line-height: 1.6;
+  gap: 12px;
+}
+html[data-theme="desert"] .reader-shell .tone-options button {
+  min-height: 44px;
+  height: auto;
+  color: var(--fe-ink);
+  border-color: var(--fe-border-strong);
+}
+html[data-theme="desert"] .reader-shell .reader-paper {
+  background: var(--fe-panel);
+  color: var(--reader-paper-ink);
+  border-inline-start: 2px var(--fe-atlas-edge) var(--fe-border);
+  padding-inline: 12px;
+  box-sizing: border-box;
+  animation: none;
+}
+html[data-theme="desert"] .reader-shell.reader-tone-warm .reader-paper {
+  background: #f7f0dc;
+  border-color: #a69a79;
+}
+html[data-theme="desert"] .reader-shell.reader-tone-night .reader-paper {
+  background: #1d2326;
+  border-color: #6b7a80;
+}
+html[data-theme="desert"] .reader-shell .reader-page-title {
+  color: var(--reader-paper-ink);
+  padding-top: 12px;
+}
+html[data-theme="desert"] .reader-shell .reader-page-title small,
+html[data-theme="desert"] .reader-shell .reader-page-title span {
+  color: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+html[data-theme="desert"] .reader-shell .reader-text {
+  background: transparent;
+  color: inherit;
+  text-shadow: none;
+}
+html[data-theme="desert"] .reader-shell .reader-text mark {
+  background: #f2d77e;
+  color: #30270f;
+  box-decoration-break: clone;
+}
+html[data-theme="desert"] .reader-shell .reader-text mark.current-match {
   background: var(--fe-accent);
+  color: var(--fe-accent-ink);
+  outline: 2px solid var(--fe-accent);
+  outline-offset: 1px;
+}
+html[data-theme="desert"] .reader-shell .reader-search {
+  background: var(--fe-panel);
+  gap: 8px;
+  flex-wrap: wrap;
+}
+html[data-theme="desert"] .reader-shell .reader-search input {
+  min-height: 44px;
+  background: var(--fe-panel);
+  border-color: var(--fe-border-strong);
+  color: var(--fe-ink);
+}
+html[data-theme="desert"] .reader-shell .reader-search-results .reader-result {
+  min-height: 44px;
+  padding: 12px;
+  border-bottom: 1px solid var(--fe-border);
+  border-radius: 4px;
+  overflow-wrap: anywhere;
+}
+html[data-theme="desert"] .reader-shell .reader-footer {
+  background: var(--fe-panel);
+  color: var(--fe-ink-3);
+  border-top: 2px var(--fe-atlas-edge) var(--fe-border-strong);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+html[data-theme="desert"] .reader-shell .reader-footer button {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--fe-border-strong);
+}
+html[data-theme="desert"] .reader-shell .reader-progress {
+  height: 5px;
+  background: var(--fe-panel-3);
+  border-radius: 3px;
+}
+html[data-theme="desert"] .reader-shell .reader-progress span {
+  border-radius: inherit;
+  background: var(--fe-accent);
+}
+html[data-theme="desert"] .reader-shell .reader-state {
+  background: var(--fe-panel);
+  color: var(--fe-ink-2);
+  border-radius: var(--fe-radius);
+}
+html[data-theme="desert"] .reader-shell .reader-error {
+  background: var(--fe-panel);
+  color: var(--fe-danger);
+  padding: 12px;
+  border-inline-start: 3px solid var(--fe-danger);
+}
+html[data-theme="desert"] .reader-start-dialog {
+  background: var(--fe-panel);
+  color: var(--fe-ink);
+  border: 1px solid var(--fe-border-strong);
+  border-radius: var(--fe-radius);
+  box-shadow: var(--fe-shadow-2);
+}
+/* Chat: provenance and domain boundaries remain literal application content. */
+html[data-theme="desert"] .reader-chat-backdrop {
+  background: color-mix(in srgb, var(--fe-ink) 35%, transparent);
+  backdrop-filter: blur(3px);
+}
+html[data-theme="desert"] .reader-chat {
+  background: var(--fe-panel);
+  color: var(--fe-ink);
+  border: 1px solid var(--fe-border-strong);
+  border-block-start: 4px var(--fe-atlas-edge) var(--fe-accent);
+  border-radius: var(--fe-radius);
+  box-shadow: var(--fe-shadow-2);
+  overscroll-behavior: contain;
+}
+html[data-theme="desert"] .reader-chat > header {
+  border-bottom: 3px double var(--fe-border-strong);
+  padding-bottom: 14px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+html[data-theme="desert"] .reader-chat > header h2 {
+  font-family: var(--fe-font-serif);
+  font-size: clamp(20px, 4vw, 24px);
+  color: var(--fe-ink);
+}
+html[data-theme="desert"] .reader-chat > header button {
+  background: var(--fe-panel);
+  color: var(--fe-accent-strong);
+  border: 1px solid var(--fe-border-strong);
+  min-height: 44px;
+}
+html[data-theme="desert"] .reader-chat .eyebrow {
+  color: var(--fe-accent-strong);
+  font-weight: 700;
+  letter-spacing: .05em;
+}
+html[data-theme="desert"] .reader-chat details {
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-border);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+html[data-theme="desert"] .reader-chat details summary {
+  color: var(--fe-ink-2);
+  cursor: pointer;
+  min-height: 44px;
+  align-content: center;
+}
+html[data-theme="desert"] .reader-chat .identifier {
+  background: var(--fe-panel-2);
+  color: var(--fe-ink-3);
+  border-inline-start: 2px solid var(--fe-border-strong);
+  padding: 8px 10px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+html[data-theme="desert"] .reader-chat .notice {
+  background: var(--fe-panel);
+  color: var(--fe-warn);
+  border-inline-start: 3px solid var(--fe-warn);
+  padding: 10px 12px;
+  line-height: 1.8;
+}
+html[data-theme="desert"] .reader-chat .notice[role="alert"] {
+  color: var(--fe-danger);
+  border-color: var(--fe-danger);
+  border-radius: 0;
+}
+html[data-theme="desert"] .reader-chat .messages {
+  background: var(--fe-panel);
+  padding: 4px 8px;
+  scrollbar-color: var(--fe-border-strong) var(--fe-panel);
+  scrollbar-gutter: stable;
+}
+html[data-theme="desert"] .reader-chat .messages > article {
+  background: var(--fe-panel-2);
+  border: 1px solid var(--fe-border);
+  border-radius: var(--fe-radius);
+  color: var(--fe-ink);
+  overflow-wrap: anywhere;
+}
+html[data-theme="desert"] .reader-chat .messages > article.user {
+  background: var(--fe-accent-soft);
+  border-inline-end: 3px solid var(--fe-accent);
+  margin-left: 24px;
+}
+html[data-theme="desert"] .reader-chat .messages > article strong {
+  color: var(--fe-accent-strong);
+  font-size: 12px;
+  letter-spacing: .035em;
+}
+html[data-theme="desert"] .reader-chat .messages > article p {
+  color: var(--fe-ink);
+  line-height: 1.85;
+  white-space: pre-wrap;
+}
+html[data-theme="desert"] .reader-chat select,
+html[data-theme="desert"] .reader-chat textarea {
+  background: var(--fe-panel);
+  color: var(--fe-ink);
+  border-color: var(--fe-border-strong);
+  border-radius: 6px;
+  min-height: 44px;
+  font-size: 16px;
+}
+html[data-theme="desert"] .reader-chat form {
+  border-top: 1px solid var(--fe-border);
+  padding-top: 12px;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+html[data-theme="desert"] .reader-chat form button {
+  min-height: 44px;
+  border: 1px solid var(--fe-accent-strong);
+  border-radius: var(--fe-radius);
+}
+html[data-theme="desert"] .app-root .bubble-label {
+  color: var(--fe-ink-3);
+  font-weight: 700;
+  letter-spacing: .045em;
+}
+html[data-theme="desert"] .app-root .chat-bubble {
+  background: var(--fe-panel);
+  color: var(--fe-ink);
+  border: 1px solid var(--fe-border);
+  border-radius: var(--fe-radius);
+  overflow-wrap: anywhere;
+}
+html[data-theme="desert"] .app-root .chat-bubble.player {
+  background: var(--fe-accent-soft);
+  border-inline-end: 3px solid var(--fe-accent);
+}
+html[data-theme="desert"] .app-root .chat-bubble.character {
+  border-inline-start: 3px var(--fe-atlas-edge) var(--fe-border-strong);
+}
+/* Jobs: native progress is data-driven; conditional statistics are not fabricated. */
+html[data-theme="desert"] .preparation-job {
+  background: var(--fe-panel);
+  color: var(--fe-ink);
+  border: 1px solid var(--fe-border-strong);
+  border-block-start: 3px var(--fe-atlas-edge) var(--fe-border-strong);
+  border-radius: var(--fe-radius);
+  padding: 16px;
+  box-shadow: var(--fe-shadow-1);
+  font-size: 13px;
+}
+html[data-theme="desert"] .preparation-job > header {
+  align-items: baseline;
+  gap: 12px;
+  border-bottom: 1px solid var(--fe-border);
+  padding-bottom: 10px;
+}
+html[data-theme="desert"] .preparation-job > header strong {
+  font-family: var(--fe-font-serif);
+  color: var(--fe-ink);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+html[data-theme="desert"] .preparation-job > header span {
+  background: var(--fe-panel-2);
+  color: var(--fe-ink-2);
+  border: 1px solid var(--fe-border-strong);
+  border-radius: var(--fe-atlas-key);
+  padding: 3px 10px;
+}
+html[data-theme="desert"] .preparation-job > p {
+  color: var(--fe-ink-2);
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+html[data-theme="desert"] .preparation-job > header + p {
+  color: var(--fe-accent-strong);
+  font-weight: 700;
+  letter-spacing: .025em;
+}
+html[data-theme="desert"] .preparation-job > progress {
+  appearance: none;
+  width: 100%;
+  height: 10px;
+  border: 1px solid var(--fe-border-strong);
+  border-radius: 4px;
+  background: var(--fe-panel-3);
+  accent-color: var(--fe-accent);
+  overflow: hidden;
+}
+html[data-theme="desert"] .preparation-job > progress::-webkit-progress-bar {
+  background: var(--fe-panel-3);
+  border-radius: 3px;
+}
+html[data-theme="desert"] .preparation-job > progress::-webkit-progress-value {
+  background: var(--fe-accent);
+  border-radius: 3px;
+}
+html[data-theme="desert"] .preparation-job > progress::-moz-progress-bar {
+  background: var(--fe-accent);
+  border-radius: 3px;
+}
+html[data-theme="desert"] .preparation-job > progress + p {
+  font-variant-numeric: tabular-nums;
+  color: var(--fe-ink);
+  font-weight: 600;
+}
+html[data-theme="desert"] .preparation-job > .job-error {
+  color: var(--fe-danger);
+  background: var(--fe-panel);
+  border: 1px solid var(--fe-danger);
+  border-inline-start-width: 4px;
+  padding: 10px 12px;
+  border-radius: 4px;
+}
+html[data-theme="desert"] .preparation-job > details {
+  border-top: 1px dashed var(--fe-border-strong);
+  padding-top: 8px;
+  margin-top: 12px;
+}
+html[data-theme="desert"] .preparation-job > details > summary {
+  color: var(--fe-ink-2);
+  min-height: 44px;
+  align-content: center;
+  cursor: pointer;
+  font-weight: 600;
+}
+html[data-theme="desert"] .preparation-job .identifier {
+  background: var(--fe-panel-2);
+  color: var(--fe-ink-3);
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  overflow-wrap: anywhere;
+}
+html[data-theme="desert"] .preparation-job > footer {
+  border-top: 1px dashed var(--fe-border);
+  padding-top: 12px;
+  gap: 10px;
+}
+html[data-theme="desert"] .preparation-job > footer button {
+  background: var(--fe-panel);
+  color: var(--fe-accent-strong);
+  border: 1px solid var(--fe-border-strong);
+  border-radius: var(--fe-radius);
+  min-height: 44px;
+  padding: 8px 12px;
+  white-space: normal;
+}
+/* Identity: caravan stones, oasis discs and wind-eroded page geometry. */
+html[data-theme="desert"] .app-root .workdesk-heading {
+  border-bottom: 3px double var(--fe-border-strong);
+  color: var(--fe-ink);
+  letter-spacing: .07em;
+}
+html[data-theme="desert"] .app-root .prologue-library {
+  border-radius: 50% 50% 8px 8px;
+  border: 2px solid var(--fe-border-strong);
+  background: var(--fe-panel-2);
+}
+html[data-theme="desert"] .designer-root .step-item.active .step-dot {
+  outline: 1px solid var(--fe-accent);
+  outline-offset: 3px;
+  background: var(--fe-accent-soft);
+}
+html[data-theme="desert"] .reader-shell .reader-page-title h3 {
+  font-weight: 700;
+  letter-spacing: .07em;
+}
+/* States: selection boundaries do not depend on ornament or hover. */
+html[data-theme="desert"] .app-root .option-card.selected,
+html[data-theme="desert"] .designer-root .choice-card.selected,
+html[data-theme="desert"] .reader-shell .reader-book.active,
+html[data-theme="desert"] .reader-shell .reader-chapter.active,
+html[data-theme="desert"] .reader-shell .reader-tool.active,
+html[data-theme="desert"] .reader-shell .tone-options .active {
+  background: var(--fe-accent-soft);
+  color: var(--fe-accent-strong);
+  border-color: var(--fe-accent);
+  box-shadow: inset 0 0 0 1px var(--fe-accent);
+}
+html[data-theme="desert"] .app-root .option-card.selected .option-key,
+html[data-theme="desert"] .designer-root .choice-card.selected .choice-key {
+  background: var(--fe-accent);
+  color: var(--fe-accent-ink);
+  border-color: var(--fe-accent-strong);
+}
+html[data-theme="desert"] .designer-root .step-item.done .step-dot {
+  background: var(--fe-ok);
+  border-color: var(--fe-ok);
+  color: #ffffff;
+}
+html[data-theme="desert"] :is(.app-root, .designer-root, .reader-shell, .reader-chat, .preparation-job) :is(button, input, textarea, select, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--fe-focus-ring);
+  outline-offset: 3px;
+}
+html[data-theme="desert"] :is(.app-root, .designer-root, .reader-shell, .reader-chat, .preparation-job) :is(button, input, textarea, select):disabled {
+  opacity: 1;
+  cursor: not-allowed;
+  color: var(--fe-ink-3);
+  background: var(--fe-panel-3);
+  border-color: var(--fe-border-strong);
+  box-shadow: none;
+}
+html[data-theme="desert"] .reader-shell .reader-paper.loading {
+  opacity: 1;
+  border-inline-start-style: dashed;
+}
+html[data-theme="desert"] .designer-root .generating-box,
+html[data-theme="desert"] .reader-chat .messages > p {
+  color: var(--fe-ink-2);
+  background: var(--fe-panel);
+  line-height: 1.8;
+}
+@media (hover: hover) {
+  html[data-theme="desert"] .app-root .option-card:hover:not(:disabled),
+  html[data-theme="desert"] .app-root .work-option:hover,
+  html[data-theme="desert"] .designer-root .choice-card:hover:not(:disabled),
+  html[data-theme="desert"] .reader-shell .reader-book:hover,
+  html[data-theme="desert"] .reader-shell .reader-chapter:hover,
+  html[data-theme="desert"] .preparation-job button:hover:not(:disabled) {
+    background: var(--fe-panel-2);
+    border-color: var(--fe-accent);
+    box-shadow: none;
+    transform: none;
+  }
+}
+/* Responsive: retain one silhouette, reduce density instead of shrinking text. */
+@media (min-width: 768px) and (max-width: 1023px) {
+  html[data-theme="desert"] .app-root .story-panel.theme-decor::before {
+    background-size: 160px 160px;
+    opacity: .04;
+  }
+}
+@media (max-width: 767px) {
+  html[data-theme="desert"] .app-root .story-panel.theme-decor::before {
+    background-image: var(--fe-atlas-small);
+    background-size: 96px 96px;
+    opacity: var(--fe-motif-mobile-opacity);
+  }
+  html[data-theme="desert"] .reader-chat-backdrop {
+    padding: 8px;
+    backdrop-filter: none;
+  }
+  html[data-theme="desert"] .reader-chat {
+    max-height: calc(100dvh - 16px);
+    padding: 16px;
+    border-radius: 10px;
+    scroll-padding-block: 16px;
+  }
+  html[data-theme="desert"] .reader-chat .messages > article.user {
+    margin-left: 12px;
+  }
+  html[data-theme="desert"] .reader-chat .messages {
+    padding-inline: 2px;
+    max-height: 32dvh;
+  }
+  html[data-theme="desert"] .designer-root .designer-header {
+    gap: 8px;
+  }
+  html[data-theme="desert"] .designer-root .step-bar {
+    width: 100%;
+    margin-left: 0;
+    gap: 4px;
+  }
+  html[data-theme="desert"] .designer-root .step-label {
+    display: inline;
+    font-size: 12px;
+  }
+  html[data-theme="desert"] .designer-root .step-item {
+    padding: 5px 4px;
+    gap: 6px;
+  }
+  html[data-theme="desert"] .designer-root .card-list > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+  html[data-theme="desert"] .reader-shell .reader-actions {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  html[data-theme="desert"] .reader-shell .reader-head h2 {
+    max-width: none;
+    white-space: normal;
+    font-size: 15px;
+  }
+  html[data-theme="desert"] .reader-shell .reader-paper {
+    padding-inline: 8px;
+    border-inline-start-width: 2px;
+  }
+  html[data-theme="desert"] .reader-shell .reader-footer {
+    gap: 8px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
+  html[data-theme="desert"] .app-root .work-picker-panel {
+    max-width: calc(100vw - 24px);
+  }
+  html[data-theme="desert"] .preparation-job {
+    padding: 12px;
+    box-shadow: none;
+  }
+  html[data-theme="desert"] .preparation-job > footer button {
+    flex: 1 1 140px;
+  }
+}
+html[data-theme="desert"] .app-root:is(.app-root--mobile-web, .app-root--android) .story-panel.theme-decor::before {
+  background-image: var(--fe-atlas-small);
+  background-size: 96px 96px;
+  opacity: var(--fe-motif-mobile-opacity);
+}
+@media (max-width: 359px), (max-height: 480px) {
+  html[data-theme="desert"] .app-root .story-panel.theme-decor::before {
+    display: none;
+  }
+  html[data-theme="desert"] .reader-chat {
+    padding: 12px;
+    max-height: calc(100dvh - 16px);
+  }
+  html[data-theme="desert"] .reader-chat > header h2 {
+    font-size: 20px;
+  }
+  html[data-theme="desert"] .reader-shell .reader-head {
+    gap: 6px;
+    padding-inline: 8px;
+  }
+  html[data-theme="desert"] .designer-root .designer-footer {
+    padding-inline: 10px;
+  }
+}
+/* Accessibility: static contours; no animation communicates invented progress. */
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme="desert"] :is(.app-root, .designer-root, .reader-shell, .reader-chat, .preparation-job) *,
+  html[data-theme="desert"] :is(.app-root, .designer-root, .reader-shell, .reader-chat, .preparation-job) *::before,
+  html[data-theme="desert"] :is(.app-root, .designer-root, .reader-shell, .reader-chat, .preparation-job) *::after {
+    animation: none;
+    transition: none;
+    scroll-behavior: auto;
+  }
+  html[data-theme="desert"] .reader-shell .page-scroll:hover,
+  html[data-theme="desert"] .designer-root .btn:active:not(:disabled) {
+    transform: none;
+  }
+}
+html[data-theme="desert"] .app-root.reduce-motion *,
+html[data-theme="desert"] .app-root.reduce-motion *::before,
+html[data-theme="desert"] .app-root.reduce-motion *::after {
+  animation: none;
+  transition: none;
+  scroll-behavior: auto;
+}
+@media (forced-colors: active) {
+  html[data-theme="desert"] {
+    --fe-bg: Canvas;
+    --fe-panel: Canvas;
+    --fe-panel-2: Canvas;
+    --fe-panel-3: Canvas;
+    --fe-ink: CanvasText;
+    --fe-ink-2: CanvasText;
+    --fe-ink-3: CanvasText;
+    --fe-border: ButtonText;
+    --fe-border-strong: ButtonText;
+    --fe-accent: Highlight;
+    --fe-accent-strong: LinkText;
+    --fe-accent-ink: HighlightText;
+    --fe-accent-soft: Canvas;
+    --fe-ok: CanvasText;
+    --fe-warn: CanvasText;
+    --fe-danger: CanvasText;
+    --fe-focus-ring: Highlight;
+    --fe-shadow-1: none;
+    --fe-shadow-2: none;
+    --fe-atlas-art: none;
+    --fe-atlas-small: none;
+  }
+  html[data-theme="desert"] .app-root .story-panel.theme-decor::before {
+    display: none;
+    background-image: none;
+  }
+  html[data-theme="desert"] .reader-chat-backdrop,
+  html[data-theme="desert"] .app-root .picker-overlay {
+    background: Canvas;
+    backdrop-filter: none;
+  }
+  html[data-theme="desert"] .reader-shell .reader-paper,
+  html[data-theme="desert"] .reader-shell.reader-tone-warm .reader-paper,
+  html[data-theme="desert"] .reader-shell.reader-tone-night .reader-paper {
+    background: Canvas;
+    color: CanvasText;
+    border-color: CanvasText;
+  }
+  html[data-theme="desert"] .app-root .option-card.selected,
+  html[data-theme="desert"] .designer-root .choice-card.selected,
+  html[data-theme="desert"] .reader-shell .reader-book.active,
+  html[data-theme="desert"] .reader-shell .reader-chapter.active,
+  html[data-theme="desert"] .reader-shell .reader-tool.active,
+  html[data-theme="desert"] .reader-shell .tone-options .active {
+    outline: 2px solid Highlight;
+    outline-offset: -3px;
+    box-shadow: none;
+  }
+  html[data-theme="desert"] .reader-shell .reader-text mark,
+  html[data-theme="desert"] .reader-shell .reader-text mark.current-match {
+    background: Highlight;
+    color: HighlightText;
+    outline: 1px solid Highlight;
+  }
+  html[data-theme="desert"] .designer-root .step-item.done .step-dot {
+    background: Highlight;
+    color: HighlightText;
+    border-color: Highlight;
+  }
+  html[data-theme="desert"] .preparation-job > progress {
+    appearance: auto;
+    forced-color-adjust: auto;
+  }
+  html[data-theme="desert"] :is(.app-root, .designer-root, .reader-shell, .reader-chat, .preparation-job) :disabled {
+    color: GrayText;
+    border-color: GrayText;
+  }
+}
+
+/* Signature: desert — original local vectors; masks inherit semantic ink.
+ * Consumers: stage corner, heading emblem, cover gutter and identity outline. */
+html[data-theme="desert"] {
+  --fe-signature-art: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20100%20100%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%271.7%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M3%2066Q24%2026%2063%2056T98%2053M3%2079Q40%2046%2074%2069T98%2065M3%2088Q42%2064%2082%2083M77%2012a12%2012%200%201%200%200%2024a12%2012%200%201%200%200-24%27%2F%3E%3C%2Fsvg%3E");
+  --fe-signature-small: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20100%20100%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%271.7%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M5%2077Q36%2037%2073%2065T96%2060%27%2F%3E%3C%2Fsvg%3E");
+  --fe-signature-radius: 50% 50% 5px 5px;
+  --fe-signature-edge: double;
+  --fe-signature-opacity: 0.055;
 }

@@ -1,23 +1,30 @@
 <script setup lang="ts">
-defineProps<{ eyebrow?: string; title?: string; compact?: boolean }>()
+withDefaults(defineProps<{
+  eyebrow?: string
+  title?: string
+  compact?: boolean
+  variant?: 'plain' | 'quiet' | 'elevated'
+}>(), { variant: 'plain' })
 </script>
+
 <template>
-  <section class="theme-frame" :class="{ 'theme-frame--compact': compact }">
-    <div v-if="eyebrow || title" class="theme-frame__heading">
-      <span class="theme-frame__ornament" aria-hidden="true">✦</span>
-      <div><small v-if="eyebrow">{{ eyebrow }}</small><h3 v-if="title">{{ title }}</h3></div>
-    </div>
+  <section class="theme-frame" :class="[`theme-frame--${variant}`, { 'theme-frame--compact': compact }]">
+    <header v-if="eyebrow || title" class="theme-frame__heading">
+      <small v-if="eyebrow">{{ eyebrow }}</small>
+      <h3 v-if="title">{{ title }}</h3>
+    </header>
     <div class="theme-frame__body"><slot /></div>
   </section>
 </template>
+
 <style scoped>
-.theme-frame { position: relative; overflow: hidden; border: 1px solid var(--fe-border); border-radius: var(--fe-radius); background: linear-gradient(135deg, color-mix(in srgb, var(--fe-panel-highlight, var(--fe-accent-soft)) 18%, var(--fe-panel)), var(--fe-panel)); box-shadow: var(--fe-shadow-1); }
-.theme-frame::before { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .55; background: var(--fe-decor-overlay); }
-.theme-frame__heading, .theme-frame__body { position: relative; z-index: 1; }
-.theme-frame__heading { display: flex; align-items: center; gap: 9px; border-bottom: 1px solid var(--fe-border); padding: 10px 12px; }
-.theme-frame__ornament { color: var(--fe-accent); font-size: 16px; }
-.theme-frame__heading small { display: block; color: var(--fe-ink-3); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; }
-.theme-frame__heading h3 { margin: 2px 0 0; color: var(--fe-ink); font-size: 13px; font-weight: 800; }
-.theme-frame__body { padding: 12px; }
-.theme-frame--compact .theme-frame__body { padding: 8px; }
+.theme-frame { min-width: 0; padding: 20px; color: var(--fe-ink); background: transparent; border: 0; box-shadow: none; overflow-wrap: anywhere; }
+.theme-frame--quiet { border-radius: var(--fe-radius); background: var(--fe-panel-2); }
+.theme-frame--elevated { border: 1px solid var(--fe-border); border-radius: var(--fe-radius); background: var(--fe-panel); box-shadow: var(--fe-shadow-2); }
+.theme-frame__heading { margin-bottom: 16px; }
+.theme-frame__heading small { display: block; margin-bottom: 4px; color: var(--fe-ink-3); font-family: var(--fe-font-sans); font-size: 12px; line-height: 1.5; }
+.theme-frame__heading h3 { margin: 0; color: var(--fe-ink); font-family: var(--fe-font-serif); font-size: 20px; font-weight: 650; line-height: 1.5; }
+.theme-frame__body { min-width: 0; }
+.theme-frame--compact { padding: 12px; }
+.theme-frame--compact .theme-frame__heading { margin-bottom: 12px; }
 </style>

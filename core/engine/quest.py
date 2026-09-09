@@ -310,10 +310,15 @@ def build_quest_context(state: Mapping[str, Any] | None, kind: str,
         if title:
             anchor_events.append({"title": title, "summary": summary})
 
+    from core.services.role_context_projection import project_role_context
+    roles = project_role_context(state)
+    if not roles["ok"]:
+        raise ValueError("role_projection_failed: " + ",".join(roles["omissions"]))
     goal_items = goals.get("current") or []
     if isinstance(goal_items, (str, bytes)):
         goal_items = [goal_items]
     return {
+        "role_context": roles["block"],
         "kind": _normalize_kind(kind),
         "difficulty": difficulty_number(difficulty),
         "chapter": int(state.get("current_chapter", 1) or 1),
@@ -404,6 +409,7 @@ def quest_offer_prompt(context: Mapping[str, Any]) -> str:
         f"金手指：{ctx.get('golden_finger') or '无'}；"
         f"世界难度：D{ctx.get('difficulty')}（{label}）；任务档位：{level}（{label}）；"
         f"最近涟漪：{ripple.get('level') or '无'}（{'通过' if ripple.get('allowed') else '阻挡/无'}）。\n"
+        f"角色动机参考（未知动机不得臆造，锚点计划不是角色知识）：{ctx.get('role_context') or '未知'}\n"
         f"初步剧情重点：{plot_summary}\n"
         f"窗口内重点剧情事件（锚点）：{events_text}\n"
         f"输出 JSON 形状：{{\"title\": \"任务标题（不超过30字）\", "

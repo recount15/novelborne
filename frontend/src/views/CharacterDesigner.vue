@@ -16,10 +16,10 @@ import {
   Wand2,
 } from 'lucide-vue-next'
 import {
-  createCharacterCard,
   generateCharacterDesign,
   getCharacterDesignerSchema,
   saveCharacterDesign,
+  loadCharacterDesign,
   type ModelConnectionParams,
 } from '../api'
 import type {
@@ -59,13 +59,13 @@ const DEFAULT_CORPUS_KINDS: DesignerCorpusKind[] = [
   { id: 'reference_character', label: '参照角色', hint: '只借原型与语言骨架，不借具体设定。' },
 ]
 const DEFAULT_FIELDS: DesignerField[] = [
-  { key: 'name', label: '角色名', required: true, placeholder: '例如：李青' },
-  { key: 'work', label: '出处作品', placeholder: '例如：示例作品' },
+  { key: 'name', label: '角色名', required: true, placeholder: '例如：沈知行' },
+  { key: 'work', label: '出处作品', placeholder: '例如：我的原创世界观；留空表示原创' },
   { key: 'role_type', label: '角色定位', options: DEFAULT_ROLE_TYPES },
   { key: 'gender', label: '性别（male/female）', options: DEFAULT_GENDERS },
   { key: 'original_position', label: '原著定位（影响宿敌强度评估）', options: DEFAULT_POSITIONS },
-  { key: 'archetype', label: '性格原型', placeholder: '例如：谨慎隐忍的求道者' },
-  { key: 'one_line', label: '一句话概括', placeholder: '用一句话说出这个角色的魂' },
+  { key: 'archetype', label: '性格原型', placeholder: '例如：谨慎而重情义的旅人' },
+  { key: 'one_line', label: '一句话概括', placeholder: '例如：谨慎的旅人，愿为朋友承担风险' },
 ]
 
 const identityFields = ref<DesignerField[]>(DEFAULT_FIELDS)
@@ -80,10 +80,7 @@ const skippedQuestions = ref<Set<string>>(new Set())
 const generating = ref(false)
 const generateError = ref('')
 const result = ref<CharacterDesignerGenerateResult | null>(null)
-const saveFilename = ref('')
-const saving = ref(false)
-const saveError = ref('')
-const saveDone = ref('')
+const reloadCharacterId = ref('')
 const personaOpen = ref(false)
 
 const MAX_CORPUS = 10
@@ -290,12 +287,14 @@ function displayValue(value: unknown): string {
 }
 
 async function generate(): Promise<void> {
-  if (generating.value || !nameValid.value) return
+  if (generating.value || savingToPool.value || !nameValid.value) return
   generating.value = true
   generateError.value = ''
   result.value = null
-  saveDone.value = ''
-  saveError.value = ''
+  saveRequestKey.value = crypto.randomUUID()
+  poolSaveDone.value = ''
+  poolSaveError.value = ''
+  reloadCharacterId.value = ''
   try {
     result.value = await generateCharacterDesign({
       identity: { ...identity.value } as DesignerIdentity,
@@ -307,30 +306,10 @@ async function generate(): Promise<void> {
       api_key: props.connection.api_key,
       model: props.connection.model,
     })
-    saveFilename.value = result.value.suggested_filename?.trim() || identity.value.name.trim()
   } catch (cause) {
     generateError.value = cause instanceof Error ? cause.message : '角色生成失败'
   } finally {
     generating.value = false
-  }
-}
-
-async function saveToLibrary(): Promise<void> {
-  const filename = saveFilename.value.trim() || identity.value.name.trim()
-  if (!filename || saving.value || !result.value) return
-  saving.value = true
-  saveError.value = ''
-  try {
-    const saved = await saveCharacterDesign({
-      filename,
-      persona_markdown: personaMarkdown.value,
-    })
-    saveDone.value = saved.message || `已保存到主角模型库：${saved.label || filename}`
-    emit('saved', saved.label || filename)
-  } catch (cause) {
-    saveError.value = cause instanceof Error ? cause.message : '保存失败'
-  } finally {
-    saving.value = false
   }
 }
 
@@ -341,17 +320,11 @@ const savingToPool = ref(false)
 const poolRoleChoice = ref('伙伴')
 const poolSaveDone = ref('')
 const poolSaveError = ref('')
+const saveRequestKey = ref(crypto.randomUUID())
 
 function cardString(key: string): string {
   const value = characterCard.value[key]
   return typeof value === 'string' ? value.trim() : ''
-}
-
-function cardList(key: string): string[] {
-  const value = characterCard.value[key]
-  if (Array.isArray(value)) return value.filter((v): v is string => typeof v === 'string' && v.trim() !== '')
-  if (typeof value === 'string' && value.trim()) return [value.trim()]
-  return []
 }
 
 // 数据库 role 词表：设计器的「女主」映射 single_heroine；「宿敌」映射反派（反派可饰宿敌）
@@ -379,58 +352,48 @@ async function saveCardToCharacterLibrary(): Promise<void> {
   try {
     const name = cardString('name') || identity.value.name.trim()
     if (!name) throw new Error('角色卡缺少名字，无法入库')
-    const rawGender = cardString('gender') || identity.value.gender || 'unknown'
-    // slot_keys：后端 parse_fusion 已规整为四栏白名单标签；缺失时交给后端四维兜底
-    const rawSlots = characterCard.value.slot_keys
-    const slotKeys = rawSlots && typeof rawSlots === 'object' && !Array.isArray(rawSlots)
-      ? Object.fromEntries(
-          Object.entries(rawSlots as Record<string, unknown>)
-            .map(([slot, tags]) => [slot.replace('主线栏', '伴侣栏'), Array.isArray(tags) ? tags.filter((t): t is string => typeof t === 'string' && t.trim() !== '') : []]),
-        )
-      : undefined
-    const rawRelationship = characterCard.value.relationship_vector
-    const relationshipVector: Record<string, string> | string =
-      rawRelationship && typeof rawRelationship === 'object' && !Array.isArray(rawRelationship)
-        ? Object.fromEntries(
-            Object.entries(rawRelationship as Record<string, unknown>)
-              .map(([target, rel]) => [target, String(rel ?? '')])
-              .filter(([, rel]) => rel.trim() !== ''),
-          )
-        : cardString('relationship_vector')
-    const rawScope = characterCard.value.knowledge_scope
-    const knowledgeScope: string[] | string = Array.isArray(rawScope)
-      ? rawScope.filter((v): v is string => typeof v === 'string' && v.trim() !== '')
-      : cardString('knowledge_scope')
-    await createCharacterCard(
-      {
-        name,
-        role: POOL_ROLE_TO_DB_ROLE[poolRoleChoice.value] ?? '伙伴',
-        gender: normalizeGender(rawGender),
-        work: cardString('work'),
-        archetype: cardString('archetype') || cardString('one_line'),
-        desire: cardString('desire'),
-        fear: cardString('fear'),
-        abilities: cardList('abilities'),
-        relationship_vector: relationshipVector,
-        knowledge_scope: knowledgeScope,
-        voice: cardString('voice'),
-        unacceptable_actions: cardList('unacceptable_actions'),
-        background: cardString('background'),
-        original_position: cardString('original_position'),
-        source_medium: cardString('source_medium'),
-        source_region: cardString('source_region') || undefined,
-        slot_keys: slotKeys,
-        source: '角色设计器',
-      },
-      false,
-    )
-    poolSaveDone.value = `已加入角色库：${name}（${POOL_ROLE_TO_DB_ROLE[poolRoleChoice.value] ?? poolRoleChoice.value}）`
+    const card: Record<string, unknown> = {
+      ...characterCard.value,
+      name,
+      role: POOL_ROLE_TO_DB_ROLE[poolRoleChoice.value] ?? '伙伴',
+      gender: normalizeGender(characterCard.value.gender || identity.value.gender),
+      idempotency_key: saveRequestKey.value,
+    }
+    // Response-only UI flags are not persisted card fields.
+    for (const key of ['origin', 'editable', 'deletable', 'replaces_built_in']) delete card[key]
+    if (typeof card.revision === 'number') card.base_revision = card.revision
+    const saved = await saveCharacterDesign({ card, persona_markdown: personaMarkdown.value })
+    if (!saved.saved) throw new Error('数据库未确认保存，草稿已保留')
+    // Keep committed identity even if subsequent reload fails, avoiding duplicate retry creation.
+    result.value = { ...result.value, card: saved.card }
+    saveRequestKey.value = crypto.randomUUID()
+    poolSaveDone.value = `已保存到角色数据库：${name}（修订 ${saved.revision}）`
+    reloadCharacterId.value = saved.character_id
+    try {
+      const loaded = await loadCharacterDesign(saved.character_id)
+      reloadCharacterId.value = ''
+      result.value = { ...result.value, card: loaded.card }
+    } catch {
+      poolSaveError.value = '已保存，但重新读取失败；可稍后重试读取。'
+    }
     emit('saved', name)
   } catch (cause) {
-    poolSaveError.value = cause instanceof Error ? cause.message : '入库失败'
+    poolSaveError.value = cause instanceof Error ? cause.message : '入库失败，草稿已保留'
   } finally {
     savingToPool.value = false
   }
+}
+async function retrySavedCard(): Promise<void> {
+  if (!reloadCharacterId.value || savingToPool.value) return
+  savingToPool.value = true
+  poolSaveError.value = ''
+  try {
+    const loaded = await loadCharacterDesign(reloadCharacterId.value)
+    result.value = { ...result.value, card: loaded.card }
+    reloadCharacterId.value = ''
+  } catch (cause) {
+    poolSaveError.value = cause instanceof Error ? `档案已保存，重新读取失败：${cause.message}` : '档案已保存，重新读取失败'
+  } finally { savingToPool.value = false }
 }
 </script>
 
@@ -487,15 +450,15 @@ async function saveCardToCharacterLibrary(): Promise<void> {
                 <em v-if="field.required || field.key === 'name'" class="required">必填</em>
               </span>
               <select v-if="fieldOptions(field)" v-model="identity[field.key]" class="field h-10 px-2.5 text-[13px]">
-                <option v-for="option in fieldOptions(field)" :key="option">{{ option }}</option>
+                <option v-for="option in fieldOptions(field)" :key="option" :value="option">{{ option || '未指定' }}</option>
               </select>
               <textarea
                 v-else-if="isLongField(field)"
                 v-model="identity[field.key]"
                 class="field h-16 p-2 text-[13px]"
-                :placeholder="field.placeholder"
+                :placeholder="DEFAULT_FIELDS.find(item => item.key === field.key)?.placeholder || field.placeholder"
               />
-              <input v-else v-model="identity[field.key]" class="field h-10 px-2.5 text-[13px]" :placeholder="field.placeholder" />
+              <input v-else v-model="identity[field.key]" class="field h-10 px-2.5 text-[13px]" :placeholder="DEFAULT_FIELDS.find(item => item.key === field.key)?.placeholder || field.placeholder" />
             </label>
           </div>
         </section>
@@ -610,26 +573,21 @@ async function saveCardToCharacterLibrary(): Promise<void> {
             </template>
 
             <div class="save-row">
-              <input v-model="saveFilename" class="field h-10 flex-1 px-2.5 text-[13px]" placeholder="模型文件名（默认角色名）" />
-              <button type="button" class="btn primary h-10" :disabled="saving || !(saveFilename.trim() || identity.name.trim())" @click="saveToLibrary">
-                <LoaderCircle v-if="saving" class="animate-spin" :size="13" />
-                <Save v-else :size="13" /> 保存到主角模型库
-              </button>
-            </div>
-            <div class="save-row">
               <button type="button" class="btn h-10 flex-1 justify-center" :disabled="savingToPool || !result" @click="saveCardToCharacterLibrary">
                 <LoaderCircle v-if="savingToPool" class="animate-spin" :size="13" />
                 <BookUser v-else :size="13" /> 保存到角色库（四栏选卡可用）
               </button>
-              <select v-model="poolRoleChoice" class="field h-10 px-2.5 text-[12px]" title="入库 role：主角→主角，女主→single_heroine，宿敌→反派">
+              <select v-model="poolRoleChoice" :disabled="savingToPool" aria-label="角色档案入库定位" class="field h-10 px-2.5 text-[12px]" title="入库 role：主角→主角，女主→single_heroine，宿敌→反派">
                 <option value="主角">主角</option>
                 <option value="伙伴">伙伴</option>
                 <option value="女主">女主</option>
                 <option value="宿敌">宿敌（存为反派）</option>
               </select>
             </div>
-            <p v-if="saveError" class="mt-2 text-[11px] text-(--fe-danger)">{{ saveError }}</p>
-            <p v-if="saveDone" class="mt-2 text-[11px] font-bold text-(--fe-ok)">{{ saveDone }}</p>
+            <p v-if="savingToPool" role="status" class="page-note">正在保存或核对角色档案，请稍候…</p>
+            <p v-if="poolSaveDone" role="status" class="save-feedback success">{{ poolSaveDone }}</p>
+            <p v-if="poolSaveError" role="alert" class="save-feedback failure">{{ poolSaveError }}</p>
+            <button v-if="reloadCharacterId" type="button" class="btn" :disabled="savingToPool" @click="retrySavedCard">重新读取已保存档案</button>
           </div>
         </section>
       </div>
@@ -642,7 +600,7 @@ async function saveCardToCharacterLibrary(): Promise<void> {
       <button v-if="step < 3" type="button" class="btn primary" :disabled="step === 0 && !nameValid" @click="nextStep">
         下一步 <ArrowRight :size="13" />
       </button>
-      <button v-else type="button" class="btn primary" :disabled="generating || !nameValid" @click="generate">
+      <button v-else type="button" class="btn primary" :disabled="generating || savingToPool || !nameValid" @click="generate">
         <LoaderCircle v-if="generating" class="animate-spin" :size="13" />
         <Sparkles v-else :size="13" /> {{ result ? '重新生成' : '生成角色' }}
       </button>
@@ -689,7 +647,9 @@ async function saveCardToCharacterLibrary(): Promise<void> {
 .step-item.done { color: var(--fe-ok); }
 .step-item.done .step-dot { border-color: var(--fe-ok); background: var(--fe-ok); color: var(--fe-accent-ink); }
 @media (max-width: 640px) {
-  .step-label { display: none; }
+  .step-item:not(.active) .step-label { display: none; }
+  .step-bar { padding: 0; }
+  .step-item.active .step-label { white-space: nowrap; }
 }
 
 .designer-scroll { flex: 1; overflow-y: auto; }
@@ -858,4 +818,7 @@ async function saveCardToCharacterLibrary(): Promise<void> {
   background: var(--fe-panel);
   padding: 10px 14px;
 }
+.save-feedback{margin-top:10px;padding:10px 12px;border:1px solid var(--fe-border);border-radius:8px;font-size:12px;overflow-wrap:anywhere}.save-feedback.success{color:var(--fe-ok)}.save-feedback.failure{color:var(--fe-danger)}
+.save-row>select{width:auto;max-width:100%}.designer-scroll{min-height:0}.designer-footer{padding-bottom:max(10px,env(safe-area-inset-bottom))}
+@media(max-width:560px){.save-row{flex-direction:column}.save-row>.btn{flex:auto;min-height:44px;height:auto;padding-block:10px}.designer-header{gap:8px;padding-inline:10px}.step-item{padding-inline:3px}}
 </style>

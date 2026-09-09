@@ -238,6 +238,32 @@ class TestRunTurn(unittest.TestCase):
         self.assertTrue(any("铜扣暗记" in p for p in option_calls),
                         "选项卷必须携带原文情景节选")
 
+    def test_committed_role_projection_reaches_options_prompt(self):
+        # v3.0.0：选项卷必须收到已提交 state 的角色安全投影——
+        # 已知分支事实可见、私有卡与私有资源绝不入提示词。
+        state = dict(
+            STATE,
+            branch_id="b1", state_revision=2,
+            active_members=[{"character_id": "c1", "name": "Display",
+                             "character_card": {"private": "PRIVATE_CARD"}}],
+            character_states={"c1": {"assertions": [
+                {"id": "f1", "key": "location", "value": "SAFE_BRANCH_MARKER",
+                 "confidence": 1.0, "provenance": {"source": "committed"},
+                 "knowledge_holder_id": "c1", "state_revision": 2}]}})
+        model = ScriptedModel(self.paper, self.terms, self.names)
+        result = tp.run_turn(state, None, "m", model_fn=model,
+                             message="查验北墙裂痕", context_blocks="前文略",
+                             anchor_text=ANCHOR)
+        self.assertIsInstance(result, tp.TurnResult)
+        option_calls = [p for p in model.calls if "选项生成卷" in p]
+        self.assertTrue(option_calls, "选项卷必须实际发起")
+        self.assertTrue(any("角色安全投影" in p for p in option_calls),
+                        "选项卷必须携带角色安全投影块")
+        self.assertTrue(any("SAFE_BRANCH_MARKER" in p for p in option_calls),
+                        "已提交分支事实必须进入选项卷")
+        self.assertTrue(all("PRIVATE_CARD" not in p for p in model.calls),
+                        "私有角色卡内容不得泄漏到任何模型调用")
+
     def test_quality_gate_audit_recorded(self):
         model = ScriptedModel(self.paper, self.terms, self.names)
         result = self._run(model)

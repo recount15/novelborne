@@ -1,4 +1,5 @@
 import { computed, nextTick, ref, watch } from 'vue'
+import { findReaderMatches } from '../utils/readerText'
 
 export type ReaderTone = 'paper' | 'warm' | 'night'
 export interface ReaderSettings { fontSize: number; lineHeight: number; contentWidth: number; tone: ReaderTone }
@@ -83,8 +84,9 @@ export async function restoreScrollRatio(element: HTMLElement | null, ratio: num
 
 export function useChapterSearch(text: () => string) {
   const query = ref(''); const matchIndex = ref(0)
-  const matches = computed(() => { const q = query.value.trim(); if (!q) return []; const source = text(); const found: number[] = []; let at = 0; while ((at = source.toLocaleLowerCase().indexOf(q.toLocaleLowerCase(), at)) >= 0) { found.push(at); at += Math.max(1, q.length) } return found })
-  watch(matches, () => { matchIndex.value = 0 })
+  const ranges = computed(() => findReaderMatches(text(), query.value))
+  const matches = computed(() => ranges.value.map(range => range.start))
+  watch(matches, () => { matchIndex.value = 0 }, { flush: 'sync' })
   function nextMatch(delta = 1): number { if (!matches.value.length) return -1; matchIndex.value = (matchIndex.value + delta + matches.value.length) % matches.value.length; return matches.value[matchIndex.value] }
-  return { query, matches, matchIndex, nextMatch }
+  return { query, matches, ranges, matchIndex, nextMatch }
 }
