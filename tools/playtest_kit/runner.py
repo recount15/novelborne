@@ -19,7 +19,8 @@ from urllib.parse import urlsplit
 import requests
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-OUT_DIR = ROOT / "outputs"
+# 报告随 FATE_VAR_DIR 走：多实例并行检验时各写各的 var，不互覆。
+OUT_DIR = Path(os.getenv("FATE_VAR_DIR") or (ROOT / "var")) / "outputs"
 # 原著 TXT 不随工具包分发：必须通过 PLAYTEST_TXT 环境变量或启动配置 txt_path 注入。
 TXT_PATH = Path(os.environ["PLAYTEST_TXT"]) if os.environ.get("PLAYTEST_TXT") else None
 REPORT_PATH = OUT_DIR / "playtest_monitor_report.json"
@@ -274,23 +275,32 @@ def run(rep, should_stop: Callable[[], bool]) -> None:
         return
 
     rep.phase("阶段1", "上传原著与全书准备")
-    session_id, upload_id, book_id = _upload_novel(base, _resolve_txt(cfg))
-    rep.session_id = session_id
-    rep.check("上传TXT:成功", bool(session_id and upload_id), f"session={session_id[:12]}…")
-
-    # 强化开局硬门禁：必须先跑完全书准备（fullbook）并等 READY，
-    # 再携带 book_id + preparation_job_id 开局（与主程序 server 端门禁同源）。
     prep_timeout = int(cfg.get("prep_timeout") or 3600)
-    code, pjob = _http(base, "POST", f"/api/books/{book_id}/preparation-jobs", {
-        "idempotency_key": f"playtest-{book_id[:12]}-{int(time.time())}",
-        "mode": "fullbook", "provider": provider, "base_url": base_url or None,
-        "api_key": api_key, "model": model}, timeout=300)
-    job_id = _job_id_of(pjob)
-    rep.check("全书准备:任务创建", code == 202 and bool(job_id),
-              f"code={code} job={job_id[:12]}…")
-    if code != 202 or not job_id:
-        rep.error = "全书准备任务创建失败，终止检验"
-        return
+    reuse_book = str(cfg.get("reuse_book_id") or "")
+    reuse_job = str(cfg.get("reuse_prep_job_id") or "")
+    if reuse_book and reuse_job:
+        # 复用已就绪/在队的书与准备任务：块缓存按书目录存放，重传同文
+        # 不命中缓存，只会整本重蒸再烧一次模型额度。会话由开局接口新建。
+        session_id, upload_id = "", ""
+        book_id, job_id = reuse_book, reuse_job
+        rep.check("复用书与准备任务", True, f"book={book_id[:12]}… job={job_id[:12]}…")
+    else:
+        session_id, upload_id, book_id = _upload_novel(base, _resolve_txt(cfg))
+        rep.session_id = session_id
+        rep.check("上传TXT:成功", bool(session_id and upload_id), f"session={session_id[:12]}…")
+
+        # 强化开局硬门禁：必须先跑完全书准备（fullbook）并等 READY，
+        # 再携带 book_id + preparation_job_id 开局（与主程序 server 端门禁同源）。
+        code, pjob = _http(base, "POST", f"/api/books/{book_id}/preparation-jobs", {
+            "idempotency_key": f"playtest-{book_id[:12]}-{int(time.time())}",
+            "mode": "fullbook", "provider": provider, "base_url": base_url or None,
+            "api_key": api_key, "model": model}, timeout=300)
+        job_id = _job_id_of(pjob)
+        rep.check("全书准备:任务创建", code == 202 and bool(job_id),
+                  f"code={code} job={job_id[:12]}…")
+        if code != 202 or not job_id:
+            rep.error = "全书准备任务创建失败，终止检验"
+            return
     prep_deadline = time.time() + prep_timeout
     prep_status, prep_progress = "", ""
     while time.time() < prep_deadline:
@@ -334,7 +344,18 @@ def run(rep, should_stop: Callable[[], bool]) -> None:
         "convergence": "较高", "story_richness": richness,
     }
     t0 = time.time()
+    if not session_id:
+        start_body.pop("session_id", None)
     evs, st, err = _stream_events(base, "/api/sessions/start", start_body, timeout=1800)
+    if not session_id:
+        # 复用模式下会话由开局接口新建：从流事件中接住新会话 ID。
+        for ev in evs:
+            sid = ((ev or {}).get("data") or {}).get("session_id")
+            if sid:
+                session_id = str(sid)
+                rep.session_id = session_id
+                break
+    rep.check("开局:会话ID就绪", bool(session_id), f"session={session_id[:12]}…")
     rep.check("开局:无error事件", err is None, str(err)[:150] if err else "")
     rep.check("开局:game_ready", isinstance(st, dict) and st.get("game_ready") is True,
               f"耗时 {time.time()-t0:.0f}s")
@@ -418,7 +439,9 @@ def run(rep, should_stop: Callable[[], bool]) -> None:
                 rep.check("托管:成功", False, f"code={code}")
 
         if rnd == 8 and not cheats_done:
-            code, a1 = _http(base, "POST", f"/api/sessions/{session_id}/ask", {"question": "UUDDLLRRBABAWHOSLOMSTING"})
+            # 三愿码为全码精确匹配（cheat_code.WISH_CODE），截断码不生效。
+            code, a1 = _http(base, "POST", f"/api/sessions/{session_id}/ask",
+                             {"question": "UUDDLLRRBABAWHOSLOMSTINGNOTALADDIN"})
             armed = code == 200 and isinstance(a1, dict) and a1.get("wish_armed") is True
             rep.check("作弊码:许愿闸门开启", armed, f"code={code}")
             if armed:

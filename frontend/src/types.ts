@@ -534,6 +534,9 @@ export interface UserBookAnchor {
 export interface UserBookChapterInsight {
   book_id: string
   chapter_index: number
+  /** F25：锚点缺失/损坏时如实标注 unavailable 并给出原因，正文阅读不受影响。 */
+  status?: 'ready' | 'unavailable'
+  detail?: string
   anchor: UserBookAnchor | null
   characters: Array<{ name: string; detail?: string }>
 }

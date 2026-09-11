@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import copy
 import datetime as dt
-import json
 from typing import Any, Mapping
 
 from .schema import clone, blank_state
@@ -62,10 +61,70 @@ class StateStore:
         return clone(self.state)
 
 
+# 面板是给用户看的业务文本：枚举与常见键一律映射为中文，杜绝 json.dumps 泄漏。
+_ENUM_ZH = {
+    "inactive": "未激活", "active": "已激活", "ready": "可用", "cooldown": "冷却中",
+    "pending": "待定", "running": "进行中", "done": "已完成", "failed": "失败",
+    "cancelled": "已取消", "unknown": "未知", "none": "无", "normal": "正常",
+}
+_KEY_ZH = {
+    "name": "名称", "status": "状态", "cooldown": "冷却", "cost": "代价",
+    "costs": "代价", "scope": "作用域", "tier": "层级", "type": "类型",
+    "level": "等级", "count": "数量", "description": "说明", "desc": "说明",
+    "title": "标题", "label": "标签", "value": "数值", "progress": "进度",
+    "round": "回合", "chapter": "章节", "gender": "性别", "age": "年龄",
+    "condition": "状况", "fatigue": "疲劳", "date": "日期", "clock": "时刻",
+    "blocked_for_others": "他人禁用", "revision": "修订",
+}
+# 语义主键：列表条目优先只展示主键，其余字段并入括号补充。
+_NAME_KEYS = ("name", "名称", "title", "标题", "label", "标签")
+
+
+def _zh_key(key: str) -> str:
+    return _KEY_ZH.get(str(key).lower(), str(key))
+
+
+def _zh_value(value: Any) -> str:
+    text = str(value).strip()
+    return _ENUM_ZH.get(text.lower(), text)
+
+
 def _text(value: Any) -> str:
-    if isinstance(value, (dict, list)):
-        return json.dumps(value, ensure_ascii=False)
-    return str(value or "")
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return _zh_value(value)
+    if isinstance(value, bool):
+        return "是" if value else "否"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, dict):
+        if not value:
+            return ""
+        parts = []
+        for key, item in value.items():
+            rendered = _text(item)
+            parts.append(f"{_zh_key(key)}：{rendered}" if rendered else _zh_key(key))
+        return "；".join(parts)
+    if isinstance(value, list):
+        if not value:
+            return ""
+        items = []
+        for item in value:
+            if isinstance(item, dict):
+                label = next((item[k] for k in _NAME_KEYS
+                              if item.get(k) not in (None, "")), None)
+                if label is not None:
+                    rest = {k: v for k, v in item.items()
+                            if k not in _NAME_KEYS and v not in (None, "", [])}
+                    extra = _text(rest)
+                    items.append(f"{_text(label)}（{extra}）" if extra else _text(label))
+                    continue
+            rendered = _text(item)
+            if rendered:
+                items.append(rendered)
+        return "、".join(items)
+    return _zh_value(value)
 
 
 def render_panel(state: Mapping[str, Any] | None) -> str:

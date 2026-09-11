@@ -105,20 +105,54 @@ def _sources(root: Path, index: Mapping[str, Any]) -> tuple[list[dict], list[dic
     return sources, blocks
 
 
+class _BlockValidationError(ValueError):
+    """结构化、不含上游文本的块校验失败（稳定 code + 字段路径）。"""
+
+    def __init__(self, code: str, message: str, field: str | None = None):
+        super().__init__(message)
+        self.code = code
+        self.field = field
+
+
+_ERROR_LIMIT = 100
+
+
+def _record_block_error(package: dict, block: Mapping[str, Any], code: str,
+                        field: str | None, message: str) -> None:
+    """只记录自产的安全信息；设上限防止死网关把包撑爆。"""
+    if len(package['errors']) < _ERROR_LIMIT:
+        package['errors'].append({'block_id': block['block_id'], 'chapter_no': block['chapter_no'],
+                                  'code': code, 'field': field, 'message': message,
+                                  'retryable': True})
+
+
 def _validate_block(value: Any, block: Mapping[str, Any]) -> dict:
-    data = _parse_model_output(value)
-    anchor = validate_anchor(data.get('anchor'), block['text'], block['chapter_no'])
+    try:
+        data = _parse_model_output(value)
+    except (ValueError, TypeError, KeyError) as exc:
+        raise _BlockValidationError('MODEL_OUTPUT_INVALID', '块输出无法解析为JSON对象') from exc
+    try:
+        anchor = validate_anchor(data.get('anchor'), block['text'], block['chapter_no'])
+    except (ValueError, TypeError, KeyError) as exc:
+        raise _BlockValidationError('ANCHOR_INVALID', str(exc), 'anchor') from exc
     if not isinstance(data.get('entities'), list):
-        raise ValueError('every block requires an explicit entities inventory')
+        raise _BlockValidationError('ENTITIES_NOT_LIST', '每个块都必须返回明确的实体清单', 'entities')
     entities = []
-    for raw in data['entities']:
+    for index, raw in enumerate(data['entities']):
         if not isinstance(raw, Mapping):
-            raise ValueError('entity must be an object')
+            raise _BlockValidationError('ENTITY_NOT_OBJECT', f'实体第{index + 1}项必须是对象',
+                                        f'entities[{index}]')
         name, kind, excerpt = (str(raw.get(k) or '').strip() for k in ('name', 'kind', 'excerpt'))
-        if not name or kind not in {'character', 'place', 'organization', 'object'}:
-            raise ValueError('entity requires name and valid kind')
+        if not name:
+            raise _BlockValidationError('ENTITY_FIELDS_INVALID', f'实体第{index + 1}项缺少名称',
+                                        f'entities[{index}].name')
+        if kind not in {'character', 'place', 'organization', 'object'}:
+            raise _BlockValidationError('ENTITY_FIELDS_INVALID', f'实体第{index + 1}项类型不合法',
+                                        f'entities[{index}].kind')
         if not excerpt or excerpt not in block['text'] or name not in excerpt:
-            raise ValueError('entity name and excerpt must match this block exactly')
+            raise _BlockValidationError('ENTITY_EXCERPT_MISMATCH',
+                                        f'实体第{index + 1}项摘录必须逐字来自本块且包含名称',
+                                        f'entities[{index}].excerpt')
         local = block['text'].index(excerpt)
         mention_id = _hash({'block': block['block_id'], 'source_hash': block['source_hash'],
                             'name': name, 'kind': kind, 'offset': local})
@@ -233,13 +267,35 @@ def prepare_book(book_dir: str | Path, *, leaf_chars: int = 1200, arc_size: int 
             try:
                 if not callable(model):
                     raise ValueError('fullbook preparation requires a block model')
-                clean = _validate_block(model(_block_prompt(block)), block)
-                _atomic_json(path, {'cache_key': cache_key, 'result': clean})
+                raw = model(_block_prompt(block))
             except PreparationCancelled:
                 raise
             except Exception:
-                # Upstream exceptions can contain credentials or request payloads.
-                package['errors'].append({'block_id': block['block_id'], 'error': 'block preparation failed'})
+                # Upstream exceptions can contain credentials or request payloads;
+                # only our own safe classification is recorded.
+                _record_block_error(package, block, 'MODEL_FAILED', None,
+                                    '块蒸馏调用失败（网络或模型异常），可重试')
+                checkpoint('DISTILLING', len(package['blocks']), len(blocks), 'block',
+                           attempted_units=attempted, block_id=block['block_id'], verified=False,
+                           chapters_done=chapters_done, chapters_total=chapters_total,
+                           current_chapter=block['chapter_no'])
+                continue
+            try:
+                clean = _validate_block(raw, block)
+                _atomic_json(path, {'cache_key': cache_key, 'result': clean})
+            except PreparationCancelled:
+                raise
+            except _BlockValidationError as exc:
+                _record_block_error(package, block, exc.code, exc.field,
+                                    f'块校验未通过（{exc.code}）')
+                checkpoint('DISTILLING', len(package['blocks']), len(blocks), 'block',
+                           attempted_units=attempted, block_id=block['block_id'], verified=False,
+                           chapters_done=chapters_done, chapters_total=chapters_total,
+                           current_chapter=block['chapter_no'])
+                continue
+            except (ValueError, TypeError, KeyError, OSError):
+                _record_block_error(package, block, 'CHECKPOINT_FAILED', None,
+                                    '块结果校验或落盘失败，可重试')
                 checkpoint('DISTILLING', len(package['blocks']), len(blocks), 'block',
                            attempted_units=attempted, block_id=block['block_id'], verified=False,
                            chapters_done=chapters_done, chapters_total=chapters_total,
@@ -270,7 +326,9 @@ def prepare_book(book_dir: str | Path, *, leaf_chars: int = 1200, arc_size: int 
                    identity_report=identity, identity_hash=_hash(identity))
     package['ready'] = complete and bool(package['entities']) and identity['identity_ready']
     if complete and not package['entities']:
-        package['errors'].append({'error': 'fullbook requires an evidence-backed entity inventory'})
+        package['errors'].append({'block_id': None, 'chapter_no': None,
+                                  'code': 'NO_ENTITY_EVIDENCE', 'field': None,
+                                  'message': 'fullbook 需要有原文证据的实体清单', 'retryable': True})
     _atomic_json(root / 'opening_ready.json', package)
     return package
 
@@ -342,9 +400,28 @@ def verify_preparation(book_dir: str | Path, *, mode: str | None = None,
             package['coverage_ready'] = True
             package['identity_ready'] = identity['identity_ready']
             if not identity['identity_ready']:
-                raise ValueError('character identities remain unresolved')
+                # 增量身份就绪放宽：若 caller 指定了 target_chapter，且目标章节自身
+                # 及其之前的章节内部提及均已完成裁决且无冲突（chapter_readiness 为 True），
+                # 则允许开局流程进入，无需等待后文 50+ 章长尾冲突完成。
+                ch_readiness = identity.get('chapter_readiness') or {}
+                target_ok = False
+                if target_chapter is not None and ch_readiness:
+                    needed = [ch for ch in range(1, int(target_chapter) + 1)]
+                    if all(ch_readiness.get(str(ch), {}).get('ready') for ch in needed):
+                        target_ok = True
+                if not target_ok:
+                    raise ValueError('character identities remain unresolved')
         if not package.get('ready'):
-            raise ValueError('preparation is not ready')
+            # 同样地，如果是因为全书身份未就绪但目标章节已就绪，放行
+            if actual_mode == 'fullbook' and target_chapter is not None:
+                ch_readiness = (package.get('identity_report') or {}).get('chapter_readiness') or {}
+                needed = [ch for ch in range(1, int(target_chapter) + 1)]
+                if needed and ch_readiness and all(ch_readiness.get(str(ch), {}).get('ready') for ch in needed):
+                    pass
+                else:
+                    raise ValueError('preparation is not ready')
+            else:
+                raise ValueError('preparation is not ready')
     except (OSError, ValueError, TypeError, KeyError) as exc:
         errors.append(str(exc))
     return {**package, 'ready': not errors, 'errors': errors or package.get('errors', [])}

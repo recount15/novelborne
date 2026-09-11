@@ -42,7 +42,8 @@ def _frontend_datas():
 
 datas = _gate.public_asset_datas(
     ROOT, allow_private=_gate.private_override_enabled()) \
-    + _frontend_datas() + [(str(ROOT / 'LICENSE'), 'LICENSE')]
+    + _frontend_datas() + [(str(ROOT / 'LICENSE'), 'LICENSE')] \
+    + [(str(ROOT / 'docs' / 'USER_MANUAL.md'), 'docs')]
 binaries = []
 hiddenimports = ['core', 'core.server', 'core.app', 'core.fate_engine']
 # Hooks may import core in isolated subprocesses. Never inherit the owner's DB.

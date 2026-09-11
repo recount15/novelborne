@@ -24,7 +24,8 @@ DEPENDENCIES = {
     "options.critic": ("story.polish", "options.candidates"),
     "final_commit_arbiter": ("story.polish", "story.continuity_critic", "options.candidates", "options.critic"),
 }
-ClaimKind = Literal["source_fact", "branch_committed_fact", "inference", "proposed_invention"]
+ClaimKind = Literal["source_fact", "branch_committed_fact", "authorized_fact", "inference", "proposed_invention"]
+DIRECTIVE_FACT_PREDICATE = "authorized_directive"
 Status = Literal["ok", "blocked", "failed", "cancelled"]
 
 
@@ -76,7 +77,8 @@ class GenerationSnapshot:
         require(payload.get("registry_version", REGISTRY_VERSION) == REGISTRY_VERSION, "registry_version")
         payload["registry_version"] = REGISTRY_VERSION
         payload.setdefault("budget_policy_version", "1")
-        for key in ("authorized_evidence", "authorized_branch_events", "role_projections"):
+        for key in ("authorized_evidence", "authorized_branch_events",
+                    "authorized_directives", "role_projections"):
             require(isinstance(payload.get(key), dict), "snapshot_" + key)
         encoded = canonical(payload)
         hashed = digest(payload)
@@ -100,21 +102,39 @@ class GroundedClaim:
     assumption_ids: tuple[str, ...]
     valid_boundary_json: str
     knowledge_holders: tuple[str, ...]
+    directive_ids: tuple[str, ...] = ()
 
     @classmethod
     def validate(cls, raw: Any, context: dict[str, Any]) -> "GroundedClaim":
-        keys = {"claim_id", "kind", "subject_ids", "predicate", "value", "evidence_ids", "branch_event_ids", "assumption_ids", "valid_boundary", "knowledge_holders"}
+        keys = {"claim_id", "kind", "subject_ids", "predicate", "value", "evidence_ids", "branch_event_ids", "assumption_ids", "valid_boundary", "knowledge_holders", "directive_ids"}
         require(isinstance(raw, dict) and set(raw) == keys, "claim_schema")
         require(text(raw["claim_id"]) and text(raw["predicate"]), "claim_identity")
-        require(raw["kind"] in ("source_fact", "branch_committed_fact", "inference", "proposed_invention"), "claim_kind")
-        for key in ("subject_ids", "evidence_ids", "branch_event_ids", "assumption_ids", "knowledge_holders"):
+        require(raw["kind"] in ("source_fact", "branch_committed_fact", "authorized_fact", "inference", "proposed_invention"), "claim_kind")
+        for key in ("subject_ids", "evidence_ids", "branch_event_ids", "assumption_ids", "knowledge_holders", "directive_ids"):
             require(strings(raw[key]), "claim_" + key)
         require(bool(raw["subject_ids"]), "claim_subject")
         require(raw["valid_boundary"] == context["boundary"], "claim_boundary")
         require(set(raw["evidence_ids"]) <= set(context["evidence"]), "unauthorized_evidence")
         require(set(raw["branch_event_ids"]) <= set(context["branch_events"]), "unauthorized_branch_event")
         require(set(raw["knowledge_holders"]) <= set(context["knowledge_holders"]), "unauthorized_knowledge_holder")
+        directives_records = context.get("authorized_directives") or {}
+        require(set(raw["directive_ids"]) <= set(directives_records), "unauthorized_directive")
         kind = raw["kind"]
+        if kind != "authorized_fact" and raw["directive_ids"]:
+            require(False, "directive_ref_wrong_kind")
+        if kind == "authorized_fact":
+            require(bool(raw["directive_ids"]), "missing_directive_ref")
+            require(not raw["evidence_ids"] and not raw["branch_event_ids"], "authorized_fact_single_domain")
+            # 授权改变世界，不自动改变他人认知：主体限玩家/世界/愿望目标，
+            # 知情面限玩家本人与目标对象——系统知道不等于角色知道。
+            allowed_subjects = {"player", "world"}
+            allowed_knowers = {"player"}
+            for ref in raw["directive_ids"]:
+                affected = directives_records[ref].get("affected") or []
+                allowed_subjects |= {str(x) for x in affected}
+                allowed_knowers |= {str(x) for x in affected}
+            require(set(raw["subject_ids"]) <= allowed_subjects, "directive_subject_outside_targets")
+            require(set(raw["knowledge_holders"]) <= allowed_knowers, "directive_knowledge_not_propagagated")
         if kind in ("source_fact", "branch_committed_fact"):
             refs = raw["evidence_ids"] if kind == "source_fact" else raw["branch_event_ids"]
             records = context["evidence"] if kind == "source_fact" else context["branch_events"]
@@ -124,7 +144,7 @@ class GroundedClaim:
             require(any(fact in records[ref].get("facts", []) for ref in refs), "unsupported_fact")
         if kind == "inference":
             require(bool(raw["evidence_ids"] or raw["branch_event_ids"] or raw["assumption_ids"]), "ungrounded_inference")
-        return cls(raw["claim_id"], kind, tuple(raw["subject_ids"]), raw["predicate"], canonical(raw["value"]), tuple(raw["evidence_ids"]), tuple(raw["branch_event_ids"]), tuple(raw["assumption_ids"]), canonical(raw["valid_boundary"]), tuple(raw["knowledge_holders"]))
+        return cls(raw["claim_id"], kind, tuple(raw["subject_ids"]), raw["predicate"], canonical(raw["value"]), tuple(raw["evidence_ids"]), tuple(raw["branch_event_ids"]), tuple(raw["assumption_ids"]), canonical(raw["valid_boundary"]), tuple(raw["knowledge_holders"]), tuple(raw["directive_ids"]))
 
 
 def role_context(snapshot: GenerationSnapshot, skill_id: str) -> dict[str, Any]:
@@ -136,13 +156,15 @@ def role_context(snapshot: GenerationSnapshot, skill_id: str) -> dict[str, Any]:
     data = snapshot.read()
     projection = data["role_projections"].get(skill_id)
     require(isinstance(projection, dict), "missing_role_projection")
-    require(set(projection) == {"data", "evidence_ids", "branch_event_ids", "knowledge_holders"}, "projection_schema")
-    for key in ("evidence_ids", "branch_event_ids", "knowledge_holders"):
+    require(set(projection) == {"data", "evidence_ids", "branch_event_ids", "knowledge_holders", "authorized_directives"}, "projection_schema")
+    for key in ("evidence_ids", "branch_event_ids", "knowledge_holders", "authorized_directives"):
         require(strings(projection[key]), "projection_" + key)
     evidence = data["authorized_evidence"]
     events = data["authorized_branch_events"]
+    directives_records = data["authorized_directives"]
     require(set(projection["evidence_ids"]) <= set(evidence), "unauthorized_evidence")
     require(set(projection["branch_event_ids"]) <= set(events), "unauthorized_branch_event")
+    require(set(projection["authorized_directives"]) <= set(directives_records), "unauthorized_directive")
     return clone({
         "data": projection["data"],
         "boundary": {"scope": data["scope"], "cutoff": data["cutoff"]},
@@ -150,6 +172,7 @@ def role_context(snapshot: GenerationSnapshot, skill_id: str) -> dict[str, Any]:
         "evidence": {key: evidence[key] for key in projection["evidence_ids"]},
         "branch_events": {key: events[key] for key in projection["branch_event_ids"]},
         "knowledge_holders": projection["knowledge_holders"],
+        "authorized_directives": {key: directives_records[key] for key in projection["authorized_directives"]},
     })
 
 
@@ -194,8 +217,13 @@ class SkillSpec:
     allowed_read_scopes: tuple[str, ...] = ("game",)
     permissions: tuple[str, ...] = ("read_projection", "propose_artifact")
     model_policy: str = "injected"
-    timeout: float = 30.0
-    max_attempts: int = 2
+    # 单技能一次波次的真实模型调用（长上下文原著开局常需 30-90 秒）。
+    timeout: float = 120.0
+    # 真机网关实测（kimi-k3）：顺序调用即有 ~1/6 概率返回 200+非 JSON 体，
+    # 高负载下近半。2 次尝试的单技能成功率 ~83%，开局 ~7 个技能必然连环
+    # 失败；3 次（契约上限）将单技能成功率提到 ~94%。仍受 job_deadline 与
+    # 总预算约束，不构成门禁放松。
+    max_attempts: int = 3
     max_output_bytes: int = 32768
     max_cost: float = 1.0
 
@@ -300,6 +328,41 @@ def selected_strategy(state: Mapping[str, Any]) -> str:
     require(explicit in (None, "simple", "agent_cluster"), "unsupported_strategy")
     selected = bool(state.get("agent_mode") or state.get("story_agent_mode") or (isinstance(settings, Mapping) and settings.get("story_agent_mode")))
     return "agent_cluster" if selected or explicit == "agent_cluster" else "simple"
+
+
+def project_authorized_directives(state: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    """把生效中的玩家授权铁律投影进回合快照域（C03）。
+
+    只投影授权状态 active/consumed 的行（fact_contract.classify_directive_row
+    判为 authorized）；draft/needs_clarification 未生效，无回执旧行是
+    unknown_legacy——都不得进入回合上下文伪造授权。授权只属 session 域：
+    绝不进入 authorized_evidence（canon）也不冒充已提交事件。simple 策略的
+    文本注入与快照投影共用同一账本与同一分类器，无平行事实源。
+    """
+    from core.engine import directives as directives_engine
+    from core.engine import fact_contract
+    records: dict[str, dict[str, Any]] = {}
+    for row in directives_engine.active_directives(state):
+        view = fact_contract.classify_directive_row(row)
+        if view.kind != fact_contract.KIND_AUTHORIZED:
+            continue
+        record = fact_contract.wish_authorization_of(row)
+        affected = list(record.target_ids) if record and record.target_ids \
+            else [str(x) for x in (row.get("affected") or ())]
+        fact_norm = str(row.get("fact_norm") or "").strip()[:500]
+        key = "directive-" + str(int(row.get("id") or 0))
+        records[key] = {
+            "origin": record.authorized_origin if record else "wish",
+            "provenance": "authorized",
+            "fact_norm": fact_norm,
+            "scope": str(row.get("scope") or "world"),
+            "affected": affected,
+            "targets_unresolved": row.get("targets_unresolved") is True,
+            "raw_text": (record.raw_text if record else "")[:500],
+            "facts": [{"subject_ids": affected or ["world"],
+                       "predicate": DIRECTIVE_FACT_PREDICATE, "value": fact_norm}],
+        }
+    return records
 
 
 def build_turn_snapshot(state: Mapping[str, Any], message: str, *, source_reader=None) -> GenerationSnapshot:
@@ -412,13 +475,28 @@ def build_turn_snapshot(state: Mapping[str, Any], message: str, *, source_reader
     public = {"player_action": str(message), "hard_facts": hard, "recent_visible_turns": recent, "round": state.get("round", 0), "chapter": cutoff["chapter_no"], "omissions": ["Only cutoff-scoped source slice and player state scalars; unverified character semantics excluded."]}
     public["characters"] = characters
     public["authored_opening"] = opening_seed
+    authorized = project_authorized_directives(state)
+    if authorized:
+        # 授权铁律是玩家显式授权的本局改编：高于一切原著剧情、低于机制，
+        # 与 canon 证据分域传播，绝不因原著校验被取消。
+        public["authorized_directives"] = {
+            "authority": "authorized_deviation_above_canon_below_mechanism",
+            "directives": [{"id": key, "provenance": "authorized",
+                            "origin": entry["origin"], "fact": entry["fact_norm"],
+                            "scope": entry["scope"], "affected": entry["affected"],
+                            "targets_unresolved": entry["targets_unresolved"],
+                            "raw_text": entry["raw_text"]}
+                           for key, entry in sorted(authorized.items())],
+        }
+    else:
+        public["authorized_directives"] = {"authority": "authorized_deviation_above_canon_below_mechanism", "directives": []}
     if opening_seed:
         # Setup receipts may contain unverified pre-start identity assignments.
         # They are not prior committed scenes and cannot authorize source facts.
         public["recent_visible_turns"] = []
         public["omissions"].append("Pre-scene authored opening: zero source events authorized; no claim of original-canon grounding.")
-    projection = {"data": public, "evidence_ids": list(evidence), "branch_event_ids": list(branch), "knowledge_holders": sorted({"player", *characters})}
-    return GenerationSnapshot.freeze({"book_id": source["book_id"], "source_hash": source["source_hash"], "scope": "game", "cutoff": {**cutoff, "source_hash": source["source_hash"]}, "base_revision": revision, "context_hash": digest(public), "intent_hash": digest(message), "strategy": "agent_cluster", "authorized_evidence": evidence, "authorized_branch_events": branch, "role_projections": {key: clone(projection) for key in DEPENDENCIES}})
+    projection = {"data": public, "evidence_ids": list(evidence), "branch_event_ids": list(branch), "knowledge_holders": sorted({"player", *characters}), "authorized_directives": list(authorized)}
+    return GenerationSnapshot.freeze({"book_id": source["book_id"], "source_hash": source["source_hash"], "scope": "game", "cutoff": {**cutoff, "source_hash": source["source_hash"]}, "base_revision": revision, "context_hash": digest(public), "intent_hash": digest(message), "strategy": "agent_cluster", "authorized_evidence": evidence, "authorized_branch_events": branch, "authorized_directives": authorized, "role_projections": {key: clone(projection) for key in DEPENDENCIES}})
 
 
 def game_character_projections(state, source, cutoff, book_dir, revision):
@@ -453,6 +531,23 @@ def game_character_projections(state, source, cutoff, book_dir, revision):
                 and context["branch_id"] == branch_id and context["state_revision"] == revision, "game_projection_binding")
         result[cid] = context
     return result
+
+
+def _boundary_equivalent(authorized: dict, given: Any) -> bool:
+    """边界形状等价：cutoff 字段值相同（嵌套或拍平形式都算），其余键忽略。
+
+    真机实测（kimi-k3）会把 valid_boundary 拍平成 {"chapter_no":…,
+    "offset":…, "source_hash":…}；语义与授权边界一致，仅形状不同。
+    """
+    if not isinstance(given, dict):
+        return False
+    expected = authorized.get("cutoff")
+    if isinstance(expected, dict):
+        actual = given.get("cutoff")
+        if not isinstance(actual, dict):
+            actual = given
+        return all(actual.get(key) == value for key, value in expected.items())
+    return given == authorized
 
 
 def model_callbacks(client, model: str, provider: str, *, model_fn=None, request_kwargs=None):
@@ -491,6 +586,39 @@ def model_callbacks(client, model: str, provider: str, *, model_fn=None, request
             actual_model = getattr(response, "model", None) or model
         require(not request.cancelled(), "cancelled")
         artifact = json.loads(raw) if isinstance(raw, str) else clone(raw)
+        # Weak models measured in the field (kimi-k3) systematically omit
+        # list-valued reference keys on claims — 8/9 first-wave samples came
+        # back missing directive_ids, two of them also assumption_ids /
+        # branch_event_ids — while top-level key sets come out exact and
+        # feedback retries do not self-correct. Minimal structural
+        # completion: fill only missing reference arrays with the
+        # conservative empty list (references nothing at all). Scalar keys
+        # (claim_id/kind/predicate/value) are never invented; every semantic
+        # gate still runs on validate_artifact unchanged: a source_fact
+        # filled with evidence_ids=[] still fails its citation requirement,
+        # an empty subject_ids still fails claim_subject, authorized_fact
+        # still requires a real directive.
+        if isinstance(artifact, dict):
+            boundary = None
+            if isinstance(getattr(request, "context", None), Mapping):
+                authorized = request.context.get("boundary")
+                if isinstance(authorized, dict):
+                    boundary = clone(authorized)
+            for claim in artifact.get("claims") or []:
+                if isinstance(claim, dict):
+                    for key in ("subject_ids", "evidence_ids", "branch_event_ids",
+                                "assumption_ids", "knowledge_holders", "directive_ids"):
+                        if key not in claim:
+                            claim[key] = []
+                    # 形式修复：真机实测（kimi-k3）会把 valid_boundary 序列化
+                    # 成字符串、整个漏掉、或拍平成 {"chapter_no":…, "offset":…}。
+                    # 缺省/非 dict/cutoff 等价的 dict 时用上下文授权边界原样
+                    # 补齐——模型本就被要求逐字复制它；cutoff 不同的 dict 是
+                    # 语义越界信号，不修，claim_boundary 照常拒绝。
+                    if boundary is not None:
+                        given = claim.get("valid_boundary")
+                        if not isinstance(given, dict) or _boundary_equivalent(boundary, given):
+                            claim["valid_boundary"] = clone(boundary)
         return ModelReply(artifact, request.snapshot_hash, actual_model, provider, "unreported", input_tokens, output_tokens)
     return {key: call for key in DEPENDENCIES}
 

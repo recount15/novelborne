@@ -999,6 +999,25 @@ def _relax_convergence(state, relief, round_no):
         _wiring_log(state, f"收束松弛失败已跳过：{exc}")
 
 
+def _quest_reward_receipt(state):
+    """奖励回执键：同一任务的一次完成只发一次奖（title@accepted_round）。
+
+    任务状态机保证 active→completed 单向一次，回执随任务盒稳定，跨回合
+    补发时不变——重复调用 _grant_quest_reward 会按回执收敛为一次发放。
+    无任务盒或标题缺失返回 None（历史防御路径，退化为不查重）。
+    """
+    box = state.get("quest")
+    if not isinstance(box, dict):
+        return None
+    title = str(box.get("title") or "").strip()
+    if not title:
+        return None
+    anchor = box.get("accepted_round")
+    if anchor is None:
+        anchor = box.get("offered_round")
+    return f"{title}@{anchor}"
+
+
 def _grant_quest_reward(state, reward):
     """把任务奖励事务性写入状态记忆与账本，返回发放明细字符串列表。
 
@@ -1015,8 +1034,16 @@ def _grant_quest_reward(state, reward):
     - 先写 state 成功后才动涟漪/审计/收束——审计与生效严格一致，未知类型
       不入账不入审计；
     - 校验抛错上抛给调用方，由 _settle_quest 挂 reward_pending 下回合补发。
+
+    C06 幂等发放（回执键 _quest_reward_receipt）：
+    - 第一阶段落账后在任务盒记 reward_phase1_receipts；部分失败（如面板
+      渲染抛错）后补发不会向 state_memory 重复入账；
+    - 第二阶段以审计条目携带的 receipt 查重——同一回执已入审计则积势/
+      审计/明细全部跳过；重复结算、双重调用、补发重试都收敛为一次奖励。
     """
     round_no = int(state.get("round", 0) or 0)
+    receipt = _quest_reward_receipt(state)
+    box = state.get("quest") if isinstance(state.get("quest"), dict) else {}
     memory = state.get("state_memory") or blank_state(state.get("mode", ""), "")
     entries = []
     for item in (reward or {}).get("items") or []:
@@ -1055,9 +1082,16 @@ def _grant_quest_reward(state, reward):
             _append_row("knowledge", "known",
                         {"content": f"任务关键情报×{amount}", "source": "quest", "round": round_no})
     if patch:
-        updated, _changes = apply_turn(memory, patch, round_no=round_no, source="quest_reward")
-        state["state_memory"] = updated
-        state["state_panel"] = render_panel(updated)
+        phase1_done = box.get("reward_phase1_receipts") if isinstance(box.get("reward_phase1_receipts"), list) else []
+        if receipt and receipt in phase1_done:
+            pass  # 同回执阶段一已落账（部分失败后补发），不重复入账
+        else:
+            updated, _changes = apply_turn(memory, patch, round_no=round_no, source="quest_reward")
+            # 先记回执再渲染面板：渲染抛错也不留重复入账的窗口
+            if receipt and box:
+                box.setdefault("reward_phase1_receipts", []).append(receipt)
+            state["state_memory"] = updated
+            state["state_panel"] = render_panel(updated)
 
     # —— 第二阶段：涟漪积势 / 审计 / 收束松弛（此时 state 部分已落地）——
     ledger_data = state.get("ledger") or ledger_module.new_ledger()
@@ -1066,6 +1100,8 @@ def _grant_quest_reward(state, reward):
     cheat = dict(ledger_data.get("cheat") or {})
     ledger_data["cheat"] = cheat
     audit = cheat.setdefault("quest_rewards", [])
+    if receipt and any(isinstance(a, dict) and a.get("receipt") == receipt for a in audit):
+        return []  # 同回执已发放完毕：重复结算/双重调用不再入账
     granted = []
     for rtype, amount, unit in entries:
         if rtype == "积势":
@@ -1080,7 +1116,8 @@ def _grant_quest_reward(state, reward):
             _wiring_log(state, f"任务奖励类型 {rtype!r} 未注册，未入账未审计")
             continue
         granted.append(f"{rtype}×{amount}{unit}")
-        audit.append({"type": rtype, "amount": amount, "unit": unit, "round": round_no})
+        audit.append({"type": rtype, "amount": amount, "unit": unit,
+                      "round": round_no, "receipt": receipt})
     state["ledger"] = ledger_data
     # 收束松弛：任务完成轻微减弱动态收束系数，让主角更自由（偏离原著）。
     relief = (reward or {}).get("convergence_relief")
@@ -1098,22 +1135,31 @@ def _quest_verdict_check(box, verdict, reply_text):
     """证据制核验：completed 判定须有正文逐字引文或完成条件关键词佐证。
 
     返回 (verdict, check)：check 为 None 表示通过/不适用；
-    "evidence_rejected" 表示判定被降级为未完成（证据与正文不符）；
-    "keyword_corroborated" 表示证据非逐字但完成条件关键词 ≥2 条命中，采信。
-    防裁判幻觉翻案：模型不能凭空宣布任务完成。
+    "evidence_rejected" 表示判定被降级为未完成（证据与正文不符，或证据/
+    正文命中只是否定、计划、尝试语境——「我准备查证北墙裂痕」「没有查证
+    北墙裂痕」都不算完成）；"keyword_corroborated" 表示证据非逐字但完成
+    条件关键词 ≥2 条干净命中，采信。防裁判幻觉翻案：模型不能凭空、也不
+    能凭「打算做」宣布任务完成。
     """
     if not verdict.get("completed"):
         return verdict, None
+    from core.engine.task_acceptance import intent_statement, untainted_occurrence
     blob = re.sub(r"\s+", "", str(reply_text or ""))
     evidence = re.sub(r"\s+", "", str(verdict.get("evidence") or ""))
-    if evidence and len(evidence) >= 6 and evidence in blob:
+    conditions = [str(r or "") for r in (box.get("requirements") or [])]
+    goal = str(box.get("goal") or "")
+    if goal:
+        conditions.append(goal)
+    if (evidence and len(evidence) >= 6 and evidence in blob
+            and untainted_occurrence(blob, evidence)
+            and not intent_statement(evidence, conditions)):
         return verdict, None
     hits = engine.quest.requirement_hits(box, str(reply_text or ""))
     if hits >= 2:
         note = "（证据非逐字引文，但完成条件关键词多条命中，采信完成判定）"
         return dict(verdict, evidence=str(verdict.get("evidence") or "") + note), "keyword_corroborated"
     return {"completed": False,
-            "evidence": "判定证据与正文不符（无逐字引文、完成条件关键词命中不足），按未完成处理"}, "evidence_rejected"
+            "evidence": "判定证据与正文不符（无逐字引文、完成条件关键词命中不足，或证据只是计划/否定语境），按未完成处理"}, "evidence_rejected"
 
 
 def _retry_pending_quest_reward(state):
@@ -1727,6 +1773,23 @@ def _merge_gf_spec(gf_decision: dict, gf_spec, gf_label: str) -> dict:
     return gf_decision
 
 
+_CLUSTER_ERROR_HINTS = {
+    "job_deadline_exceeded": "智能体编队单技能等待超时（默认 120 秒/技能）。",
+    # 预算可经 state["request_budget"] 或部署环境变量覆盖；文案给实际值。
+    "deadline_exceeded": "本次生成超出总时间预算（默认 180 秒，可配置）。",
+    "budget_exhausted": "本次生成超出调用次数或用量预算（默认 20 次调用）。",
+}
+
+
+def _friendly_model_error(exc: Exception) -> str:
+    """把集群门禁错误码翻译成用户可操作的提示；其余异常保持原样。"""
+    hint = _CLUSTER_ERROR_HINTS.get(str(getattr(exc, "code", "") or ""))
+    if hint:
+        return ("⚠️ 调用模型服务失败：" + hint
+                + "可重试，或在 AI 配置中换用响应更快的模型；关闭“智能体编队/剧情增强”模式可改走单次生成。")
+    return f"⚠️ 调用模型服务失败：{exc}"
+
+
 def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinking_param,
              mode, work, novel_file, fragment, role, timepoint, difficulty, gf, gf_custom, persona_preset,
              persona_custom, persona_file, distill_enabled, companion_roster=None, heroine_roster=None,
@@ -2308,7 +2371,7 @@ def on_start(provider, base_url, api_key, remember, model, thinking_mode, thinki
                              u1=gr.update(visible=True), u2=gr.update(visible=False),
                              u3=chat_on, u4=gr.update(visible=False))
             return
-        yield _out_start([{"role": "assistant", "content": f"⚠️ 调用模型服务失败：{e}"}],
+        yield _out_start([{"role": "assistant", "content": _friendly_model_error(e)}],
                          dict(st0, history=[]), "调用失败，请检查 Key 与网络。",
                          u1=gr.update(visible=True), u2=gr.update(visible=False),
                          u3=chat_on, u4=gr.update(visible=False))
@@ -3175,6 +3238,17 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
                 "summary": "feedback review unavailable", "feedback_status": "degraded",
                 "degraded": True, "violations": [{"code": "review_error", "detail": str(_feedback_exc) }],
                 "next_turn_directives": ["保持上一回合已提交事实和顺序"]})
+        # C05：蓝图分段事件随提交入台账（事件完成的**已提交证据**）；
+        # agent_cluster 候选无蓝图分段事件，行内 events 保持为空——
+        # 不以「回合曾生成」冒充「事件已落地」。
+        _committed_events = copy.deepcopy(
+            (assembled_result.agent_meta if assembled_result else {}).get("events") or [])
+        if not _committed_events and assembled_result is not None:
+            _blueprint = getattr(assembled_result, "blueprint", None)
+            _committed_events = [str(evt)
+                                 for seg in (getattr(_blueprint, "segments", None) or ())
+                                 for evt in (getattr(seg, "events", None) or ())
+                                 if str(evt or "").strip()]
         state["story_ledger"] = core.engine.story_ledger.append_turn(
             state.get("story_ledger") or [], {
                 "turn_id": f"round-{r}", "round": r,
@@ -3182,10 +3256,23 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
                 "chapter_round": int(state.get("chapter_round") or r),
                 "action": message, "narrative": narrative,
                 "options": copy.deepcopy(state.get("options") or []),
-                "events": copy.deepcopy((assembled_result.agent_meta if assembled_result else {}).get("events") or []),
+                "events": _committed_events,
                 "objective_updates": [], "state_hash_before": "", "state_hash_after": "",
                 "committed": True,
             })
+        # C05 提交后推进：章节弧只在证据落位时推进节拍（advance 内部判定）；
+        # 失败草稿不走到这里（上文门禁未过已回滚），推进失败不阻断已提交回合。
+        try:
+            from core.engine import chapter_arc as _chapter_arc
+            _arc_seed = state.get("chapter_arc_plan") or {}
+            if not _arc_seed:
+                _arc_seed = _chapter_arc.build_chapter_arc(
+                    state, state.get("plot_thread_map") or {})
+            state["chapter_arc_plan"] = _chapter_arc.advance_chapter_arc(
+                _arc_seed, {"turn_id": f"round-{r}", "round": r,
+                            "events": _committed_events})
+        except Exception as _arc_exc:  # noqa: BLE001 派生状态降级：留下可审计日志
+            _wiring_log(state, f"章节弧推进失败已跳过：{_arc_exc}")
         chatbot[-1] = {"role": "assistant",
                        "content": (narrative + "\n\n" + options_block).strip() if options_block else narrative}
         # 十回合压缩可能改变 history；最终落盘和事件必须使用同一版本。
@@ -3206,7 +3293,7 @@ def on_send(provider, base_url, api_key, model, thinking_mode, thinking_param,
         if enhanced:
             state["scene_gate"] = False
             state["scene_gate_reason"] = "模型服务调用失败，已回滚本回合运行状态。"
-        chatbot[-1] = {"role": "assistant", "content": f"⚠️ 调用模型服务失败：{e}"}
+        chatbot[-1] = {"role": "assistant", "content": _friendly_model_error(e)}
         yield _out_send(chatbot, state)
 
 

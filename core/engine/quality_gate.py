@@ -23,6 +23,38 @@ DEFAULT_EPSILON = 1.0
 DEFAULT_MIN_IMPROVEMENT = 0.25
 PASS_SCORE = 70.0
 
+# ---------------------------------------------------------------- C04 错误分类
+# 计划 §4.1 三层结果：A 确定性硬错误（不得提交候选）/ B 语义疑点（收窄或降
+# 级为猜测，不整轮无限拒绝）/ C 软质量（可 warning 提交）。
+# GateError 码全部是结构/授权/一致性/预算类 → A；软质量从不以 GateError 形式
+# 出现（ScoreCard issues 走 dimension/severity 软轨）。未知码 fail-closed 归 A：
+# 宁可 failed_recoverable，绝不把没见过的错误 keep-best 提交。
+SEMANTIC_GATE_CODES: frozenset[str] = frozenset()   # B 通道由 C05 语义门禁启用
+SOFT_GATE_CODES: frozenset[str] = frozenset()       # C 通道：目前为空，显式非静默
+
+
+def classify_gate_code(code: str) -> str:
+    """把门禁错误码分类为 A/B/C 三层（计划 §4.1）。"""
+    code = str(code or "")
+    if code in SOFT_GATE_CODES:
+        return "C"
+    if code in SEMANTIC_GATE_CODES:
+        return "B"
+    return "A"
+
+
+def terminal_status_from_code(code: str) -> str:
+    """错误码 → 请求终态（fact_contract.TURN_TERMINAL_STATUSES）。
+
+    cancelled 是独立终态；A 类硬错误 failed_recoverable（保留上次已提交状态，
+    绝不 keep-best 提交）；B/C 通道启用后分别映射 needs_clarification /
+    committed_with_warnings——当前无 B/C 错误码，映射先行钉死语义。
+    """
+    if code == "cancelled":
+        return "cancelled"
+    return {"A": "failed_recoverable", "B": "needs_clarification",
+            "C": "committed_with_warnings"}[classify_gate_code(code)]
+
 DIMENSION_WEIGHTS: dict[str, float] = {
     "format": 0.14,
     "substance": 0.10,

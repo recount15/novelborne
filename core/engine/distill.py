@@ -32,6 +32,15 @@ def _subcall_timeout() -> float:
         return DEFAULT_SUBCALL_TIMEOUT
 
 
+def subcall_timeout_ceiling() -> float:
+    """C04 公开只读口：子调用默认读超时上限（含环境覆盖）。
+
+    回合预算用它钳制单次模型调用：``timeout = min(上限, 剩余预算)``——
+    单次超时不得超过剩余请求预算（计划 §4.2）。
+    """
+    return _subcall_timeout()
+
+
 def _retryable(exc: Exception) -> bool:
     text = str(exc).lower()
     return isinstance(exc, (TimeoutError, ConnectionError)) or any(

@@ -25,11 +25,11 @@ cluster = sys.modules["core.services.agent_cluster_service"]
 
 
 def snapshot_data():
-    return {"book_id": "book", "source_hash": "source", "scope": "game", "context_hash": "context", "intent_hash": "intent", "base_revision": 4, "cutoff": 3, "strategy": "agent_cluster", "authorized_evidence": {"e1": {"facts": [{"subject_ids": ["hero"], "predicate": "present", "value": True}], "text": "Hero is here."}, "future-secret": {"text": "SECRET_NOT_AUTHORIZED"}}, "authorized_branch_events": {}, "role_projections": {key: {"data": {"public": ["here"]}, "evidence_ids": ["e1"], "branch_event_ids": [], "knowledge_holders": ["hero"]} for key in gs.DEPENDENCIES}}
+    return {"book_id": "book", "source_hash": "source", "scope": "game", "context_hash": "context", "intent_hash": "intent", "base_revision": 4, "cutoff": 3, "strategy": "agent_cluster", "authorized_evidence": {"e1": {"facts": [{"subject_ids": ["hero"], "predicate": "present", "value": True}], "text": "Hero is here."}, "future-secret": {"text": "SECRET_NOT_AUTHORIZED"}}, "authorized_branch_events": {}, "authorized_directives": {"directive-1": {"origin": "wish", "provenance": "authorized", "fact_norm": "The wall hides a passage.", "scope": "world", "affected": ["wall"], "targets_unresolved": False, "raw_text": "player raw wish", "facts": [{"subject_ids": ["wall"], "predicate": "authorized_directive", "value": "The wall hides a passage."}]}}, "role_projections": {key: {"data": {"public": ["here"]}, "evidence_ids": ["e1"], "branch_event_ids": [], "knowledge_holders": ["hero"], "authorized_directives": ["directive-1"]} for key in gs.DEPENDENCIES}}
 
 
 def claim():
-    return {"claim_id": "c1", "kind": "source_fact", "subject_ids": ["hero"], "predicate": "present", "value": True, "evidence_ids": ["e1"], "branch_event_ids": [], "assumption_ids": [], "valid_boundary": {"scope": "game", "cutoff": 3}, "knowledge_holders": ["hero"]}
+    return {"claim_id": "c1", "kind": "source_fact", "subject_ids": ["hero"], "predicate": "present", "value": True, "evidence_ids": ["e1"], "branch_event_ids": [], "assumption_ids": [], "valid_boundary": {"scope": "game", "cutoff": 3}, "knowledge_holders": ["hero"], "directive_ids": []}
 
 
 def output(key):
@@ -291,7 +291,35 @@ class ClusterTests(unittest.TestCase):
             raise ConnectionError("unavailable")
         error = self.blocked("worker_failed", callbacks({"story.evidence": failure}))
         layer = next(x for x in error.layers if x.skill_id == "story.evidence")
-        self.assertEqual(2, len(json.loads(layer.attempts_json)))
+        self.assertEqual(3, len(json.loads(layer.attempts_json)))
+        self.assertIsNone(layer.artifact)
+
+    def test_validation_failure_retries_with_feedback(self):
+        """校验类 GateError 不再一击即溃：第二次尝试提示词携带上次错误码（反馈修复）。
+
+        真实模型（kimi-k3 实测）会漏 claim 键/多顶层键，同一提示词重试必然
+        复现同一偏离——不带反馈的重试等于死锁（开局闸门正确拒绝但永不通过）。
+        """
+        attempts = []
+        prompts = []
+        def flaky(req):
+            attempts.append(req.attempt_no)
+            prompts.append(req.prompt)
+            if req.attempt_no == 1:
+                return reply(req, {**output(req.skill_id), "state_patch": {"gold": 5}})
+            return reply(req)
+        result = self.generate(callbacks({"story.evidence": flaky}))
+        self.assertEqual([1, 2], attempts)
+        self.assertEqual(2, len(json.loads(result.layers[0].attempts_json)))
+        self.assertIn("artifact_schema", prompts[1])
+
+    def test_persistent_schema_violation_still_blocked(self):
+        """反馈重试不放松门禁：三次都违约仍然 blocked，且不产生 artifact。"""
+        def bad(req):
+            return reply(req, {**output(req.skill_id), "state_patch": {"gold": 5}})
+        error = self.blocked("artifact_schema", callbacks({"story.evidence": bad}))
+        layer = next(x for x in error.layers if x.skill_id == "story.evidence")
+        self.assertEqual(3, len(json.loads(layer.attempts_json)))
         self.assertIsNone(layer.artifact)
 
 
@@ -522,6 +550,132 @@ class PipelineClusterTests(unittest.TestCase):
         self.assertEqual(10, len({id(call["messages"]) for call in captured}))
         self.assertTrue(all(call["max_tokens"] == 4096 and "tools" not in call and call["timeout"] > 0 for call in captured))
         self.assertEqual("actual-model", json.loads(result.layers[0].provenance_json)["model_id"])
+
+    def test_adapter_fills_missing_claim_directive_ids(self):
+        """实测弱模型（kimi-k3）系统性漏 claim.directive_ids：适配器补保守空
+        列表后工件原样过硬闸门；其余键缺失仍由 validate_artifact 拦截。"""
+        from types import SimpleNamespace
+        seen_claims = []
+        def create(**kwargs):
+            payload = json.loads(kwargs["messages"][0]["content"].split("\n", 1)[1])
+            artifact = output(payload["skill_id"])
+            for claim in artifact.get("claims") or []:
+                claim.pop("directive_ids")
+                seen_claims.append(claim["claim_id"])
+            return SimpleNamespace(model="m", choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(artifact)))], usage=None)
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+        snap = gs.GenerationSnapshot.freeze(snapshot_data())
+        result = cluster.AgentClusterService(gs.model_callbacks(client, "requested", "openai")).generate(snap)
+        self.assertTrue(seen_claims)
+        for layer in result.layers:
+            artifact = json.loads(layer.artifact_json)
+            for claim in artifact.get("claims") or []:
+                self.assertEqual([], claim["directive_ids"])
+
+    def test_adapter_fills_missing_claim_reference_keys(self):
+        """实测分布（kimi-k3 一波 9 样本）：缺失全部是列表引用键——7/9 仅
+        directive_ids，2/9 还缺 assumption_ids/branch_event_ids。适配器对全部
+        引用键做保守空列表补全（指向空集）；标量键不造，语义门禁原样生效。"""
+        from types import SimpleNamespace
+        seen_claims = []
+        def create(**kwargs):
+            payload = json.loads(kwargs["messages"][0]["content"].split("\n", 1)[1])
+            artifact = output(payload["skill_id"])
+            for claim in artifact.get("claims") or []:
+                claim.pop("directive_ids", None)
+                claim.pop("assumption_ids", None)
+                if seen_claims:  # 第二个 claim 起再缺 branch_event_ids（实测 2/9）
+                    claim.pop("branch_event_ids", None)
+                seen_claims.append(claim["claim_id"])
+            return SimpleNamespace(model="m", choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(artifact)))], usage=None)
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+        snap = gs.GenerationSnapshot.freeze(snapshot_data())
+        result = cluster.AgentClusterService(gs.model_callbacks(client, "requested", "openai")).generate(snap)
+        self.assertTrue(seen_claims)
+        for layer in result.layers:
+            self.assertEqual("ok", layer.status)
+            artifact = json.loads(layer.artifact_json)
+            for claim in artifact.get("claims") or []:
+                self.assertEqual([], claim["directive_ids"])
+                self.assertEqual([], claim["assumption_ids"])
+                self.assertEqual([], claim["branch_event_ids"])
+
+    def test_adapter_repairs_stringified_boundary_but_not_wrong_dict(self):
+        """真机实测（kimi-k3）：valid_boundary 被序列化成字符串。缺省/非 dict
+        时适配器用上下文授权边界补齐（模型本被要求逐字复制）；主动给出错误
+        dict 是语义越界，claim_boundary 照常拒绝。"""
+        from types import SimpleNamespace
+        def create(**kwargs):
+            payload = json.loads(kwargs["messages"][0]["content"].split("\n", 1)[1])
+            artifact = output(payload["skill_id"])
+            for claim in artifact.get("claims") or []:
+                claim["valid_boundary"] = "chapter_no:1, offset:1192"
+            return SimpleNamespace(model="m", choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(artifact)))], usage=None)
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+        snap = gs.GenerationSnapshot.freeze(snapshot_data())
+        result = cluster.AgentClusterService(gs.model_callbacks(client, "requested", "openai")).generate(snap)
+        for layer in result.layers:
+            self.assertEqual("ok", layer.status)
+            for claim in json.loads(layer.artifact_json).get("claims") or []:
+                self.assertEqual({"scope": "game", "cutoff": 3}, claim["valid_boundary"])
+        def wrong(**kwargs):
+            payload = json.loads(kwargs["messages"][0]["content"].split("\n", 1)[1])
+            artifact = output(payload["skill_id"])
+            for claim in artifact.get("claims") or []:
+                claim["valid_boundary"] = {"scope": "game", "cutoff": 99}
+            return SimpleNamespace(model="m", choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(artifact)))], usage=None)
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=wrong)))
+        snap = gs.GenerationSnapshot.freeze(snapshot_data())
+        with self.assertRaises(cluster.ClusterError) as caught:
+            cluster.AgentClusterService(gs.model_callbacks(client, "requested", "openai")).generate(snap)
+        self.assertEqual("claim_boundary", caught.exception.code)
+
+    def test_boundary_equivalence_accepts_flattened_only(self):
+        """拍平形式（cutoff 字段一致）视为同一边界；cutoff 不同必须不等价。"""
+        authorized = {"scope": "game", "cutoff": {"chapter_no": 1, "offset": 1192}}
+        self.assertTrue(gs._boundary_equivalent(authorized, {"chapter_no": 1, "offset": 1192, "source_hash": "x"}))
+        self.assertTrue(gs._boundary_equivalent(authorized, {"cutoff": {"chapter_no": 1, "offset": 1192}}))
+        self.assertFalse(gs._boundary_equivalent(authorized, {"chapter_no": 2, "offset": 1192}))
+        self.assertFalse(gs._boundary_equivalent(authorized, "chapter_no:1, offset:1192"))
+        self.assertFalse(gs._boundary_equivalent({"scope": "game", "cutoff": 3}, {"chapter_no": 1, "offset": 1192}))
+
+    def test_adapter_unparseable_body_retries_as_transient(self):
+        """实测网关（kimi-k3）会返回 HTTP 200 但 body 非 JSON（顺序调用 1/6，
+        高负载近半）：json.loads 失败与传输超时同类，走剩余尝试；探测原文
+        不得进任何 layer 记录。"""
+        from types import SimpleNamespace
+        calls = []
+        def create(**kwargs):
+            payload = json.loads(kwargs["messages"][0]["content"].split("\n", 1)[1])
+            calls.append(payload["skill_id"])
+            body = "<!doctype html>upstream overloaded" if len(calls) == 1 else json.dumps(output(payload["skill_id"]))
+            return SimpleNamespace(model="m", choices=[SimpleNamespace(message=SimpleNamespace(content=body))], usage=None)
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+        snap = gs.GenerationSnapshot.freeze(snapshot_data())
+        result = cluster.AgentClusterService(gs.model_callbacks(client, "requested", "openai")).generate(snap)
+        self.assertEqual(11, len(calls))
+        self.assertNotIn("upstream overloaded", repr(result.layers))
+        attempts = json.loads(result.layers[0].attempts_json)
+        self.assertEqual(["worker_failed", "ok"], [entry["status"] if entry["status"] == "ok" else entry["error_code"] for entry in attempts])
+
+    def test_adapter_persistent_garbage_still_blocked(self):
+        """持续返回非 JSON 体：三次尝试全部 worker_failed 后 blocked，不产出工件。"""
+        from types import SimpleNamespace
+        def create(**kwargs):
+            return SimpleNamespace(model="m", choices=[SimpleNamespace(message=SimpleNamespace(content="not json at all"))], usage=None)
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+        snap = gs.GenerationSnapshot.freeze(snapshot_data())
+        with self.assertRaises(cluster.ClusterError) as caught:
+            cluster.AgentClusterService(gs.model_callbacks(client, "requested", "openai")).generate(snap)
+        self.assertEqual("worker_failed", caught.exception.code)
+        # 首波并发 + 预算耗尽先后不定：error.layers 携带哪几个技能随调度而变，
+        # 断言「出现的层都烧满 3 次尝试且无工件」而非特定技能。
+        self.assertTrue(caught.exception.layers)
+        for layer in caught.exception.layers:
+            attempts = json.loads(layer.attempts_json)
+            self.assertEqual(3, len(attempts))
+            self.assertTrue(all(entry["error_code"] == "worker_failed" for entry in attempts))
+            self.assertIsNone(layer.artifact)
 
 
 if __name__ == "__main__":

@@ -84,6 +84,11 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(timer) })
     <p v-if="job.gap_report?.card_publication === 'not_implemented'">当前任务只准备原著证据，不包含完整人物卡发布。</p>
     <p v-if="job.needs_credentials">恢复任务需使用当前模型设置中的连接凭据；密钥不会保存。</p>
     <p v-if="job.error || error" class="job-error" role="alert">{{ error || job.error?.message || job.error?.code }}</p>
+    <ul v-if="!error && job.error?.issues?.length" class="job-issues">
+      <li v-for="(issue, index) in job.error.issues" :key="index">
+        {{ issue.code }}<template v-if="issue.chapter_no != null"> · 第 {{ issue.chapter_no }} 章</template><template v-if="issue.field"> · {{ issue.field }}</template><template v-if="issue.message"> · {{ issue.message }}</template>
+      </li>
+    </ul>
     <details><summary>任务与来源</summary><p class="identifier">{{ job.job_id }}</p><p class="identifier">{{ job.source_hash }}</p></details>
     <footer>
       <button v-if="active" :disabled="acting || job.status === 'CANCEL_REQUESTED'" @click="act('cancel')">取消任务</button>
@@ -101,6 +106,8 @@ p { margin: 8px 0; }
 progress { width: 100%; height: 7px; accent-color: var(--fe-accent); }
 .identifier { overflow-wrap: anywhere; font-size: 10px; }
 .job-error { color: var(--fe-danger, var(--fe-warn)); }
+.job-issues { margin: 8px 0; padding-left: 18px; color: var(--fe-ink-3); }
+.job-issues li { overflow-wrap: anywhere; }
 button { padding: 6px 10px; background: var(--fe-panel); color: var(--fe-ink); border: 1px solid var(--fe-border); border-radius: 6px; }
 button:disabled { opacity: .5; }
 footer { justify-content: flex-start; margin-top: 12px; }

@@ -2,13 +2,15 @@
 import { Anchor, CircleAlert, LoaderCircle } from 'lucide-vue-next'
 import type { UserBookAnchor } from '../../types'
 
-defineProps<{ anchor: UserBookAnchor | null; loading?: boolean; currentChapterIndex: number }>()
+// status/detail 来自 F25 锚点端点：unavailable 时如实转述服务端原因，不伪造确定性。
+defineProps<{ anchor: UserBookAnchor | null; loading?: boolean; currentChapterIndex: number; status?: 'ready' | 'unavailable'; detail?: string }>()
 </script>
 
 <template>
   <div class="reader-insight-panel">
     <div class="drawer-head"><strong><Anchor :size="14" /> 本章锚点</strong><span>第 {{ currentChapterIndex }} 章</span></div>
     <div v-if="loading" class="anchor-empty"><LoaderCircle class="animate-spin" :size="22" /><p>正在读取剧情锚点</p></div>
+    <div v-else-if="status === 'unavailable'" class="anchor-empty"><CircleAlert :size="22" /><p>本章锚点暂不可用</p><small>{{ detail || '锚点未生成或不可读；章节原文仍可阅读。' }}</small></div>
     <div v-else-if="!anchor" class="anchor-empty"><CircleAlert :size="22" /><p>本章暂无剧情锚点</p><small>蒸馏到本章后会自动显示，无需重开阅读器</small></div>
     <div v-else class="insight-content">
       <h3>{{ anchor.title || `第 ${currentChapterIndex} 章` }}</h3>

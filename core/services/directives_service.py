@@ -219,10 +219,16 @@ def _budgeted(client, model: str, request_kwargs: dict | None, provider: str,
 def _register_structured(state: dict, clean_text: str, *, kind: str, model: Model,
                          api_key: str | None,
                          attempts: int = REGISTER_ATTEMPTS) -> tuple[dict[str, Any], dict[str, Any]]:
-    """登记卷 → 校验 → 写账本；任何失败落自由文本兜底条目（origin=fallback）。
+    """登记卷 → 校验 → 写账本；任何失败落原话兜底条目（origin=fallback）。
 
     返回 ``(账本行, meta)``；``meta["origin"]`` ∈ model/fallback。
+    C02：随行落 :class:`WishAuthorizationRecord` 授权记录（原话/解释分离、
+    目标解析留痕、幂等 request_id、范围安全回退标记）。
     """
+    import hashlib
+    import uuid
+
+    from core.engine.fact_contract import AUTHORIZED_ORIGINS, WishAuthorizationRecord
     from core.services.role_context_projection import project_role_context
     roles = project_role_context(state)
     if not roles["ok"]:
@@ -254,29 +260,88 @@ def _register_structured(state: dict, clean_text: str, *, kind: str, model: Mode
             meta["register_errors"] = list(errors)
     origin = "model"
     if entry is None:
-        entry = directives.fallback_entry(clean_text, kind=kind)
+        entry = directives.fallback_entry(clean_text, kind=kind, known=allowed)
         origin = "fallback"
     entry = _mask_entry(entry, api_key)
+    masked_text = _mask(clean_text, api_key)
+    authorized_origin = kind if kind in AUTHORIZED_ORIGINS else "wish"
+    record = WishAuthorizationRecord(
+        authorization_id="auth-" + uuid.uuid4().hex[:16],
+        request_id="req-" + hashlib.sha256(
+            (kind + "|" + masked_text).encode("utf-8")).hexdigest()[:16],
+        raw_text=masked_text,
+        authorized_origin=authorized_origin,
+        status="draft",  # 调用方在扣费/落效果后置 consumed/active
+        accepted_interpretation=str(entry.get("fact_norm") or ""),
+        target_ids=tuple(str(t) for t in entry.get("affected") or ()),
+        unresolved_target_text=tuple(str(t) for t in entry.get("removed_affected") or ()),
+        receipt={"origin": origin,
+                 "targets_unresolved": entry.get("targets_unresolved") is True},
+    )
     row = directives.register(
         state, entry, kind=kind,
-        round_no=int(state.get("round") or 0), raw=_mask(clean_text, api_key))
+        round_no=int(state.get("round") or 0), raw=masked_text,
+        authorization=record.to_row_value())
     superseded = directives.mark_superseded(state, row)
     meta = dict(meta or {})
     meta.update({"origin": origin, "superseded": superseded,
-                 "directive_id": row.get("id")})
+                 "directive_id": row.get("id"),
+                 "authorization_id": record.authorization_id})
     return row, meta
 
 
+def _set_authorization_status(state: dict, directive_id: Any, status: str,
+                              **receipt_updates: Any) -> dict[str, Any] | None:
+    """把账本行的授权记录置为终态（consumed/active），并补充回执字段。
+
+    返回更新后的 authorization 子键（供返回值同步）；行不存在或无记录返回 None。
+    """
+    from core.engine.fact_contract import AUTHORIZATION_KEY, WishAuthorizationRecord
+    cheat = (state.get("ledger") or {}).get("cheat") if isinstance(state.get("ledger"), dict) else None
+    rows = cheat.get(directives.LEDGER_KEY) if isinstance(cheat, dict) else None
+    if not isinstance(rows, list):
+        return None
+    for row in rows:
+        if isinstance(row, dict) and row.get("id") == directive_id:
+            record = WishAuthorizationRecord.from_row_value(row.get(AUTHORIZATION_KEY))
+            if record is None:
+                return None
+            receipt = dict(record.receipt)
+            receipt.update(receipt_updates)
+            updated = WishAuthorizationRecord(
+                authorization_id=record.authorization_id,
+                request_id=record.request_id, raw_text=record.raw_text,
+                authorized_origin=record.authorized_origin, status=status,
+                accepted_interpretation=record.accepted_interpretation,
+                target_ids=record.target_ids,
+                unresolved_target_text=record.unresolved_target_text,
+                explicit_limits=record.explicit_limits,
+                global_authority=record.global_authority,
+                effect_refs=record.effect_refs, receipt=receipt,
+            ).to_row_value()
+            row[AUTHORIZATION_KEY] = updated
+            return updated
+    return None
+
+
 def _duplicate_directive(state: dict, clean_text: str, kind: str) -> bool:
-    """同文铁律已生效则拒绝重复登记（重试不重复生效、不重复扣费）。"""
+    """同文铁律已生效则拒绝重复登记（重试不重复生效、不重复扣费）。
+
+    C02 幂等加强：除同文比对外，authorization.request_id 命中**任意历史行**
+    （含已被显式取代的行）同样拒绝——网络重试或取代后重放不得二次扣费。
+    """
+    from core.engine.fact_contract import AUTHORIZATION_KEY, WishAuthorizationRecord
     wanted = str(clean_text or "").strip()
     if not wanted:
         return False
-    for row in directives.active_directives(state):
+    for row in directives.directives(state):
         if str(row.get("kind") or "") != kind:
             continue
         if str(row.get("fact_norm") or "").strip() == wanted or \
                 str(row.get("raw") or "").strip() == wanted:
+            return True
+        record = WishAuthorizationRecord.from_row_value(row.get(AUTHORIZATION_KEY))
+        if record is not None and record.raw_text.strip() == wanted:
             return True
     return False
 
@@ -323,6 +388,11 @@ def grant_wish(state: dict, question: str, *, client=None, model: str = "",
     # 原子扣费点：登记与状态兑现都已落成，最后才消耗次数（顺序不可颠倒）。
     engine.cheat_code.consume(state)
     remaining = engine.cheat_code.remaining_wishes(state)
+    # C02：扣费完成后把授权记录置为 consumed（回执随行，账本与返回值同步）。
+    updated_auth = _set_authorization_status(
+        state, row.get("id"), "consumed", charged=True, remaining_after=remaining)
+    if updated_auth is not None:
+        row["authorization"] = updated_auth
     # 兼容旧存档/旧读取方：wish_facts 继续双写（不删旧键，双读期）。
     state.setdefault("wish_facts", []).append(
         {"wish": clean, "granted": granted,
@@ -367,6 +437,11 @@ def append_relay_fact(state: dict, question: str, *, client=None, model: str = "
     engine.cheat_code.record_relay_fact(
         state, {"fact": clean, "text": text,
                 "round": int(state.get("round") or 0), "directive_id": row.get("id")})
+    # C02：永久增补不扣三愿次数；授权记录置 active。
+    updated_auth = _set_authorization_status(
+        state, row.get("id"), "active", charged=False)
+    if updated_auth is not None:
+        row["authorization"] = updated_auth
     return {"row": row, "text": text,
             "rejected": rejected,
             "count": len(directives.active_directives(state)),

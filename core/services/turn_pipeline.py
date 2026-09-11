@@ -17,6 +17,8 @@ engine 机制与 core.prompts 文案；不碰 app/server/UI 状态，不做 IO�
 """
 from __future__ import annotations
 
+import json
+
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping, Optional, Sequence
 
@@ -42,7 +44,14 @@ from core.engine.quality_gate import (
     bounded_refine,
     has_scaffold,
 )
-from core.engine.distill import distill_model
+from core.engine.distill import distill_model, subcall_timeout_ceiling
+from core.engine.fact_contract import (
+    DEFAULT_REQUEST_BUDGET,
+    RequestBudgetProfile,
+    TURN_TERMINAL_STATUSES,
+    ContractError,
+)
+from core.engine.quality_gate import terminal_status_from_code
 from core.prompts import render
 from core.services import options_service
 from core.services import choice_agent
@@ -63,6 +72,70 @@ class TurnUpstreamError(RuntimeError):
     与「模型答卷不合格」区分：不合格走批改重填与确定性兜底，绝不抛错；
     只有连接/额度/鉴权级失败才抛此异常，由 app 层回滚整回合。
     """
+
+    #: C04 请求终态（fact_contract.TURN_TERMINAL_STATUSES）。
+    terminal_status = "failed_recoverable"
+
+
+class TurnCancelledError(TurnUpstreamError):
+    """玩家/宿主取消：终态 cancelled——状态不得写入，晚到结果丢弃。"""
+
+    terminal_status = "cancelled"
+
+
+class TurnBudgetError(TurnUpstreamError):
+    """请求预算（时限/调用数）耗尽且无有效候选：终态 failed_recoverable。"""
+
+
+#: agent_cluster 十节点 DAG 的结构性调用下限（C04 核算）：一次全绿生成即需
+#: 10 次模型调用（3 首波 + 7 后续），BudgetPolicy.max_calls=20 为既有实测
+#: 配置。RequestBudgetProfile.max_model_attempts=6 覆盖不了 DAG 结构——按
+#: 计划 §4.2「结构无法满足时明确调整配置」，接线处取 max(映射值, 结构下限)。
+CLUSTER_STRUCTURAL_MIN_CALLS = 20
+
+#: 预算剩余低于该秒数时不再发起新的模型调用（避免发出去就超时的浪费）。
+MIN_MODEL_CALL_SECONDS = 10.0
+
+
+def resolve_request_budget(state: Mapping[str, Any]) -> RequestBudgetProfile:
+    """从对局 state 解析请求级预算（C04）；缺省用 DEFAULT_REQUEST_BUDGET。
+
+    ``state["request_budget"]`` 是唯一配置入口（显式、有限上界、随档可见）；
+    非法配置直接抛 :class:`TurnBudgetError`——预算配置错必须响，不得静默
+    回退默认值掩盖。
+    """
+    raw = state.get("request_budget") if isinstance(state, Mapping) else None
+    if raw is None:
+        return DEFAULT_REQUEST_BUDGET
+    if not isinstance(raw, Mapping):
+        raise TurnBudgetError("request_budget 配置必须是对象")
+    try:
+        return RequestBudgetProfile(**{key: value for key, value in raw.items()})
+    except ContractError as exc:
+        raise TurnBudgetError(f"request_budget 配置非法：{exc.code}") from None
+
+
+def cluster_policy_from_profile(profile: RequestBudgetProfile) -> "BudgetPolicy":
+    """RequestBudgetProfile → agent_cluster BudgetPolicy（不叠加第二套重试器）。"""
+    from core.services.agent_cluster_service import BudgetPolicy
+    kwargs = profile.cluster_policy_kwargs()
+    return BudgetPolicy(
+        max_calls=max(int(kwargs["max_calls"]), CLUSTER_STRUCTURAL_MIN_CALLS),
+        deadline_seconds=float(kwargs["deadline_seconds"]))
+
+
+def terminal_status_for(*, deadline_hit: bool, stage_skips: Sequence[str],
+                        format_fallback: bool) -> str:
+    """simple 管线终态判定：软质量降级可 warning 提交，干净通过才 committed。
+
+    deadline 命中/阶段跳过/格式降级都是「有效但降级」的回合——按计划 §4.1 C
+    层带 warning 提交，绝不算作硬错误回滚，也绝不冒充干净提交。
+    """
+    status = ("committed_with_warnings"
+              if deadline_hit or list(stage_skips or []) or format_fallback
+              else "committed")
+    assert status in TURN_TERMINAL_STATUSES
+    return status
 
 
 @dataclass
@@ -326,14 +399,65 @@ def run_turn(state: Mapping[str, Any], client, model: str,
     v2.0.4: 初始化回合级 Token 累加器（阶段 E）。
     """
     from core.services.generation_skills import selected_strategy, validate_turn_output
+    # C04：请求级预算先于策略分支解析（配置非法必须响，不得静默默认）。
+    request_profile = resolve_request_budget(state)
     if selected_strategy(state) == "agent_cluster":
         return _run_agent_cluster(state, client, model, request_kwargs, provider,
                                   message=message, model_fn=model_fn,
                                   source_reader=cluster_source_reader,
-                                  budget=cluster_budget, cancel=cancel)
+                                  budget=cluster_budget or cluster_policy_from_profile(request_profile),
+                                  cancel=cancel)
     # v2.0.4 Token 计量：初始化回合级累加器
     from core.engine import token_accounting
     token_accounting.init_turn_usage()
+
+    # —— C04 请求级预算：总时限钳制所有模型调用；取消为终态 ——
+    # 结构性调用上限 = 各阶段「一次成功」所需调用的上界总和 + 配置的额外
+    # 尝试预算（max_model_attempts）。预算耗尽不发新调用；已有草稿走既有
+    # 确定性兜底（批改回退/格式门/脚手架检查）——降级可见，不静默超支。
+    import time as _time_mod
+    _deadline = _time_mod.monotonic() + float(request_profile.deadline_seconds)
+    _budget_meta: dict[str, Any] = {
+        "deadline_seconds": float(request_profile.deadline_seconds),
+        "model_calls": 0,
+        "max_model_calls": int(request_profile.max_model_attempts),
+        "deadline_hit": False,
+        "cancelled": False,
+        "stage_skips": [],
+    }
+
+    def _remaining() -> float:
+        return _deadline - _time_mod.monotonic()
+
+    def _check_cancelled() -> None:
+        if cancel is not None and cancel.is_set():
+            _budget_meta["cancelled"] = True
+            raise TurnCancelledError("回合已取消：不再发起模型调用，晚到结果丢弃")
+
+    def _budget_model(prompt: str):
+        _check_cancelled()
+        _budget_meta["model_calls"] += 1
+        if _budget_meta["model_calls"] > _budget_meta["max_model_calls"]:
+            raise TurnBudgetError("模型调用数超出请求预算上限")
+        left = _remaining()
+        if left <= MIN_MODEL_CALL_SECONDS:
+            _budget_meta["deadline_hit"] = True
+            raise TurnBudgetError("剩余时间预算不足，拒绝发起新的模型调用")
+        if model_fn is not None:
+            return model_fn(prompt)
+        # 单次超时不得超过剩余预算（计划 §4.2）；上限沿用子调用默认（含环境覆盖）。
+        timeout = max(1.0, min(subcall_timeout_ceiling(), left - 1.0))
+        return distill_model(client, model, prompt, request_kwargs, provider,
+                             timeout=timeout)
+
+    def _stage_allowed(stage: str) -> bool:
+        """可选模型阶段（润色/质量门）的预算闸：跳过必须留痕。"""
+        _check_cancelled()
+        if _remaining() <= MIN_MODEL_CALL_SECONDS:
+            _budget_meta["deadline_hit"] = True
+            _budget_meta["stage_skips"].append(stage)
+            return False
+        return True
     
     snapshot = dict(state or {})
     resolved_tier = int(tier or snapshot.get("paper_tier") or 0)
@@ -361,9 +485,7 @@ def run_turn(state: Mapping[str, Any], client, model: str,
     if paper is None:
         return LEGACY
 
-    budgeted = parallel.budget_model(
-        model_fn or (lambda p: distill_model(client, model, p, request_kwargs, provider)),
-        parallel.PRIORITY_TURN)
+    budgeted = parallel.budget_model(_budget_model, parallel.PRIORITY_TURN)
 
     # —— v2.0.3 生成侧上下文：作品设定摘要 + 近期 ≤10 回合摘要（单源组装）——
     # v2.0.4：进行中任务块并入段卷 world_block（正文生成时可见任务，推进
@@ -406,6 +528,13 @@ def run_turn(state: Mapping[str, Any], client, model: str,
         state=snapshot, attempts=attempts, system_brief=str(system_prompt or ""),
         quest_hint=quest_block)
     contracts = _segment_contracts(paper, plan)
+    # C04：按试卷结构核算调用上限 = 各阶段一次成功的上界 + 配置额外尝试。
+    # （导演≤attempts + 段卷 N + 重填 N×REFILL + 选项 2×attempts + 润色 2 +
+    # 质量门 4；choice_agent 走独立通道不计入。）
+    _budget_meta["max_model_calls"] = (
+        int(attempts) + len(contracts) * (1 + REFILL_ATTEMPTS)
+        + 2 * int(attempts) + 2 + 4
+        + int(request_profile.max_model_attempts))
 
     # —— Wave B：段卷 ∥ 选项卷（单层扁平并发；选项卷内部不得再并发）——
     segment_jobs = [
@@ -501,6 +630,11 @@ def run_turn(state: Mapping[str, Any], client, model: str,
         for item in segment_results
     ]
     if not any(drafts):
+        # C04：无有效候选是终态——按原因分类上报，保留上次已提交状态。
+        if _budget_meta["cancelled"]:
+            raise TurnCancelledError("回合已取消：无候选，晚到结果丢弃")
+        if _budget_meta["deadline_hit"] or _budget_meta["model_calls"] > _budget_meta["max_model_calls"]:
+            raise TurnBudgetError("请求预算耗尽且段卷无有效候选")
         raise TurnUpstreamError("段卷全线失败：模型服务不可用")
 
     # —— 段级批改 → 逐空重填 ≤2 → 确定性兜底段 ——
@@ -545,36 +679,43 @@ def run_turn(state: Mapping[str, Any], client, model: str,
         gate = turn_grader.format_gate(result.text or "")
         return (0 if result.used else 1, len(gate.get("errors") or []))
 
-    _polish_jobs = [
-        (lambda: answer_polish_service.polish_answer(narrative, **_polish_kwargs)),
-        (lambda: answer_polish_service.polish_answer(narrative, **_polish_kwargs)),
-    ]
-    _polish_results = parallel.run_parallel(_polish_jobs, parallel.PRIORITY_TURN)
-    _polish_candidates = [
-        item.value for item in _polish_results if getattr(item, "ok", False)
-    ] or [answer_polish_service.PolishResult(narrative, False, "parallel_failed")]
-    polish = min(_polish_candidates, key=_polish_cost)
-    polish_meta.update({"used": polish.used, "reason": polish.reason,
-                        "meta": dict(polish.meta or {}),
-                        "best_of": len(_polish_candidates)})
-    if polish.used:
-        narrative = polish.text
-        display = turn_composer.compose_display([narrative], options)
-        gate = turn_grader.format_gate(narrative)
+    if _stage_allowed("polish"):
+        _polish_jobs = [
+            (lambda: answer_polish_service.polish_answer(narrative, **_polish_kwargs)),
+            (lambda: answer_polish_service.polish_answer(narrative, **_polish_kwargs)),
+        ]
+        _polish_results = parallel.run_parallel(_polish_jobs, parallel.PRIORITY_TURN)
+        _polish_candidates = [
+            item.value for item in _polish_results if getattr(item, "ok", False)
+        ] or [answer_polish_service.PolishResult(narrative, False, "parallel_failed")]
+        polish = min(_polish_candidates, key=_polish_cost)
+        polish_meta.update({"used": polish.used, "reason": polish.reason,
+                            "meta": dict(polish.meta or {}),
+                            "best_of": len(_polish_candidates)})
+        if polish.used:
+            narrative = polish.text
+            display = turn_composer.compose_display([narrative], options)
+            gate = turn_grader.format_gate(narrative)
+    else:
+        polish_meta.update({"used": False, "reason": "budget_stage_skipped"})
 
     # —— v2.0.3 质量门 + 有界多轮修订（keep-best/分维无回退门/预算熔断，
     #     全程审计入 agent_meta.postprocess；任何失败均回退润色稿不阻断）——
-    post_meta = _run_quality_gate(
-        snapshot, budgeted, narrative=narrative, options=options,
-        system_prompt=str(system_prompt or ""), world_block=world_block,
-        anchor_text=anchor_text, active_members=active_members or (),
-        contracts=contracts, window=(int(paper.min_chars), int(paper.max_chars)),
-        stage=paper.stage)
-    if post_meta.get("adopted"):
-        narrative = str(post_meta["narrative"])
-        options = list(post_meta["options"])
-        display = turn_composer.compose_display([narrative], options)
-        gate = turn_grader.format_gate(narrative)
+    if _stage_allowed("quality_gate"):
+        post_meta = _run_quality_gate(
+            snapshot, budgeted, narrative=narrative, options=options,
+            system_prompt=str(system_prompt or ""), world_block=world_block,
+            anchor_text=anchor_text, active_members=active_members or (),
+            contracts=contracts, window=(int(paper.min_chars), int(paper.max_chars)),
+            stage=paper.stage)
+        if post_meta.get("adopted"):
+            narrative = str(post_meta["narrative"])
+            options = list(post_meta["options"])
+            display = turn_composer.compose_display([narrative], options)
+            gate = turn_grader.format_gate(narrative)
+    else:
+        post_meta = {"version": QUALITY_GATE_VERSION, "enabled": True, "adopted": False,
+                     "used": False, "error": "", "skip_reason": "budget_stage_skipped"}
 
     # —— v2.0.3 终检防线（AI-only 对正文同样成立）：蓝图脚手架与格式硬伤
     #     绝不出厂。润色卷和质量门都没能救回时，整回合降级 LEGACY 单卷
@@ -625,6 +766,13 @@ def run_turn(state: Mapping[str, Any], client, model: str,
         "director": plan_meta.get("meta") or {},
         "usage": usage_breakdown,  # v2.0.4 Token 分项
     }
+    # C04：请求终态与预算审计（计划 §4.2——配置与用量可见，不静默超支）。
+    _check_cancelled()
+    agent_meta["terminal_status"] = terminal_status_for(
+        deadline_hit=bool(_budget_meta["deadline_hit"]),
+        stage_skips=_budget_meta["stage_skips"],
+        format_fallback=format_fallback)
+    agent_meta["request_budget"] = dict(_budget_meta)
     validate_turn_output(narrative, options, allow_empty_options=True)
     agent_meta.update(requested_strategy="simple", effective_strategy="simple")
     return TurnResult(
@@ -670,6 +818,15 @@ def _run_agent_cluster(state, client, model, request_kwargs, provider, *,
                 "format_gate": {"valid": True}, "degraded_reasons": ["Scoped source and player-state projection; unverified character semantics excluded."],
                 "jobs": [{"skill_id": layer.skill_id, "job_id": layer.job_id, "status": layer.status,
                           "input_artifact_ids": list(layer.input_artifact_ids)} for layer in candidate.layers]}
+        # C04：集群成功路径的终态与预算审计（调用数从分层 usage 汇总）。
+        meta["terminal_status"] = "committed"
+        meta["request_budget"] = {
+            "deadline_seconds": float(getattr(budget, "deadline_seconds", 0.0) or 0.0),
+            "max_model_calls": int(getattr(budget, "max_calls", 0) or 0),
+            "model_calls": sum(int((json.loads(layer.usage_json) or {}).get("calls") or 0)
+                               for layer in candidate.layers),
+            "deadline_hit": False, "cancelled": False, "stage_skips": [],
+        }
         return TurnResult(narrative=candidate.narrative, options=options,
                           log_line=candidate.narrative[:240],
                           scene_validation={"status": "validated_candidate"},

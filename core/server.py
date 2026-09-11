@@ -65,9 +65,10 @@ from core.services import opening_service  # noqa: E402  (开局蒸馏进度注�
 
 FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
 sessions = SessionManager(PROJECT_ROOT)
-operation_journal = OperationJournal(PROJECT_ROOT / "var" / "operations.jsonl")
+# 操作日志必须跟随 FATE_VAR_DIR，否则多实例并行共用仓库根 var/ 会互相串写。
+operation_journal = OperationJournal(Path(fe.WRITABLE_DIR) / "operations.jsonl")
 question_service = structured_question_service.StructuredQuestionService()
-app = FastAPI(title="书中行 API", version="3.0.0")
+app = FastAPI(title="书中行 API", version="3.0.1")
 _cors_origins = [item.strip() for item in os.getenv("FATE_CORS_ORIGINS", "").split(",") if item.strip()]
 if _cors_origins:
     app.add_middleware(
@@ -167,8 +168,26 @@ class AnswerQuestionRequest(BaseModel):
     context: dict[str, Any] = Field(default_factory=dict)
 
 
-class AskRequest(BaseModel):
+class _OptionalBodyCreds(BaseModel):
+    """请求体兜底凭据（DEF-E-02）。
+
+    会话密钥只在 /start 提交时驻留内存、不落盘；实例重启后恢复的会话密钥为空。
+    回合外模型端点与 copilot 采用同一约定：会话凭据优先，请求体兜底；
+    凭据仅在内存中使用，不写入状态或日志。
+    """
+
+    provider: str | None = None
+    base_url: str | None = None
+    api_key: str | None = None
+    model: str | None = None
+
+
+class AskRequest(_OptionalBodyCreds):
     question: str = Field(min_length=1, max_length=4000)
+
+
+class AutoplayChoiceRequest(_OptionalBodyCreds):
+    pass
 
 
 class CopilotChatRequest(BaseModel):
@@ -181,7 +200,7 @@ class CopilotChatRequest(BaseModel):
     model: str | None = None
 
 
-class QuestOfferRequest(BaseModel):
+class QuestOfferRequest(_OptionalBodyCreds):
     kind: str = "short"
     difficulty: float = 0.5
 
@@ -1743,7 +1762,7 @@ def user_book_chapter(book_id: str, chapter_index: int) -> dict[str, Any]:
 
 @app.get("/api/books/{book_id}/chapters/{chapter_index}/anchors")
 def user_book_chapter_anchors(book_id: str, chapter_index: int) -> dict[str, Any]:
-    """读取指定章节的剧情锚点与活跃人物摘要。"""
+    """读取指定章节的剧情锚点与活跃人物摘要；锚点缺失/损坏时如实标注 unavailable（F25），不伪造内容。"""
     if chapter_index < 1:
         raise HTTPException(status_code=400, detail="章节号必须大于 0")
     book_dir = _resolve_book_dir(book_id)
@@ -1771,7 +1790,25 @@ def user_book_chapter_anchors(book_id: str, chapter_index: int) -> dict[str, Any
             if name:
                 detail = str(item.get("summary") or item.get("detail") or item.get("role") or "").strip()
                 characters.append({"name": name, **({"detail": detail} if detail else {})})
-    return {"book_id": book_dir.name, "chapter_index": chapter_index, "anchor": anchor, "characters": characters}
+    
+    # 锚点未生成或不可读时的诊断明细：区分 Window 模式与 Fullbook 蒸馏进度
+    detail_msg = "锚点未生成或不可读；章节原文仍可阅读，可稍后重试。"
+    if anchor is None:
+        opening_ready_path = book_dir / "opening_ready.json"
+        if opening_ready_path.is_file():
+            try:
+                prep_data = json.loads(opening_ready_path.read_text(encoding="utf-8"))
+                if prep_data.get("mode") == "window":
+                    detail_msg = "当前原著采用窗口快速准备模式，轻量提取无模型消耗；完整剧情锚点与活跃人物将在启动游戏开局管线时实时生成。"
+                elif prep_data.get("mode") == "fullbook":
+                    detail_msg = f"当前原著为全书蒸馏模式，第 {chapter_index} 章锚点尚未生成或蒸馏未完成；蒸馏覆盖本章后将自动呈现。"
+            except Exception:
+                pass
+
+    return {"book_id": book_dir.name, "chapter_index": chapter_index,
+            "status": "ready" if anchor is not None else "unavailable",
+            "anchor": anchor, "characters": characters,
+            **({} if anchor is not None else {"detail": detail_msg})}
 
 
 class _ModelCallRequest(BaseModel):
@@ -1984,6 +2021,9 @@ class ReaderChatThreadRequest(BaseModel):
     chapter_no: int = Field(ge=1, le=100000)
     card_revision: int | None = Field(default=None, ge=1)
     source_hash: str | None = None
+    # C07：默认 original（原著访谈，无需会话）；game 为本局分支访谈，需 session_id。
+    view: str = "original"
+    session_id: str | None = None
 
 
 class ReaderChatMessageRequest(_ModelCallRequest):
@@ -2005,20 +2045,60 @@ def _get_reader_chat():
 
 def _reader_thread(thread_id: str) -> dict[str, Any]:
     thread = _get_reader_chat().get_thread(thread_id)
-    if thread.get("scope") != "reader":
+    if thread.get("scope") not in ("reader", "game"):
         raise HTTPException(status_code=409, detail="非阅读域会话")
     # Local single-user server: only threads attached to this instance's book root.
-    _resolve_book_dir(thread.get("context", {}).get("book_id", ""))
+    # Game-view threads may carry no book identity when the source stayed unknown.
+    book_id = thread.get("context", {}).get("book_id", "")
+    if book_id:
+        _resolve_book_dir(book_id)
     return thread
 
 
+def _game_session_state(book_dir: Path, session_id: str | None) -> dict[str, Any]:
+    """C07 本局访谈会话校验：存在、有进行中对局、且锚定当前书目；只取只读深拷贝快照。"""
+    session_id = str(session_id or "").strip()
+    if not session_id:
+        raise HTTPException(status_code=422, detail="本局访谈需要 session_id")
+    try:
+        session = sessions.require(session_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="session 不存在") from exc
+    with session.lock:
+        state = session.state
+        snapshot = copy.deepcopy(state) if isinstance(state, dict) else None
+    if not isinstance(snapshot, dict) or not snapshot.get("system"):
+        raise HTTPException(status_code=409,
+                            detail={"code": "no_active_game", "message": "该会话没有进行中的对局"})
+    anchor = str(snapshot.get("distill_key") or "").strip()
+    if not anchor:
+        raise HTTPException(status_code=409,
+                            detail={"code": "no_book_source", "message": "该会话未绑定书目来源，无法进行本局访谈"})
+    try:
+        matched = Path(anchor).resolve() == book_dir.resolve()
+    except OSError:
+        matched = False
+    if not matched:
+        raise HTTPException(status_code=409,
+                            detail={"code": "session_book_mismatch", "message": "该会话属于另一本书"})
+    # distill_key 已核实指向本书；仅补齐 build_game_context 期望的身份字段，不引入新事实。
+    snapshot.setdefault("book_dir", str(book_dir))
+    snapshot.setdefault("book_id", book_dir.name)
+    return snapshot
+
+
 @app.get("/api/books/{book_id}/reader-chat/roster")
-def reader_chat_roster(book_id: str, chapter_no: int = 1) -> dict[str, Any]:
+def reader_chat_roster(book_id: str, chapter_no: int = 1, view: str = "original",
+                       session_id: str | None = None) -> dict[str, Any]:
     book_dir = _resolve_book_dir(book_id)
     if chapter_no < 1:
         raise HTTPException(status_code=422, detail="chapter_no 必须为正整数")
+    if view not in ("original", "game"):
+        raise HTTPException(status_code=422, detail="view 必须是 original 或 game")
+    # 原著花名册不触碰会话；本局花名册校验 session/书目后只读快照。
+    session_state = _game_session_state(book_dir, session_id) if view == "game" else None
     try:
-        return _get_reader_chat().list_roster(book_dir, chapter_no)
+        return _get_reader_chat().list_roster(book_dir, chapter_no, view=view, session_state=session_state)
     except Exception as exc:
         raise _workflow_error(exc) from exc
 
@@ -2026,9 +2106,16 @@ def reader_chat_roster(book_id: str, chapter_no: int = 1) -> dict[str, Any]:
 @app.post("/api/books/{book_id}/reader-chat/threads")
 def create_reader_chat_thread(book_id: str, request: ReaderChatThreadRequest) -> dict[str, Any]:
     book_dir = _resolve_book_dir(book_id)
+    if request.view not in ("original", "game"):
+        raise HTTPException(status_code=422, detail="view 必须是 original 或 game")
+    # 原著访谈不触碰会话；本局访谈校验 session/书目并取只读快照（card_revision/source_hash 仅原著视图使用）。
+    session_state = _game_session_state(book_dir, request.session_id) if request.view == "game" else None
     try:
         return _get_reader_chat().create_thread(book_dir, request.character_id, request.chapter_no,
-            card_revision=request.card_revision, source_hash=request.source_hash)
+            card_revision=request.card_revision, source_hash=request.source_hash,
+            view=request.view, session_state=session_state)
+    except HTTPException:
+        raise
     except Exception as exc:
         raise _workflow_error(exc) from exc
 
@@ -2489,7 +2576,8 @@ def ask(session_id: str, request: AskRequest) -> dict[str, Any]:
         try:
             return ask_service.handle_ask(
                 state, request.question,
-                api_key=session.api_key, session_id=session.session_id)
+                api_key=session.api_key or (request.api_key or "").strip(),
+                session_id=session.session_id)
         except ask_service.AskClientError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except ask_service.AskUpstreamError as exc:
@@ -2533,7 +2621,8 @@ def quest_offer(session_id: str, request: QuestOfferRequest) -> dict[str, Any]:
         model = state.get("model") or (config.get("models") or [fe.DEFAULT_MODEL])[0]
         try:
             client = fe.make_client(
-                session.api_key, provider, state.get("base_url") or config["base_url"])
+                session.api_key or (request.api_key or "").strip(),
+                provider, state.get("base_url") or config["base_url"])
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(status_code=400, detail=f"模型客户端初始化失败：{exc}") from exc
         game_difficulty = _game_difficulty_of(state)
@@ -2761,7 +2850,8 @@ def break_anchor_decline(session_id: str) -> dict[str, Any]:
 
 
 @app.post("/api/sessions/{session_id}/autoplay-choice")
-def autoplay_choice(session_id: str) -> dict[str, Any]:
+def autoplay_choice(session_id: str,
+                    request: AutoplayChoiceRequest | None = None) -> dict[str, Any]:
     """主角性格子智能体从当前选项自动选一项（单回合托管，不连续推进）。"""
     session = _session_or_404(session_id)
     if not sessions.acquire(session):
@@ -2774,9 +2864,11 @@ def autoplay_choice(session_id: str) -> dict[str, Any]:
         provider = state.get("provider") or "deepseek"
         config = fe.provider_config(provider, state.get("base_url"))
         model = state.get("model") or (config.get("models") or [fe.DEFAULT_MODEL])[0]
+        body_key = (request.api_key or "").strip() if request is not None else ""
         try:
             client = fe.make_client(
-                session.api_key, provider, state.get("base_url") or config["base_url"])
+                session.api_key or body_key,
+                provider, state.get("base_url") or config["base_url"])
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(status_code=400, detail=f"模型客户端初始化失败：{exc}") from exc
         prompt = engine.autoplay.build_autoplay_prompt(state, options, state.get("history"))
@@ -3095,9 +3187,9 @@ def _run_export(state: dict[str, Any], style: str, creds: dict[str, Any]) -> dic
         return _scrub(output)
 
     params = state.get("start_params") if isinstance(state.get("start_params"), dict) else {}
-    source_meta = {key: params.get(key) or state.get(key) for key in ("work", "novel", "mode")}
+    work_meta = {key: params.get(key) or state.get(key) for key in ("work", "novel", "mode")}
     context = "；".join(
-        f"{label}：{value}" for label, value in (("作品", source_meta["work"]), ("篇目", source_meta["novel"]))
+        f"{label}：{value}" for label, value in (("作品", work_meta["work"]), ("篇目", work_meta["novel"]))
         if value)
     try:
         records = list(exporter.iter_pipeline(chapters, model=_model, style=style, context=context))
@@ -3120,16 +3212,7 @@ def _run_export(state: dict[str, Any], style: str, creds: dict[str, Any]) -> dic
                 "text": str(record["output"]),
             }
     manifest = exporter.build_export_manifest(
-        {**source_meta, "source_kind": source_kind,
-         "source_round_min": min((int(s.get("round") or 0) for s in segments), default=0),
-         "source_round_max": max((int(s.get("round") or 0) for s in segments), default=0),
-         "source_turn_count": len(segments),
-         "source_gaps": source_meta.get("source_gaps", []),
-         "migration_uncertain": source_meta.get("migration_uncertain", False),
-         "complete": source_meta.get("complete", False),
-         "expected_round": source_meta.get("expected_round"),
-         "committed_only": source_kind == "story_ledger"},
-        chapters, style, model_used=True)
+        {**source_meta, **work_meta}, chapters, style, model_used=True)
     token_chars = sum(len(r.get("prompt", "")) + len(str(r.get("output") or "")) for r in records)
     return {
         "manifest": manifest,
@@ -3148,10 +3231,11 @@ def export_session_novel(session_id: str, request: ExportNovelRequest) -> dict[s
         raise HTTPException(status_code=409, detail="该 session 正在处理另一个请求")
     try:
         state = _require_game(session)
+        # DEF-E-04：会话密钥只在 /start 提交时驻留内存；重启恢复后为空时用请求体兜底。
         creds = {
             "provider": state.get("provider"),
             "base_url": state.get("base_url"),
-            "api_key": session.api_key,
+            "api_key": session.api_key or (request.api_key or "").strip(),
             "model": state.get("model"),
         }
         return _run_export(state, request.style, creds)
@@ -3299,12 +3383,18 @@ def _copilot_tool_actions(session, request: CopilotChatRequest) -> dict[str, Any
 
 @app.post("/api/copilot/chat")
 def copilot_chat(request: CopilotChatRequest) -> dict[str, Any]:
-    """Copilot 对话：工具循环在服务端执行（白名单注册表），凭据不落日志。"""
+    """Copilot 对话：工具循环在服务端执行（白名单注册表），凭据不落日志。
+
+    会话锁被对局回合或上一次 Copilot 请求占用时不再直接 409，而是降级为
+    纯对话模式：不读对局状态（避免与写入方并发）、不注入任何操作工具，
+    文档检索等只读工具仍然可用。
+    """
     session = None
+    degraded = False
     if request.session_id:
         session = _session_or_404(request.session_id)
-        if not sessions.acquire(session):
-            raise HTTPException(status_code=409, detail="该 session 正在处理另一个请求")
+        degraded = not sessions.acquire(session)
+    held = session is not None and not degraded
     try:
         provider = str((session and session.state.get("provider"))
                        or request.provider or "deepseek")
@@ -3316,21 +3406,30 @@ def copilot_chat(request: CopilotChatRequest) -> dict[str, Any]:
         config = fe.provider_config(provider, base_url)
         model = str(request.model or (session and session.state.get("model"))
                     or (config.get("models") or [fe.DEFAULT_MODEL])[0])
-        ctx = {
-            "state": session.state if session is not None else None,
-            "writable_root": fe.WRITABLE_DIR,
-            "actions": _copilot_tool_actions(session, request),
-        }
+        if held:
+            ctx = {
+                "state": session.state,
+                "writable_root": fe.WRITABLE_DIR,
+                "actions": _copilot_tool_actions(session, request),
+            }
+            busy_note = ""
+        else:
+            ctx = {"state": None, "writable_root": fe.WRITABLE_DIR, "actions": {}}
+            busy_note = ("" if session is None else
+                         "【降级模式】当前会话正在处理另一个请求（例如回合生成或上一次提问）。"
+                         "本条回复无法读取对局状态，也无法执行存档/准备/导出等操作；"
+                         "请基于对话历史、用户手册与只读工具回答，"
+                         "并在回答开头简要说明当前处于繁忙降级模式。")
         try:
             return copilot_service.handle_chat(
                 request.messages, ctx, provider=provider, base_url=base_url,
-                api_key=api_key, model=model)
+                api_key=api_key, model=model, busy_note=busy_note)
         except copilot_service.CopilotClientError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except copilot_service.CopilotUpstreamError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
     finally:
-        if session is not None:
+        if held:
             sessions.release(session)
 
 

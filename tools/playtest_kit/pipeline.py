@@ -7,6 +7,7 @@ Key 只经内存传递，不落盘（日志里也用掩码）。
 from __future__ import annotations
 
 import json
+import os
 import queue
 import threading
 import time
@@ -15,7 +16,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-OUT_DIR = ROOT / "outputs"
+# 输出随 FATE_VAR_DIR 走：多实例并行检验时各写各的 var，不互覆。
+OUT_DIR = Path(os.getenv("FATE_VAR_DIR") or (ROOT / "var")) / "outputs"
 LIVE_LOG = OUT_DIR / "playtest_live.jsonl"
 
 # 单例运行态：同一时刻只允许一场检验。

@@ -129,8 +129,9 @@ def parse_registration(data: Any, *, allowed: Sequence[str] = (),
 
     ``allowed`` 是 affected 白名单（在场名册 ∪ 世界书词表 ∪ 锚点词）。
     白名单外的项**逐项剔除**（不整包拒收——玩家的合法部分应当生效）；
-    剔除后 affected 为空时改为 :data:`WILDCARD`，并在错误清单里说明
-    （调用方可据此判断是否降级为"全局铁律"）。
+    剔除后 affected 为空时标记 ``targets_unresolved`` 并保留未解析原文
+    （C02：解析失败按原文登记，绝不静默扩大为全局铁律——全局范围只有
+    玩家原话明确全局时才可能授予，模型声明不算）。
     """
     try:
         payload = extract_json(data)
@@ -143,6 +144,8 @@ def parse_registration(data: Any, *, allowed: Sequence[str] = (),
     whitelist = {_flat(name, AFFECTED_ITEM_MAX) for name in (allowed or ())
                  if _flat(name, AFFECTED_ITEM_MAX)}
     affected = _terms(payload.get("affected") or ())
+    # 模型自己声明『全局』不构成玩家全局授权：一律按未解析处理。
+    affected = [term for term in affected if term != WILDCARD]
     removed: list[str] = []
     if whitelist:
         kept = []
@@ -156,9 +159,9 @@ def parse_registration(data: Any, *, allowed: Sequence[str] = (),
     notes: list[str] = []
     if removed:
         notes.append("affected 已剔除白名单外的项：「%s」" % "」、「".join(removed[:5]))
-    if not affected:
-        affected = [WILDCARD]
-        notes.append("affected 全部落在白名单之外，已降级为全局铁律")
+    unresolved = not affected
+    if unresolved:
+        notes.append("愿望对象未能解析；按原文登记为未解析目标，未授予全局范围")
 
     entry = {
         "kind": KIND_WISH,
@@ -169,14 +172,25 @@ def parse_registration(data: Any, *, allowed: Sequence[str] = (),
         "affected_anchors": _terms(payload.get("affected_anchors") or ()),
         "origin": "model",
         "removed_affected": removed,
+        "targets_unresolved": unresolved,
     }
     return entry, notes
 
 
 def fallback_entry(fact_text: str, *, kind: str = KIND_WISH,
-                   affected: Sequence[str] = ()) -> dict[str, Any]:
-    """兜底条目：结构化登记失败时，用原文登记为全局铁律（不丢玩家诉求）。"""
-    terms = _terms(affected) or [WILDCARD]
+                   affected: Sequence[str] = (),
+                   known: Sequence[str] = ()) -> dict[str, Any]:
+    """兜底条目：确定性匹配原话中出现的已知对象；匹配不到就按原文登记。
+
+    C02 范围安全回退：解析失败**保留**玩家诉求而不是**扩大**授权——
+    从 ``known``（名册∪世界书）里做纯字符串匹配；命中则作为 affected，
+    未命中标记 ``targets_unresolved``（注入与通配同级，但不记全局授权）。
+    旧参数 ``affected`` 保留给显式传入的调用方。
+    """
+    explicit = _terms(affected)
+    matched = [term for term in _terms(known)
+               if term and term in str(fact_text or "")]
+    terms = explicit or matched
     return {
         "kind": kind if kind in KINDS else KIND_WISH,
         "fact_norm": _flat(fact_text, FACT_MAX),
@@ -185,26 +199,35 @@ def fallback_entry(fact_text: str, *, kind: str = KIND_WISH,
         "conflicts": [],
         "origin": "fallback",
         "removed_affected": [],
+        "targets_unresolved": not terms,
     }
 
 
 def register(state: dict, entry: Mapping[str, Any], *, kind: str = KIND_WISH,
-             round_no: int = 0, raw: str = "") -> dict[str, Any]:
+             round_no: int = 0, raw: str = "",
+             authorization: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """把条目写入 ``ledger.cheat.directives``，返回落库后的完整条目。
 
-    自动分配递增 ``id``、写 ``kind``/``round``/``raw``，并对 affected 重叠的
-    既有条目标 ``superseded_by``（见 :func:`mark_superseded`）。
+    自动分配递增 ``id``、写 ``kind``/``round``/``raw``，并按
+    :func:`mark_superseded` 的显式冲突规则做取代仲裁。
+    ``authorization``（C02）是 :data:`fact_contract.AUTHORIZATION_KEY` 子键：
+    原话/解释分离 + 目标解析留痕 + 幂等 request_id，随行原子落账。
     """
     cheat = _cheat_box(state)
     rows = cheat.get(LEDGER_KEY)
     rows = [dict(row) for row in rows if isinstance(row, Mapping)] if isinstance(rows, list) else []
     next_id = 1 + max((int(row.get("id") or 0) for row in rows), default=0)
+    unresolved = entry.get("targets_unresolved") is True
+    affected = _terms(entry.get("affected") or ())
+    if not affected and not unresolved:
+        # 旧调用方兼容：无未解析标记的空 affected 维持旧通配语义。
+        affected = [WILDCARD]
     row = {
         "id": next_id,
         "kind": kind if kind in KINDS else KIND_WISH,
         "fact_norm": _flat(entry.get("fact_norm"), FACT_MAX),
         "scope": _flat(entry.get("scope"), 20) or "world",
-        "affected": _terms(entry.get("affected") or ()) or [WILDCARD],
+        "affected": affected,
         "conflicts": _terms(entry.get("conflicts") or ()),
         "affected_anchors": _terms(entry.get("affected_anchors") or ()),
         "origin": _flat(entry.get("origin"), 20) or "model",
@@ -214,7 +237,10 @@ def register(state: dict, entry: Mapping[str, Any], *, kind: str = KIND_WISH,
         "activated_round": 0,  # v2.0.4: 兑现检查用
         "keywords": [],  # v2.0.4: 兑现检查关键词
         "payload": None,  # v2.0.4: 类型化 payload
+        "targets_unresolved": unresolved,  # C02: 未解析目标（注入与通配同级）
     }
+    if authorization is not None:
+        row["authorization"] = dict(authorization)
     rows.append(row)
     cheat[LEDGER_KEY] = rows
     mark_superseded(state, row)
@@ -222,18 +248,19 @@ def register(state: dict, entry: Mapping[str, Any], *, kind: str = KIND_WISH,
 
 
 def mark_superseded(state: dict, new_row: Mapping[str, Any]) -> list[int]:
-    """affected 重叠的旧条目标 ``superseded_by = 新条目 id``，返回被取代的 id。
+    """仅当新条目 ``conflicts`` 显式点名旧条目时才取代，返回被取代的 id。
 
-    通配（:data:`WILDCARD`）条目不参与取代判定——全局铁律不该被一条局部
-    铁律顶掉，也不该顶掉别人。
+    C02 独立愿望共存：affected 重叠**不再**构成取代理由——同对象的两个
+    独立愿望（"苏叶会御剑" + "苏叶是遗孤"）必须共存。显式点名 = conflicts
+    项与旧条目 id 相等，或作为子串出现在旧条目 fact_norm 中。
     """
     cheat = _cheat_box(state)
     rows = cheat.get(LEDGER_KEY)
     if not isinstance(rows, list):
         return []
     new_id = int(new_row.get("id") or 0)
-    new_terms = {term for term in (new_row.get("affected") or ()) if term != WILDCARD}
-    if not new_terms:
+    conflict_refs = [term for term in _terms(new_row.get("conflicts") or ())]
+    if not conflict_refs:
         return []
     superseded: list[int] = []
     for row in rows:
@@ -241,8 +268,10 @@ def mark_superseded(state: dict, new_row: Mapping[str, Any]) -> list[int]:
             continue
         if row.get("superseded_by"):
             continue
-        old_terms = {term for term in (row.get("affected") or ()) if term != WILDCARD}
-        if old_terms and old_terms & new_terms:
+        old_id = str(int(row.get("id") or 0))
+        old_fact = str(row.get("fact_norm") or "")
+        explicit = any(ref == old_id or (ref and ref in old_fact) for ref in conflict_refs)
+        if explicit:
             row["superseded_by"] = new_id
             superseded.append(int(row.get("id") or 0))
     return superseded
@@ -260,8 +289,9 @@ def select_relevant(state: Mapping[str, Any] | None, *,
     """按 ``affected ∩ 本回合命中集`` 选出要注入的条目（未命中不注入）。
 
     命中集 = 锚点词 ∪ 在场角色名 ∪ 地点名 ∪ extra_terms（世界书命中等）。
-    通配条目（affected 含 :data:`WILDCARD`）始终命中。命中判定与登记时的
-    白名单一致：全等或互为子串。
+    通配条目（affected 含 :data:`WILDCARD`）与未解析目标条目
+    （``targets_unresolved``，C02）始终命中——愿望不得因对象缺失而死。
+    命中判定与登记时的白名单一致：全等或互为子串。
     """
     names: list[str] = []
     for item in present_members or ():
@@ -276,7 +306,7 @@ def select_relevant(state: Mapping[str, Any] | None, *,
     selected: list[dict[str, Any]] = []
     for row in active_directives(state):
         affected = [term for term in (row.get("affected") or ())]
-        if WILDCARD in affected:
+        if WILDCARD in affected or row.get("targets_unresolved"):
             selected.append(row)
         elif any(term == hit or term in hit or hit in term
                  for term in affected for hit in hits):

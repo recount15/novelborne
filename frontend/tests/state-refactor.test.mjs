@@ -46,3 +46,14 @@ test('character query edits remain slot-local and mode does not clamp gameplay',
   const modeHandler = app.match(/function onModeChanged[\s\S]*?\n}/)[0]
   assert.doesNotMatch(modeHandler, /form\.value\.(work|timepoint|paper_tier)|enableNemesis/)
 })
+
+test('reader chat entries stay explicitly labeled by view and session wiring', () => {
+  const app = readFileSync(new URL('../src/App.vue', import.meta.url), 'utf8')
+  const chatHandler = app.match(/function onReaderChat[\s\S]*?\n}/)[0]
+  assert.match(chatHandler, /view\?/)
+  assert.match(app, /:view="readerChatTarget\.view \|\| 'original'"/)
+  assert.match(app, /:session-id="sessionId"/)
+  // 原著阅读器（原著域）的对话入口必须显式声明原著视图，不得默认落入本局。
+  const modal = readFileSync(new URL('../src/components/OriginalReaderModal.vue', import.meta.url), 'utf8')
+  assert.match(modal, /'chat-with-character': \[payload: \{ bookId: string; chapterNo: number; view: 'original'; characterId\?: string }\]/)
+})

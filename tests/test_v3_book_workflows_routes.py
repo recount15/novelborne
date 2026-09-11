@@ -80,10 +80,13 @@ def test_sync_prepare_forwards_model_version_and_target(routes, monkeypatch):
 
 def test_reader_chat_contracts_and_redacted_errors(routes):
     assert routes.client.get('/api/books/demo/reader-chat/roster?chapter_no=3').status_code == 200
-    routes.chat.list_roster.assert_called_once_with(routes.book, 3)
+    # C07：路由显式传递 view/session_state（original 默认，不触碰会话）。
+    routes.chat.list_roster.assert_called_once_with(routes.book, 3, view='original', session_state=None)
     response = routes.client.post('/api/books/demo/reader-chat/threads', json={
         'character_id': 'char1', 'chapter_no': 3, 'card_revision': 2, 'source_hash': 'hash'})
     assert response.status_code == 200
+    routes.chat.create_thread.assert_called_once_with(routes.book, 'char1', 3,
+        card_revision=2, source_hash='hash', view='original', session_state=None)
     assert routes.client.get('/api/reader-chat/threads/reader1').status_code == 200
     response = routes.client.post('/api/reader-chat/threads/reader1/messages', json={
         'message': 'hello', 'request_id': 'one', 'api_key': 'secret'})

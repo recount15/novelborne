@@ -47,6 +47,12 @@ TRANSACTIONAL_KEYS: frozenset[str] = frozenset({
     "paper_key", "paper_tier", "paper_family", "compose_mode",
     # v2.0.4 作弊码增补：relay_activated（永久通路激活标志，回合内可变需回滚）
     "relay_activated", "sequence_feedback", "plot_thread_map", "chapter_arc_plan", "generation_brief", "repair_report", "degraded", "task_registry", "task_progress_log", "conversation_memory", "conversation_commitments", "mechanism_windows",
+    # C10 全域审计增补（此前漏加导致回滚残缺）：handoff/compression_record/
+    # compression_due_round 为 C09 摘要链回合内写入；scene_participants 为回合末
+    # 派生的闲聊名单；character_states 为回合内角色状态记忆。与已回滚的
+    # story_ledger/round 同批写入，不登记则失败回合后凭空残留摘要与场景态。
+    "handoff", "compression_record", "compression_due_round",
+    "scene_participants", "character_states",
 })
 
 

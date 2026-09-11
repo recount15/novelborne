@@ -354,14 +354,24 @@ class PreparationJobsService:
             if not claimed:
                 raise
             # Failed/cancelled attempts never replace an older ready package.
+            # Read the failed attempt's structured block errors BEFORE restoring.
+            failed_issues: list = []
+            if root is not None:
+                try:
+                    failed_issues = (_read_json(root / 'opening_ready.json').get('errors') or [])[-10:]
+                except Exception:
+                    failed_issues = []
             if previous and previous.get('ready') and root is not None:
                 _atomic_json(root / 'opening_ready.json', previous)
             with self._db() as db:
                 status = 'CANCELLED' if isinstance(exc, PreparationCancelled) else 'FAILED'
+                error = None if status == 'CANCELLED' else _error(
+                    'PREPARATION_FAILED', 'Preparation failed; validated checkpoints can be resumed.', job_id)
+                if error is not None and failed_issues:
+                    error['issues'] = failed_issues
                 return self._update(db, job_id, status=status, retryable=True,
                                     needs_credentials=json.loads(self._row(db, job_id)['config_json'])['mode'] == 'fullbook',
-                                    error=None if status == 'CANCELLED' else _error(
-                                        'PREPARATION_FAILED', 'Preparation failed; validated checkpoints can be resumed.', job_id))
+                                    error=error)
 
     def close(self, *, wait: bool = True) -> None:
         with self._lock:

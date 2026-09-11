@@ -4,10 +4,15 @@ from contextlib import closing
 import json
 import sqlite3
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
+
+from core import server
 from core.engine.book_index import build_book_index
 from core.services.character_context_service import (
     ReaderContextError, build_game_context, build_reader_context, canonical, read_reader_source,
@@ -354,6 +359,301 @@ class ReaderChatTests(unittest.TestCase):
         with self.assertRaises(sqlite3.IntegrityError):
             self.service.send_message(tid, "hello", request_id="r", model_fn=lambda p: ABSTENTION)
         self.assertEqual(self.service.get_thread(tid)["messages"], [])
+
+    def test_reader_qa_budget_three_per_sixty_seconds(self):
+        """§4.2 阅读器问答独立短预算：每线程 60 秒内最多 3 次已提交提问；幂等重放不重复计费；线程独立。"""
+        tid = self.thread()["thread_id"]
+        for index in range(3):
+            self.service.send_message(tid, f"问题{index}", request_id=f"r{index}", model_fn=lambda p: ABSTENTION)
+        self.assert_code("budget_exhausted", lambda: self.service.send_message(
+            tid, "第四问", request_id="r3", model_fn=lambda p: ABSTENTION))
+        self.assertEqual(len(self.service.get_thread(tid)["messages"]), 6)  # 被拒的第4问未落库
+        # 幂等重放不消耗预算（重放优先于预算检查）。
+        replay = self.service.send_message(tid, "问题2", request_id="r2", model_fn=lambda p: ABSTENTION)
+        self.assertEqual(replay["grounding"], "abstention")
+        self.assertEqual(len(self.service.get_thread(tid)["messages"]), 6)
+        # 其他线程独立计费。
+        other = self.thread(3)["thread_id"]
+        fresh = self.service.send_message(other, "你好", request_id="o1", model_fn=lambda p: ABSTENTION)
+        self.assertEqual(fresh["grounding"], "abstention")
+
+
+class GameViewTests(unittest.TestCase):
+    """C07 本局访谈（view=game）：会话只读快照、原著/本局来源隔离、分支事实作答、不写游戏状态。"""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.book = self.root / "book"
+        (self.book / "chapters").mkdir(parents=True)
+        self.text = "林舟说：我只知道河边的旧桥，昨日亲眼看见桥下流水。"
+        (self.book / "chapters" / "0001.txt").write_text(self.text, encoding="utf-8")
+        (self.book / "chapter_index.json").write_text(json.dumps({"book_id": "book-a", "chapters": [{"idx": 1}]}), encoding="utf-8")
+        build_book_index(self.book)
+        self.source = read_reader_source(self.book, 1)
+        self.card = {"schema_version": 2, "character_id": "char-a", "revision": 1, "name": "林舟",
+            "source": {"book_id": "book-a", "source_hash": self.source["source_hash"]},
+            "quality": {"state": "ready"}, "profile": {},
+            "evidence": [{"evidence_id": "e1", "book_id": "book-a", "source_hash": self.source["source_hash"],
+                "chapter_no": 1, "start": 0, "end": len(self.text), "quote": self.text, "speaker_id": "char-a"}],
+            "facts": [{"fact_id": "f1", "subject_id": "char-a", "knowledge_holder_id": "char-a",
+                "domain": "knowledge", "predicate": "knows", "value": "河边的旧桥",
+                "status": "confirmed", "evidence_ids": ["e1"]}],
+            "semantic": {}}
+        self.db = self.root / "runtime.sqlite"
+        self.service = ReaderChatService(self.db,
+            card_provider=lambda cid, rev: copy.deepcopy(self.card) if cid == "char-a" else None)
+        with closing(sqlite3.connect(self.db)) as conn, conn:
+            conn.execute("CREATE TABLE characters(id TEXT PRIMARY KEY,is_active INTEGER)")
+            conn.execute("CREATE TABLE character_record_snapshots(character_id TEXT,revision INTEGER,record_json TEXT)")
+            conn.execute("INSERT INTO characters VALUES('char-a',1)")
+            conn.execute("INSERT INTO character_record_snapshots VALUES('char-a',1,?)", (canonical(self.card),))
+
+    def state(self, **extra):
+        base = {"system": "fate", "session_id": "sess-1", "state_revision": 3,
+                "book_dir": str(self.book), "book_id": "book-a", "distill_key": str(self.book),
+                "quest": {"status": "active"}, "round": 9, "history": "FUTURE_HISTORY",
+                "character_states": {
+                    "char-a": {"assertions": [
+                        {"id": "g1", "key": "location", "value": "分支山谷", "confidence": 1,
+                         "provenance": ["committed event"], "knowledge_holder_id": "char-a"},
+                        {"id": "g2", "key": "location", "value": "别处军营", "confidence": 1,
+                         "provenance": ["x"], "knowledge_holder_id": "npc-b"}]},
+                    "npc-b": {"assertions": [
+                        {"id": "n1", "key": "condition", "value": "守夜中", "confidence": 1,
+                         "provenance": ["x"], "knowledge_holder_id": "npc-b"}]}}}
+        base.update(extra)
+        return base
+
+    def assert_code(self, code, fn):
+        with self.assertRaises((ReaderChatError, ReaderContextError)) as error:
+            fn()
+        self.assertEqual(error.exception.code, code)
+
+    @staticmethod
+    def verification(prompt):
+        payload = json.loads(prompt.split("\n")[-1])
+        return {"claims": [{"index": r["index"], "supported": True} for r in payload["claims"]],
+                "social": [{"index": r["index"], "nonfactual": True} for r in payload["social"]],
+                "no_unattributed_claims": True, "no_contradictions": True}
+
+    def test_game_view_separates_domains_and_never_writes_state(self):
+        state = self.state()
+        before = copy.deepcopy(state)
+        game = self.service.create_thread(self.book, "char-a", 1, view="game", session_state=state)
+        self.assertEqual(game["scope"], "game")
+        self.assertEqual(game["mode"], "game")
+        data = game["context"]
+        self.assertEqual([f["fact_id"] for f in data["known_facts"]], ["g1"])
+        self.assertEqual([f["fact_id"] for f in data["source_facts"]], ["f1"])
+        self.assertEqual(data["source_status"], "scoped_reference_only")
+        self.assertNotIn("FUTURE_HISTORY", canonical(data))
+        fetched = self.service.get_thread(game["thread_id"])
+        self.assertEqual(fetched["scope"], "game")
+        # 原著视图不受本局污染：同角色同章，两域线程分离。
+        original = self.service.create_thread(self.book, "char-a", 1)
+        self.assertEqual(original["scope"], "reader")
+        self.assertNotIn("分支山谷", canonical(original["context"]))
+        self.assertNotIn("FUTURE_HISTORY", canonical(original["context"]))
+        self.assertNotEqual(game["thread_id"], original["thread_id"])
+        self.assertEqual(state, before)
+
+    def test_game_answers_grounded_in_branch_facts_only(self):
+        state = self.state()
+        before = copy.deepcopy(state)
+        tid = self.service.create_thread(self.book, "char-a", 1, view="game", session_state=state)["thread_id"]
+        utterance = "我如今就在分支山谷。"
+        draft = {"utterance": utterance,
+                 "grounded_claims": [{"start": 5, "end": len(utterance), "fact_id": "g1"}],
+                 "social_spans": [{"start": 0, "end": 5}]}
+        seen = []
+        def model(prompt):
+            seen.append(prompt)
+            if prompt.startswith("GAME_INTERVIEW_V1"):
+                return canonical(draft)
+            return self.verification(prompt)
+        result = self.service.send_message(tid, "你现在在哪里？", request_id="g1", model_fn=model)
+        self.assertEqual(result["scope"], "game")
+        self.assertEqual(result["grounding"], "verified_branch_claims")
+        self.assertEqual(result["evidence_ids"], [])
+        self.assertTrue(seen[0].startswith("GAME_INTERVIEW_V1"))
+        self.assertIn("g1", seen[0])
+        self.assertNotIn("FUTURE_HISTORY", "".join(seen))
+        self.assertEqual(state, before)  # 聊天不写剧情事实
+
+    def test_game_rejects_source_facts_foreign_knowledge_and_freeform(self):
+        state = self.state()
+        tid = self.service.create_thread(self.book, "char-a", 1, view="game", session_state=state)["thread_id"]
+        def draft(fact_id, utterance="我知道一些事。", **extra):
+            row = {"start": 0, "end": len(utterance), "fact_id": fact_id}
+            row.update(extra)
+            return {"utterance": utterance, "grounded_claims": [row], "social_spans": []}
+        def model(bad):
+            return lambda p: canonical(bad) if p.startswith("GAME_INTERVIEW_V1") else self.verification(p)
+        for bad in (draft("f1"),                        # 原著域事实不是本局分支事实
+                    draft("g2"),                        # 只有 npc-b 知道的分支事实
+                    draft("invented"),                  # 编造引用
+                    draft("g1", evidence_ids=["e1"]),   # 本局访谈不作证词引用
+                    draft("g1", epistemic_kind="inference"),
+                    draft("g1", scope="reader")):
+            with self.subTest(bad=canonical(bad)):
+                self.assert_code("disclosure_rejected", lambda: self.service.send_message(
+                    tid, "说说看", request_id="r", model_fn=model(bad)))
+        self.assertEqual(self.service.get_thread(tid)["messages"], [])
+        # 逐字原文在本局视图不是合法证据路径（来源隔离），弃权始终允许。
+        self.assert_code("disclosure_rejected", lambda: self.service.send_message(
+            tid, "原文说什么", request_id="r2", model_fn=lambda p: self.text))
+        receipt = self.service.send_message(tid, "原文说什么", request_id="r3", model_fn=lambda p: ABSTENTION)
+        self.assertEqual(receipt["grounding"], "abstention")
+
+    def test_game_view_validates_view_session_character_revision_book(self):
+        self.assert_code("invalid_view", lambda: self.service.create_thread(self.book, "char-a", 1, view="story"))
+        self.assert_code("session_required", lambda: self.service.create_thread(self.book, "char-a", 1, view="game"))
+        self.assert_code("session_required", lambda: self.service.create_thread(
+            self.book, "char-a", 1, view="game", session_state=["not", "a", "mapping"]))
+        self.assert_code("invalid_character", lambda: self.service.create_thread(
+            self.book, "char-a", 1, view="game", session_state={"system": "fate"}))
+        self.assert_code("invalid_character", lambda: self.service.create_thread(
+            self.book, "ghost", 1, view="game", session_state=self.state()))
+        no_revision = self.state()
+        no_revision.pop("state_revision")
+        self.assert_code("invalid_revision", lambda: self.service.create_thread(
+            self.book, "char-a", 1, view="game", session_state=no_revision))
+        other = self.root / "other-book"
+        other.mkdir()
+        self.assert_code("session_book_mismatch", lambda: self.service.create_thread(
+            self.book, "char-a", 1, view="game",
+            session_state=self.state(book_dir=str(other), book_id="other")))
+        # 原著视图忽略会话参数：不需要也不校验 session。
+        original = self.service.create_thread(self.book, "char-a", 1, view="original", session_state={"junk": True})
+        self.assertEqual(original["scope"], "reader")
+
+    def test_game_threads_anchor_to_committed_revision(self):
+        state = self.state()
+        t3 = self.service.create_thread(self.book, "char-a", 1, view="game", session_state=state)
+        t4 = self.service.create_thread(self.book, "char-a", 1, view="game",
+                                        session_state=self.state(state_revision=4))
+        self.assertNotEqual(t3["thread_id"], t4["thread_id"])
+        again = self.service.create_thread(self.book, "char-a", 1, view="game",
+                                           session_state=self.state(state_revision=4))
+        self.assertEqual(t4["thread_id"], again["thread_id"])  # 同一提交幂等复用
+
+    def test_game_roster_lists_branch_characters_without_private_state(self):
+        state = self.state()
+        roster = self.service.list_roster(self.book, 1, view="game", session_state=state)
+        self.assertEqual(roster["status"], "ready")
+        self.assertEqual([c["character_id"] for c in roster["characters"]], ["char-a", "npc-b"])
+        self.assertEqual(roster["branch_id"], "sess-1")
+        self.assertNotIn("FUTURE_HISTORY", canonical(roster))
+        self.assert_code("session_required", lambda: self.service.list_roster(self.book, 1, view="game"))
+        self.assert_code("invalid_view", lambda: self.service.list_roster(self.book, 1, view="x"))
+        original = self.service.list_roster(self.book, 1)
+        self.assertEqual([c["character_id"] for c in original["characters"]], ["char-a"])
+
+
+class GameViewRouteTests(unittest.TestCase):
+    """C07 路由：原著请求无需 session；本局请求校验 session/书目；访谈只读不改对局。"""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.book = self.root / "book-a"  # 真实部署不变式：书目目录名 == book_id
+        (self.book / "chapters").mkdir(parents=True)
+        self.text = "林舟说：我只知道河边的旧桥。"
+        (self.book / "chapters" / "0001.txt").write_text(self.text, encoding="utf-8")
+        (self.book / "chapter_index.json").write_text(json.dumps({"book_id": "book-a", "chapters": [{"idx": 1}]}), encoding="utf-8")
+        build_book_index(self.book)
+        source_hash = read_reader_source(self.book, 1)["source_hash"]
+        card = {"schema_version": 2, "character_id": "char-a", "revision": 1, "name": "林舟",
+            "source": {"book_id": "book-a", "source_hash": source_hash},
+            "quality": {"state": "ready"}, "profile": {},
+            "evidence": [{"evidence_id": "e1", "book_id": "book-a", "source_hash": source_hash,
+                "chapter_no": 1, "start": 0, "end": len(self.text), "quote": self.text, "speaker_id": "char-a"}],
+            "facts": [{"fact_id": "f1", "subject_id": "char-a", "knowledge_holder_id": "char-a",
+                "domain": "knowledge", "predicate": "knows", "value": "河边的旧桥",
+                "status": "confirmed", "evidence_ids": ["e1"]}],
+            "semantic": {}}
+        self.service = ReaderChatService(self.root / "runtime.sqlite",
+            card_provider=lambda cid, rev: copy.deepcopy(card) if cid == "char-a" else None)
+        with closing(sqlite3.connect(self.root / "runtime.sqlite")) as conn, conn:
+            conn.execute("CREATE TABLE characters(id TEXT PRIMARY KEY,is_active INTEGER)")
+            conn.execute("CREATE TABLE character_record_snapshots(character_id TEXT,revision INTEGER,record_json TEXT)")
+            conn.execute("INSERT INTO characters VALUES('char-a',1)")
+            conn.execute("INSERT INTO character_record_snapshots VALUES('char-a',1,?)", (canonical(card),))
+        def resolve(bid):
+            if bid == "book-a":
+                return self.book
+            raise HTTPException(status_code=404, detail=f"书目不存在：{bid}")
+        for starter in (patch.object(server, "_resolve_book_dir", resolve),
+                        patch.object(server, "_reader_chat", self.service)):
+            starter.start()
+            self.addCleanup(starter.stop)
+        self.client = TestClient(server.app)
+        self.game_state = {"system": "fate", "session_id": "sess-1", "state_revision": 2,
+            "distill_key": str(self.book), "round": 4, "quest": {"status": "active"},
+            "history": "FUTURE_HISTORY",
+            "character_states": {"char-a": {"assertions": [
+                {"id": "g1", "key": "location", "value": "分支山谷", "confidence": 1,
+                 "provenance": ["committed"], "knowledge_holder_id": "char-a"}]}}}
+
+    def _sessions(self, **table):
+        class _Session:
+            def __init__(self, state):
+                self.state = state
+                self.lock = threading.Lock()
+        class _Manager:
+            def __init__(self, sessions):
+                self.sessions = sessions
+            def require(self, sid):
+                if sid not in self.sessions:
+                    raise KeyError(sid)
+                return self.sessions[sid]
+        return _Manager({sid: _Session(state) for sid, state in table.items()})
+
+    def test_original_view_needs_no_session_and_ignores_session_id(self):
+        with patch.object(server, "sessions", self._sessions()):  # 空 session 表：被触碰即失败
+            response = self.client.post("/api/books/book-a/reader-chat/threads",
+                json={"character_id": "char-a", "chapter_no": 1})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["scope"], "reader")
+            response = self.client.post("/api/books/book-a/reader-chat/threads",
+                json={"character_id": "char-a", "chapter_no": 1, "view": "original", "session_id": "missing"})
+            self.assertEqual(response.status_code, 200)  # 原著阅读不触碰会话
+            roster = self.client.get("/api/books/book-a/reader-chat/roster", params={"chapter_no": 1})
+            self.assertEqual(roster.status_code, 200)
+            self.assertEqual(roster.json()["status"], "ready")
+
+    def test_game_view_validates_session_and_book_and_reads_state_only(self):
+        sessions = self._sessions(s1=self.game_state, empty={"round": 1},
+            other={**self.game_state, "distill_key": str(self.root / "elsewhere")},
+            nosource={k: v for k, v in self.game_state.items() if k != "distill_key"})
+        with patch.object(server, "sessions", sessions):
+            def post(**payload):
+                return self.client.post("/api/books/book-a/reader-chat/threads", json=payload)
+            self.assertEqual(post(character_id="char-a", chapter_no=1, view="game").status_code, 422)
+            self.assertEqual(post(character_id="char-a", chapter_no=1, view="game", session_id="ghost").status_code, 404)
+            self.assertEqual(post(character_id="char-a", chapter_no=1, view="game", session_id="empty").json()["detail"]["code"], "no_active_game")
+            self.assertEqual(post(character_id="char-a", chapter_no=1, view="game", session_id="other").json()["detail"]["code"], "session_book_mismatch")
+            self.assertEqual(post(character_id="char-a", chapter_no=1, view="game", session_id="nosource").json()["detail"]["code"], "no_book_source")
+            self.assertEqual(post(character_id="char-a", chapter_no=1, view="bogus").status_code, 422)
+            before = copy.deepcopy(self.game_state)
+            ok = post(character_id="char-a", chapter_no=1, view="game", session_id="s1")
+            self.assertEqual(ok.status_code, 200, ok.text)
+            body = ok.json()
+            self.assertEqual(body["scope"], "game")
+            self.assertEqual(body["context"]["branch_id"], "sess-1")
+            self.assertEqual(self.game_state, before)  # 阅读不结算任务、不写剧情事实
+            got = self.client.get(f"/api/reader-chat/threads/{body['thread_id']}")
+            self.assertEqual(got.status_code, 200)
+            self.assertEqual(got.json()["scope"], "game")
+            roster = self.client.get("/api/books/book-a/reader-chat/roster",
+                params={"chapter_no": 1, "view": "game", "session_id": "s1"})
+            self.assertEqual(roster.status_code, 200)
+            self.assertEqual([c["character_id"] for c in roster.json()["characters"]], ["char-a"])
+            self.assertEqual(self.client.get("/api/books/book-a/reader-chat/roster",
+                params={"chapter_no": 1, "view": "game", "session_id": "ghost"}).status_code, 404)
 
 
 if __name__ == "__main__":

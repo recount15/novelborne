@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any, Callable
 
@@ -24,10 +25,30 @@ from core import fate_engine as fe
 from core.services import book_library_service
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-MANUAL_PATH = PROJECT_ROOT / "docs" / "USER_MANUAL.md"
 
-MAX_STEPS = 6
-_MAX_DOC_SECTIONS = 4
+
+def _resolve_manual_path() -> Path:
+    """定位用户手册：冻结构建落在 _internal/docs，源码运行在仓库 docs。
+
+    PyInstaller onedir 下 ``__file__`` 位于 sys._MEIPASS（即 _internal）内，
+    spec 已把 docs/USER_MANUAL.md 打到 _internal/docs；再兜底可执行文件
+    同级目录，覆盖手动放置手册的场景。
+    """
+    candidates = [PROJECT_ROOT / "docs" / "USER_MANUAL.md"]
+    if getattr(sys, "frozen", False):
+        exe_dir = Path(sys.executable).resolve().parent
+        candidates.insert(0, exe_dir / "_internal" / "docs" / "USER_MANUAL.md")
+        candidates.append(exe_dir / "docs" / "USER_MANUAL.md")
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return candidates[0]
+
+
+MANUAL_PATH = _resolve_manual_path()
+
+MAX_STEPS = 10
+_MAX_DOC_SECTIONS = 6
 _DOC_EXCERPT_CHARS = 600
 
 
@@ -330,13 +351,17 @@ def _scrub(value: Any, api_key: str) -> Any:
 
 def _call_model(client: Any, model: str, messages: list[dict[str, str]],
                 provider: str, system_prompt: str, question: str) -> str:
-    """单次模型调用：anthropic 走原生网关，其余走 chat.completions。"""
-    kwargs = dict(model=model, messages=messages, temperature=0.3, max_tokens=900)
+    """单次模型调用：anthropic 走原生网关，其余走 chat.completions。
+
+    900 tokens 会把稍长的回答拦腰截断；Copilot 回答不上限敏感，
+    4096 与引擎技能调用的输出预算一致。
+    """
+    kwargs = dict(model=model, messages=messages, temperature=0.3, max_tokens=4096)
     with engine.parallel.slot(engine.parallel.PRIORITY_TURN):
         if provider == "anthropic":
             from core.services.native_gateway import native_complete
             response = native_complete(client, provider, model, question,
-                                       system=system_prompt, max_tokens=900,
+                                       system=system_prompt, max_tokens=4096,
                                        extra={"temperature": 0.3})
             return response.text.strip()
         try:
@@ -352,14 +377,19 @@ def _call_model(client: Any, model: str, messages: list[dict[str, str]],
 
 def handle_chat(history: list[dict[str, Any]], ctx: dict[str, Any],
                 provider: str, base_url: str | None, api_key: str,
-                model: str) -> dict[str, Any]:
+                model: str, busy_note: str = "") -> dict[str, Any]:
     """Copilot 对话主流程：系统提示 + 历史消息 + 工具循环，返回可 JSON 化响应。
 
     ``ctx["state"]`` 可为 None（无对局）；``ctx["actions"]`` 由端点层注入
-    持锁闭包。同步执行；单次对话最多 MAX_STEPS 个工具步。
+    持锁闭包。同步执行；单次对话最多 MAX_STEPS 个工具步，步数用尽时追加
+    一次禁用工具的收尾合成调用，保证用户拿到完整回答而不是截断提示。
+    ``busy_note`` 非空表示会话锁被占用、操作工具不可用的降级模式，仅追加
+    到系统提示，不改变工具白名单本身。
     """
     snapshot = state_snapshot(ctx.get("state"))
     system_prompt = build_system_prompt(snapshot)
+    if busy_note:
+        system_prompt = system_prompt + "\n\n" + busy_note
     messages = [{"role": "system", "content": system_prompt}]
     for item in history:
         if isinstance(item, dict) and item.get("role") in ("user", "assistant"):
@@ -405,8 +435,19 @@ def handle_chat(history: list[dict[str, Any]], ctx: dict[str, Any],
                        + ("\n可继续调用工具，或直接给出最终回答。" if ok else "\n该工具失败，请向用户说明或换一种方式。"),
         })
     else:
-        answer = ("已执行 " + str(len(actions)) + " 步操作，达到单次对话步数上限；"
-                  "如需继续请再发一条消息。")
+        # 步数用尽不代表回答完成：追加一次“禁用工具”的收尾合成调用，
+        # 让模型把已执行的工具结果整理成完整回答（替换旧版罐头结束语）。
+        messages.append({
+            "role": "user",
+            "content": "【系统】已达到单次对话工具步数上限，请立即基于以上工具结果"
+                       "给出完整的最终回答；不要再输出工具调用。",
+        })
+        try:
+            text = _call_model(client, model, messages, provider, system_prompt, question)
+        except Exception as exc:  # noqa: BLE001
+            raise CopilotUpstreamError(f"Copilot 模型调用失败：{exc}") from exc
+        answer = text if (text and parse_tool_call(text) is None) else (
+            "已执行 " + str(len(actions)) + " 步操作；如需继续请再发一条消息。")
 
     answer = _scrub(answer, api_key)
     if system_prompt and system_prompt in answer:

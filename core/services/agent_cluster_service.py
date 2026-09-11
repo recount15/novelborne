@@ -10,6 +10,8 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from contextvars import copy_context
 from dataclasses import dataclass
+import json
+import logging
 import math
 import threading
 import time
@@ -29,7 +31,9 @@ class BudgetPolicy:
     max_input_bytes: int = 2_000_000
     max_output_bytes: int = 655_360
     max_cost: float = 20.0
-    deadline_seconds: float = 120.0
+    # 整次编队生成的总预算：真实书目开局含约 20 次模型调用，120 秒会被
+    # deadline_exceeded 误杀；420 秒与 SkillSpec.timeout=120 配合覆盖慢供应商。
+    deadline_seconds: float = 420.0
     max_workers: int = 3
     version: str = "1"
 
@@ -89,6 +93,12 @@ class ClusterError(GateError):
         self.requested_strategy = self.effective_strategy = "agent_cluster"
         self.status = "cancelled" if code == "cancelled" else "blocked"
 
+    @property
+    def terminal_status(self) -> str:
+        """C04：错误 → 请求终态。A 类硬错误绝不 keep-best 提交。"""
+        from core.engine.quality_gate import terminal_status_from_code
+        return terminal_status_from_code(self.code)
+
 
 class AgentClusterService:
     def __init__(self, callbacks: Mapping[str, Callable[[WorkerInput], ModelReply]], *, registry: Mapping[str, SkillSpec] | None = None):
@@ -143,13 +153,22 @@ class AgentClusterService:
                 reply = None
                 artifact = None
                 code = None
+                # 上一次尝试的校验失败码：反馈修复用。真实模型常漏/多键
+                # （kimi-k3 实测漏 claim.directive_ids），同一提示词重试只会
+                # 复现同一偏离；把错误码喂回去才可能自纠。门禁不放松：
+                # 第二次输出仍须完整通过 validate_artifact。
+                feedback_code = None
                 for attempt in range(1, spec.max_attempts + 1):
                     start = time.monotonic()
                     try:
                         check()
                         require(start < job_deadline, "job_deadline_exceeded")
                         # Both the prompt and structured fields use separate detached data.
-                        prompt = spec.prompt + "\n" + canonical({"skill_id": key, "snapshot_hash": snapshot.snapshot_hash, "context": context, "artifacts": upstream, "output_schema": spec.output_schema, "output_contract": output_contract(spec.output_schema), "rules": "Output exactly the artifact JSON object, no markdown. Claims may be empty when unknown; never fabricate source facts. Only copy source_fact triples from authorized evidence facts. Preserve branch facts over source expectations. No future secrets. Polish must preserve all draft claims exactly. Critics inspect candidate independently, reject unsupported knowledge or contradictions. Options have no executable effects or preconditions; six distinct proposed actions. No state patches."})
+                        contract_payload = {"skill_id": key, "snapshot_hash": snapshot.snapshot_hash, "context": context, "artifacts": upstream, "output_schema": spec.output_schema, "output_contract": output_contract(spec.output_schema), "rules": "Output exactly the artifact JSON object, no markdown. Claims may be empty when unknown; never fabricate source facts. Only copy source_fact triples from authorized evidence facts. Preserve branch facts over source expectations. No future secrets. Polish must preserve all draft claims exactly. Critics inspect candidate independently, reject unsupported knowledge or contradictions. Options have no executable effects or preconditions; six distinct proposed actions. No state patches."}
+                        if feedback_code:
+                            contract_payload["previous_attempt_error"] = feedback_code
+                            contract_payload["correction"] = "Your previous artifact violated this exact check. Re-output the artifact JSON obeying output_contract literally: exactly the declared keys at every level (claim objects include directive_ids even when empty), valid_boundary copied verbatim from context.boundary, no extra or missing keys, no markdown."
+                        prompt = spec.prompt + "\n" + canonical(contract_payload)
                         ledger.reserve(len(prompt.encode("utf-8")), spec.max_output_bytes, spec.max_cost)
                         usage["calls"] += 1
                         request = WorkerInput(key, generation_id, job_id, attempt, snapshot.snapshot_id, snapshot.snapshot_hash, clone(context), clone(upstream), prompt, job_deadline, lambda: stopped.is_set() or external_cancel.is_set() or time.monotonic() >= job_deadline)
@@ -173,10 +192,30 @@ class AgentClusterService:
                         break
                     except Exception as exc:
                         code = exc.code if isinstance(exc, GateError) else "worker_failed"
+                        feedback_code = code if isinstance(exc, GateError) else None
                         artifact = None
                         attempts.append({"attempt_no": attempt, "status": "failed", "error_code": code, "started_at": start, "ended_at": time.monotonic()})
-                        # Only explicit transient transport failures are retried.
-                        if not isinstance(exc, (TimeoutError, ConnectionError)) or attempt == spec.max_attempts:
+                        # 运维诊断：门禁拒绝时把被拒工件原样记入本地日志，
+                        # 否则真实模型部署无从知晓 critic 为何拒绝/键契约差在
+                        # 哪里（gates 本身不变，拒绝仍然生效）。仅记结构化
+                        # 工件；传输层垃圾不落盘。
+                        if isinstance(exc, GateError):
+                            logging.getLogger("fate.cluster").warning(
+                                "cluster_gate_fail %s",
+                                json.dumps({"skill": key, "code": code, "attempt": attempt,
+                                            "artifact": reply.artifact if isinstance(reply, ModelReply) else None},
+                                           ensure_ascii=False, default=str))
+                        # Transient transport failures and contract-validation
+                        # failures (GateError) both get the remaining attempts;
+                        # validation retries carry the failing code as feedback.
+                        # A 200 response whose body is not JSON is the same
+                        # transport class as a timeout: the field gateway
+                        # (kimi-k3 measured, 1/6 sequential, ~50% under load)
+                        # intermittently returns empty/garbage content with
+                        # HTTP 200. Treating json.loads failure as terminal
+                        # aborted the whole skill on the first flake.
+                        transient = isinstance(exc, (TimeoutError, ConnectionError, json.JSONDecodeError))
+                        if (not transient and not isinstance(exc, GateError)) or attempt == spec.max_attempts:
                             break
                 provenance = {"book_id": data["book_id"], "source_hash": data["source_hash"], "cutoff": data["cutoff"], "context_hash": data["context_hash"], "evidence_ids": sorted(context["evidence"]), "branch_event_ids": sorted(context["branch_events"]), "prompt_manifest": spec.prompt_manifest}
                 if isinstance(reply, ModelReply):

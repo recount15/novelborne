@@ -68,3 +68,35 @@ def test_chapter_start_route_and_start_revalidate_client_facts(book, monkeypatch
     response = client.post('/api/sessions/start', json={'book_id': 'demo', 'chapter_selection': {
         'chapter_no': 2, 'source_hash': 'stale'}})
     assert response.status_code == 409
+
+
+def test_anchors_report_unavailability_while_chapter_text_stays_readable(book, monkeypatch):
+    """F25：锚点缺失/损坏时如实标注 unavailable，原文仍可读，不伪造锚点内容。"""
+    monkeypatch.setattr(server, '_resolve_book_dir', lambda bid: book)
+    client = TestClient(server.app)
+    chapter = client.get('/api/books/demo/chapters/1')
+    assert chapter.status_code == 200
+    assert chapter.json()['chapter']['text'] == 'past fact'
+    missing = client.get('/api/books/demo/chapters/1/anchors')
+    assert missing.status_code == 200
+    body = missing.json()
+    assert body['status'] == 'unavailable'
+    assert body['anchor'] is None
+    assert body['characters'] == []
+    (book / 'anchors').mkdir()
+    (book / 'anchors' / '0001.json').write_text(
+        json.dumps({'characters': ['甲'], 'plot': '旧桥夜话'}), encoding='utf-8')
+    ready = client.get('/api/books/demo/chapters/1/anchors').json()
+    assert ready['status'] == 'ready'
+    assert ready['anchor']['plot'] == '旧桥夜话'
+    assert ready['characters'] == [{'name': '甲'}]
+    (book / 'anchors' / '0001.json').write_text('{broken', encoding='utf-8')
+    assert client.get('/api/books/demo/chapters/1/anchors').json()['status'] == 'unavailable'
+
+    # Window 准备模式下：如实返回透明诊断引导信息，告知锚点将在开局管线启动时生成
+    (book / 'anchors' / '0001.json').unlink()
+    (book / 'opening_ready.json').write_text(json.dumps({'mode': 'window'}), encoding='utf-8')
+    window_resp = client.get('/api/books/demo/chapters/1/anchors').json()
+    assert window_resp['status'] == 'unavailable'
+    assert '窗口快速准备模式' in window_resp['detail']
+    assert '开局管线' in window_resp['detail']

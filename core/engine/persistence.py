@@ -551,11 +551,14 @@ def save_metadata(save_id: str, root: Optional[PathLike] = None,
     try:
         with conn:
             _import_legacy_saves(root, conn)
+        # 与 save_state/load_state_strict 同一归一：latest 按会话隔离为
+        # latest-<会话前8位>；否则存档端点对默认 latest 的元数据查询落空。
+        safe_id = _scoped_save_id(save_id, session_id)
         query = f"SELECT {', '.join(_SAVE_META_KEYS)} FROM saves WHERE save_id=?"
-        args: tuple[Any, ...] = (save_id,)
+        args: tuple[Any, ...] = (safe_id,)
         if session_id:
             query += " AND session_id=?"
-            args = (save_id, session_id)
+            args = (safe_id, session_id)
         query += " ORDER BY saved_at DESC, rowid DESC LIMIT 1"
         row = conn.execute(query, args).fetchone()
     finally:

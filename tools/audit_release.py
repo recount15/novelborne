@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 import re
 import sys
 import tarfile
+import tempfile
 from typing import Iterable
 import zipfile
 
@@ -141,7 +142,7 @@ def _credential_content_rule(data: bytes) -> str | None:
         match = pattern.search(data)
         if match is None:
             continue
-        if index == 2 and match.group(1).strip().casefold() in _PLACEHOLDERS:
+        if index == 2 and match.group(1).strip().lower() in _PLACEHOLDERS:
             continue
         return "credential content"
     return None
@@ -288,24 +289,25 @@ def _read_tar_members(source: Path | io.BytesIO) -> Iterable[tuple[str, bytes | 
 
 def _read_7z_members(source: Path | io.BytesIO) -> Iterable[tuple[str, bytes | None]]:
     import py7zr
-    from py7zr.io import BytesIOFactory
 
     with py7zr.SevenZipFile(source, mode="r") as archive:
         infos = archive.list()
         declared_total = sum(info.uncompressed or 0 for info in infos if not info.is_directory)
         if declared_total > MAX_ARCHIVE_TOTAL_BYTES:
             raise ValueError("archive too large")
-        factory = BytesIOFactory(limit=MAX_ARCHIVE_TOTAL_BYTES)
-        archive.extractall(factory=factory)
-        for info in infos:
-            if info.is_directory:
-                yield info.filename, None
-            elif (info.uncompressed or 0) > MAX_ARCHIVE_MEMBER_BYTES:
-                raise ValueError("archive member too large")
-            else:
-                buffer = factory.get(info.filename)
-                buffer.seek(0)
-                yield info.filename, buffer.read()
+        # py7zr 1.x dropped the factory= extraction contract; a temp dir works
+        # across versions. Size caps above bound what can be extracted.
+        with tempfile.TemporaryDirectory() as workdir:
+            archive.extractall(path=workdir)
+            for info in infos:
+                if info.is_directory:
+                    yield info.filename, None
+                elif (info.uncompressed or 0) > MAX_ARCHIVE_MEMBER_BYTES:
+                    raise ValueError("archive member too large")
+                else:
+                    member = (Path(workdir) / info.filename).resolve()
+                    member.relative_to(Path(workdir).resolve())
+                    yield info.filename, member.read_bytes()
 
 
 def audit(root: Path) -> list[Finding]:

@@ -119,6 +119,111 @@ test('chat does not apply a late roster after unmount', async () => {
   assert.equal(panel.state.roster.value, null)
 })
 
+test('game view chat is fully usable without original-work roster fields', async () => {
+  const gameRoster = { status: 'ready', book_id: 'book-a', branch_id: 'branch-1', cutoff: null, characters: [{ character_id: 'char-a', card_revision: null, identity: { character_id: 'char-a' }, mode: 'game', grounding: 'partial_committed_branch', effective_state: { basis: 'committed_branch' } }] }
+  const gameThread = { thread_id: 'thread-game', scope: 'game', mode: 'game', status: 'ready', context: { cutoff: null, source_hash: null, identity: { character_id: 'char-a' }, card_revision: null }, messages: [] }
+  const rosterCalls = []
+  const created = []
+  const panel = mountSetup('../src/components/ReaderChatPanel.vue', { bookId: 'book-a', chapterNo: 2, view: 'game', sessionId: 'sess-1', credentials }, {
+    getReaderRoster: async (...args) => { rosterCalls.push(args); return gameRoster },
+    createReaderThread: async (_book, body) => { created.push(body); return gameThread },
+    getReaderThread: async () => gameThread,
+  })
+  try {
+    await flush()
+    assert.deepEqual(rosterCalls, [['book-a', 2, { view: 'game', sessionId: 'sess-1' }]])
+    assert.equal(panel.state.activeView.value, 'game')
+    // 本局花名册没有原著姓名：人物标签必须回退到稳定 ID，不得渲染 undefined。
+    assert.equal(panel.state.characterLabel(gameRoster.characters[0]), 'char-a')
+    assert.equal(panel.state.characterLabel({ character_id: 'x', card_revision: 1, identity: { name: '乙' }, mode: 'reader' }), '乙')
+    panel.state.selected.value = 'char-a'
+    await panel.state.openThread()
+    assert.equal(panel.state.thread.value.thread_id, 'thread-game')
+    // 本局线程没有 cutoff/卡片修订：创建请求不得携带原著边界字段。
+    assert.deepEqual(created, [{ character_id: 'char-a', chapter_no: 2, view: 'game', session_id: 'sess-1' }])
+    assert.equal(panel.state.threadName.value, 'char-a')
+    // 显式来源标识 + 有效愿望解释：本局与原著必须可区分，本局说明已生效愿望才算事实。
+    assert.match(panel.source, /本局访谈/)
+    assert.match(panel.source, /原著访谈|原著阅读/)
+    assert.match(panel.source, /已生效/)
+    assert.match(panel.source, /不.{0,6}当作原文|不得当作本局/)
+  } finally { panel.unmount() }
+})
+
+test('fast view switching reloads rosters per view and a late stale roster cannot cross views', async () => {
+  const gameRoster = { status: 'ready', book_id: 'book-a', branch_id: 'branch-1', cutoff: null, characters: [{ character_id: 'char-a', card_revision: null, identity: { character_id: 'char-a' }, mode: 'game', grounding: 'partial_committed_branch', effective_state: {} }] }
+  const slowOriginal = deferred()
+  const calls = []
+  const panel = mountSetup('../src/components/ReaderChatPanel.vue', { bookId: 'book-a', chapterNo: 2, view: 'original', sessionId: 'sess-1', credentials }, {
+    getReaderRoster: async (...args) => { calls.push(args); return calls.length === 1 ? slowOriginal.promise : Promise.resolve(gameRoster) },
+  })
+  try {
+    await flush()
+    assert.deepEqual(calls[0], ['book-a', 2, { view: 'original', sessionId: 'sess-1' }])
+    panel.state.switchView('game')
+    await flush()
+    await flush()
+    assert.equal(panel.state.activeView.value, 'game')
+    assert.deepEqual(calls[1], ['book-a', 2, { view: 'game', sessionId: 'sess-1' }])
+    assert.equal(panel.state.roster.value.branch_id, 'branch-1')
+    // 切视图重置选择与线程，避免把原著线程带进本局。
+    assert.equal(panel.state.selected.value, '')
+    assert.equal(panel.state.thread.value, null)
+  } finally {
+    // finally 里补结算悬挂请求：断言失败也释放组件内部的有界等待定时器。
+    slowOriginal.resolve({ status: 'ready', book_id: 'book-a', cutoff: { chapter_no: 2, offset: 9, source_hash: 'stale' }, characters: [] })
+    await flush()
+    assert.equal(panel.state.roster.value.branch_id, 'branch-1')
+    panel.unmount()
+  }
+})
+
+test('abstention replies settle busy state and surface a soft grounding hint', async () => {
+  const replyText = '截至阅读边界，已知资料不足以回答这个问题。'
+  const thread = { thread_id: 't1', mode: 'reader', status: 'ready', context: { cutoff: {}, source_hash: 'h', identity: { name: '甲' }, card_revision: 1 }, messages: [] }
+  const panel = mountSetup('../src/components/ReaderChatPanel.vue', { bookId: 'book-a', chapterNo: 1, credentials }, {
+    getReaderRoster: async () => ({ status: 'ready', book_id: 'book-a', cutoff: { chapter_no: 1, offset: 0, source_hash: 'h' }, characters: [] }),
+    getReaderThread: async () => ({ ...thread, messages: [{ message_id: 2, role: 'assistant', content: replyText }] }),
+    sendReaderMessage: async () => ({ reply: replyText, saved: true, grounding: 'abstention' }),
+    requestId: () => 'r1',
+  })
+  try {
+    await flush()
+    panel.state.thread.value = thread
+    panel.state.input.value = '这个问题原著里有答案吗'
+    await panel.state.send()
+    assert.equal(panel.state.busy.value, false)
+    assert.equal(panel.state.input.value, '')
+    assert.equal(panel.state.lastGrounding.value, 'abstention')
+    assert.match(panel.source, /soft-hint/)
+  } finally { panel.unmount() }
+})
+
+test('an unresponsive roster wait is bounded and releases busy instead of spinning forever', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const panel = mountSetup('../src/components/ReaderChatPanel.vue', { bookId: 'book-a', chapterNo: 1, credentials }, {
+    getReaderRoster: () => new Promise(() => {}),
+  })
+  try {
+    await flush()
+    assert.equal(panel.state.busy.value, true)
+    t.mock.timers.tick(46000)
+    await flush()
+    assert.equal(panel.state.busy.value, false)
+    assert.match(panel.state.error.value, /超时/)
+    assert.ok(panel.source.includes('REQUEST_BOUND_MS'))
+  } finally { panel.unmount(); t.mock.timers.reset() }
+})
+
+test('anchors panel reports the server unavailable status verbatim instead of fabricating certainty', () => {
+  const panelSource = readFileSync(new URL('../src/components/reader/ReaderAnchorsPanel.vue', import.meta.url), 'utf8')
+  assert.match(panelSource, /'unavailable'/)
+  assert.match(panelSource, /\{\{ detail/)
+  const modal = readFileSync(new URL('../src/components/OriginalReaderModal.vue', import.meta.url), 'utf8')
+  assert.match(modal, /:status="chapterInsight\?\.status"/)
+  assert.match(modal, /:detail="chapterInsight\?\.detail"/)
+})
+
 test('designer displays committed save feedback and retries read without saving again', async () => {
   let saves = 0
   let failRead = true

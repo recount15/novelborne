@@ -154,56 +154,72 @@ def merge_narrative(segments: Iterable[Dict[str, Any]]) -> str:
 
 def plan_chapters(text: str, target_chars: int = 2500,
                   max_chapters: Optional[int] = None) -> List[Dict[str, Any]]:
-    """按段落边界确定性切章；单段超长时按句号硬切，保证不产生巨型章节。"""
+    """按段落边界确定性切章；单段超长时按句号硬切，保证不产生巨型章节。
+
+    ``start_char``/``end_char`` 是原文绝对偏移，且始终对齐段落/硬切句块边界
+    （供重放与追溯上游切分使用），不是剥离空白后的伪偏移。
+    """
     if target_chars <= 0:
         raise ValueError("target_chars 必须为正数")
-    paragraphs = [p for p in re.split(r"\n\s*\n", text) if p.strip()]
-    units: List[str] = []
-    for para in paragraphs:
-        if len(para) <= target_chars:
-            units.append(para.strip())
+    # units: (abs_start, abs_end, stripped_text)；偏移随原文推进，含空白分隔符。
+    units: List[tuple[int, int, str]] = []
+    offset = 0
+    for part in re.split(r"(\n\s*\n)", text):
+        if part and re.fullmatch(r"\n\s*\n", part):
+            offset += len(part)
             continue
-        sentences = re.split(r"(?<=[。！？!?])", para)
-        buf = ""
-        for sentence in sentences:
-            if buf and len(buf) + len(sentence) > target_chars:
-                units.append(buf.strip())
-                buf = sentence
-            else:
-                buf += sentence
-        if buf.strip():
-            units.append(buf.strip())
+        para = part.strip()
+        if not para:
+            offset += len(part)
+            continue
+        if len(para) <= target_chars:
+            units.append((offset, offset + len(part), para))
+        else:
+            sentences = re.split(r"(?<=[。！？!?])", part)
+            base = offset
+            pos = 0
+            buf = ""
+            buf_start = 0
+            for sentence in sentences:
+                if buf and len(buf) + len(sentence) > target_chars:
+                    units.append((base + buf_start, base + pos, buf.strip()))
+                    buf = sentence
+                    buf_start = pos
+                else:
+                    if not buf:
+                        buf_start = pos
+                    buf += sentence
+                pos += len(sentence)
+            if buf.strip():
+                units.append((base + buf_start, base + pos, buf.strip()))
+        offset += len(part)
 
     chapters: List[Dict[str, Any]] = []
-    buf: List[str] = []
+    buf: List[tuple[int, int, str]] = []
     buf_chars = 0
-    cursor = 0
-    start = 0
 
     def flush() -> None:
-        nonlocal buf, buf_chars, start
+        nonlocal buf, buf_chars
         if not buf:
             return
-        body = "\n\n".join(buf)
+        body = "\n\n".join(unit[2] for unit in buf)
         idx = len(chapters) + 1
         chapters.append({
             "idx": idx,
             "title": "第%d章" % idx,
-            "start_char": start,
-            "end_char": cursor,
+            "start_char": buf[0][0],
+            "end_char": buf[-1][1],
             "chars": len(body),
             "text": body,
         })
         buf = []
         buf_chars = 0
-        start = cursor
 
     for unit in units:
-        if buf and buf_chars + len(unit) > target_chars:
+        if buf and buf_chars + len(unit[2]) > target_chars:
             flush()
         buf.append(unit)
-        buf_chars += len(unit)
-        cursor += len(unit)
+        buf_chars += len(unit[2])
     flush()
 
     if max_chapters and len(chapters) > max_chapters:
@@ -269,15 +285,23 @@ def iter_pipeline(chapters: Iterable[Dict[str, Any]],
         for stage in ("plot", "style", "final_polish"):
             prompt = builders[stage](draft)
             output = model(prompt) if model is not None else None
-            yield {
+            record: Dict[str, Any] = {
                 "chapter_idx": chapter.get("idx"),
                 "chapter_title": chapter.get("title"),
                 "stage": stage,
                 "prompt": prompt,
-                "output": output,
+                "output": None,
             }
             if output is not None:
-                draft = str(output)
+                text_out = str(output).strip()
+                if text_out:
+                    record["output"] = text_out
+                    draft = text_out
+                else:
+                    # 阶段返回空文本视为该阶段失败：保留前一稿（忠实版本），
+                    # 不用空稿续写或模板填充凑成功（计划 §3.4）。
+                    record["fallback"] = "empty_output"
+            yield record
 
 
 def build_export_manifest(source_meta: Optional[Dict[str, Any]] = None,
@@ -347,14 +371,19 @@ def export_novel(source: Union[str, Path, Dict, List],
                  target_chars: int = 2500,
                  context: str = "",
                  source_meta: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """一站式便捷入口：抽取→切章→三遍→成稿。model=None 时 text 为 None。"""
-    segments = extract_narrative(source)
+    """一站式便捷入口：抽取→切章→三遍→成稿。model=None 时 text 为 None。
+
+    未显式传 ``source_meta`` 时使用 prepare_source 的真值元数据（来源类别、
+    迁移不确定、完整性等），导出清单不得丢失来源引用。
+    """
+    segments, meta, _continuity = prepare_source(source)
     if not segments:
         raise ValueError("未从存档中抽取到任何叙事片段")
     chapters = plan_chapters(merge_narrative(segments), target_chars=target_chars)
     records = list(iter_pipeline(chapters, model=model, style=style, context=context))
     text = assemble(records) if model is not None else None
-    manifest = build_export_manifest(source_meta, chapters, style, model_used=model is not None)
+    manifest = build_export_manifest(source_meta if source_meta is not None else meta,
+                                     chapters, style, model_used=model is not None)
     return {"manifest": manifest, "records": records, "text": text}
 
 

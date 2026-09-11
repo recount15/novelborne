@@ -18,6 +18,7 @@ import re
 from typing import Any, Mapping
 
 from .ripple import difficulty_number
+from .task_acceptance import window_hit_clean
 
 # 任务档位：档位名 -> (最短时限, 最长时限)，单位均为回合。
 QUEST_KINDS: dict[str, tuple[int, int]] = {
@@ -170,13 +171,15 @@ def quest_context_block(state: Mapping[str, Any] | None,
 def requirement_hits(box: Mapping[str, Any] | None, text: str) -> int:
     """本地规则：完成条件/goal 与正文的重合条数（4 字滑窗精确匹配）。
 
-    每条条件清洗标点后取全部 4 字连续窗口，任一窗口出现在正文（同样清洗
-    标点空白）即记 1 命中；短于 4 字的条件整体作为匹配串。不做分词，避免
+    每条条件清洗标点后取全部 4 字连续窗口，任一窗口在正文（同样清洗
+    标点空白）中有「干净」出现即记 1 命中；短于 4 字的条件整体作为匹配串。
+    C06：干净出现排除了否定/计划/尝试/疑问语境（「没有找到钥匙」「我准备
+    找到钥匙」不算命中），判定规则与 task_acceptance 同源。不做分词，避免
     引入分词器依赖与误切；用于「模型判定 completed 但证据非逐字引文」时的
     佐证核验（≥2 条命中才采信），宁缺毋滥。
     """
     box = box if isinstance(box, Mapping) else {}
-    blob = _STRIP_RE.sub("", str(text or ""))
+    blob = _STRIP_RE.sub("", str(text or "")).lower()
     if not blob:
         return 0
     hits = 0
@@ -185,14 +188,14 @@ def requirement_hits(box: Mapping[str, Any] | None, text: str) -> int:
     if goal:
         conditions.append(goal)
     for cond in conditions:
-        phrase = _STRIP_RE.sub("", cond)
+        phrase = _STRIP_RE.sub("", str(cond)).lower()
         if not phrase:
             continue
         if len(phrase) >= 4:
-            windows = [phrase[i:i + 4] for i in range(len(phrase) - 3)]
+            windows = [(i, phrase[i:i + 4]) for i in range(len(phrase) - 3)]
         else:
-            windows = [phrase]
-        if any(w in blob for w in windows):
+            windows = [(0, phrase)]
+        if any(window_hit_clean(blob, window, offset) for offset, window in windows):
             hits += 1
     return hits
 

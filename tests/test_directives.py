@@ -66,11 +66,20 @@ class TestParseRegistration(unittest.TestCase):
         self.assertNotIn("不存在的势力", entry["affected"])
         self.assertIn("北墙", entry["affected"])
 
-    def test_all_affected_dropped_falls_back_to_wildcard(self):
-        entry, _ = directives.parse_registration(
+    def test_all_affected_dropped_marks_unresolved_not_wildcard(self):
+        # C02：白名单外目标被全剔后按未解析登记（原文保留在 removed_affected），
+        # 绝不静默扩大为全局铁律——全局范围只有玩家原话明确全局才可能授予。
+        entry, notes = directives.parse_registration(
             good_payload(affected=["幽灵城", "虚构国"]), allowed=["北墙"])
         self.assertIsNotNone(entry)
-        self.assertEqual(entry["affected"], [directives.WILDCARD])
+        self.assertEqual(entry["affected"], [])
+        self.assertTrue(entry["targets_unresolved"])
+        self.assertEqual(entry["removed_affected"], ["幽灵城", "虚构国"])
+        self.assertNotIn(directives.WILDCARD, entry["affected"])
+        state: dict = {}
+        row = directives.register(state, entry, kind="wish")
+        self.assertEqual(row["affected"], [])
+        self.assertTrue(row["targets_unresolved"])
 
     def test_empty_allowed_skips_whitelist(self):
         entry, errors = directives.parse_registration(
@@ -119,14 +128,30 @@ class TestRegisterAndLedger(unittest.TestCase):
         ids = {directives.register(state, entry, kind="wish")["id"] for _ in range(4)}
         self.assertEqual(len(ids), 4)
 
-    def test_mark_superseded_on_overlapping_affected(self):
+    def test_overlapping_affected_coexist_without_explicit_conflict(self):
+        # C02：affected 重叠不再是取代理由——同对象两个独立愿望必须共存。
         state: dict = {}
         first, _ = directives.parse_registration(
             good_payload(fact_norm="北墙由旧部把守"), allowed=())
         old = directives.register(state, first, kind="wish")
         second, _ = directives.parse_registration(
             good_payload(fact_norm="北墙已被彻底封死"), allowed=())
-        # register 内部已做取代仲裁，这里直接验账本状态（不重复调用）。
+        new = directives.register(state, second, kind="wish")
+        rows = {row["id"]: row for row in directives.directives(state)}
+        self.assertEqual(rows[old["id"]]["superseded_by"], 0)
+        active = [row["id"] for row in directives.active_directives(state)]
+        self.assertIn(old["id"], active)
+        self.assertIn(new["id"], active)
+
+    def test_mark_superseded_only_on_explicit_conflict_reference(self):
+        # 显式点名 = conflicts 项等于旧 id 或为旧 fact_norm 子串。
+        state: dict = {}
+        first, _ = directives.parse_registration(
+            good_payload(fact_norm="北墙由旧部把守"), allowed=())
+        old = directives.register(state, first, kind="wish")
+        second, _ = directives.parse_registration(
+            good_payload(fact_norm="北墙已被彻底封死",
+                         conflicts=["北墙由旧部把守"]), allowed=())
         new = directives.register(state, second, kind="wish")
         rows = {row["id"]: row for row in directives.directives(state)}
         self.assertEqual(rows[old["id"]]["superseded_by"], new["id"])
@@ -180,9 +205,11 @@ class TestSelectRelevant(unittest.TestCase):
         self.assertTrue(any(row["fact_norm"] == "世界规则整体改写" for row in hits))
 
     def test_superseded_excluded_from_selection(self):
-        # 登记一条 affected 重叠的新铁律 → 旧条目被取代 → 注入时只出现新条目。
+        # C02：新条目 conflicts 显式点名旧条目 fact_norm → 旧条目被取代，
+        # 注入时只出现新条目（取代只能由显式冲突触发，见 TestRegisterAndLedger）。
         newer, _ = directives.parse_registration(
-            good_payload(fact_norm="北墙暗渠已被彻底封死", affected=["北墙"]),
+            good_payload(fact_norm="北墙暗渠已被彻底封死", affected=["北墙"],
+                         conflicts=["北墙裂痕后有暗渠"]),
             allowed=())
         directives.register(self.state, newer, kind="wish")
         facts = [row["fact_norm"]

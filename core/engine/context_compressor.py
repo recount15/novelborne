@@ -11,6 +11,9 @@ import json
 from copy import deepcopy
 from typing import Any, Mapping, Sequence
 
+from core.engine import fact_contract
+from core.engine.directives import active_directives
+
 COMPRESS_INTERVAL = 10
 KEEP_TAIL = 4
 SUMMARY_PREFIX = "[接手摘要] "
@@ -65,6 +68,29 @@ def build_handoff(state: Mapping[str, Any]) -> dict:
     ripples = state.get("ripples") or ledger.get("ripples") or []
     ledger_summary["recent_ripples"] = [deepcopy(r) for r in ripples[-3:]]
 
+    # 来源引用传播（C09）：生效授权与未确认/来源不明指令分别携带，
+    # 摘要不得丢失授权，也不得把猜测写成事实。
+    wish_authorizations: list[dict[str, Any]] = []
+    uncertain_directives: list[dict[str, Any]] = []
+    for row in active_directives(state):
+        view = fact_contract.classify_directive_row(row)
+        record = fact_contract.wish_authorization_of(row)
+        if view.kind == fact_contract.KIND_AUTHORIZED and record is not None:
+            wish_authorizations.append({
+                "authorization_id": record.authorization_id,
+                "origin": record.authorized_origin,
+                "status": record.status,
+                "raw_text": record.raw_text[:200],
+                "interpretation": record.accepted_interpretation[:200],
+                "targets": list(record.target_ids),
+            })
+        else:
+            uncertain_directives.append({
+                "kind": view.kind,
+                "fact_norm": str(row.get("fact_norm") or "")[:200],
+                "note": view.note,
+            })
+
     character_states = {
         "relationships": deepcopy(memory.get("relationships") or {}),
         "goals": deepcopy(memory.get("goals") or {}),
@@ -85,6 +111,8 @@ def build_handoff(state: Mapping[str, Any]) -> dict:
         },
         "character_states": character_states,
         "ledger_summary": ledger_summary,
+        "wish_authorizations": wish_authorizations,
+        "uncertain_directives": uncertain_directives,
         "quest": deepcopy(state.get("quest")),  # engine.quest 接口预留
         "convergence": deepcopy(state.get("convergence_state", state.get("convergence"))),
     }
@@ -99,7 +127,11 @@ def handoff_prompt(handoff: Mapping[str, Any]) -> str:
         "1. 每个锚点标题（past/current/upcoming）都必须原样出现；\n"
         "2. 主要角色（伙伴/女主/宿敌）的名字与其当前状态事实必须保留，不得捏造；\n"
         "3. 若 quest 存在，其目标必须原样保留；\n"
-        "4. 只依据接手包内容，不得补写不存在的事实。\n\n"
+        "4. 只依据接手包内容，不得补写不存在的事实；\n"
+        "5. wish_authorizations 中已生效的玩家授权（愿望）必须原样保留：解释文本不得"
+        "改写或扩大，并标注为玩家授权设定，不得当作原著事实；\n"
+        "6. uncertain_directives 是未确认猜测或来源不明的旧设定：摘要若提及，必须保留"
+        "其不确定表述（如“疑似”“怀疑”），不得写成已确认事实。\n\n"
         f"【接手包】\n{payload}"
     )
 
@@ -168,6 +200,12 @@ def fidelity_check(before_state: Mapping[str, Any], new_history: Sequence[Mappin
                 if name:
                     required.append(name)
     required.extend(_quest_facts(handoff.get("quest")))
+    # 生效授权是玩家凭据：摘要丢失授权即保真失败（C09 授权跨摘要不丢失）。
+    for item in handoff.get("wish_authorizations") or ():
+        if isinstance(item, Mapping):
+            text = str(item.get("interpretation") or item.get("raw_text") or "").strip()
+            if text:
+                required.append(text)
 
     missing = [fact for fact in dict.fromkeys(required) if fact not in haystack]
     return {"ok": not missing, "missing": missing}

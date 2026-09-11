@@ -59,13 +59,25 @@ def _make_state(book_dir) -> dict:
     }
 
 
+def _real_library_digest() -> str | None:
+    """V00 隔离只放行 asset_gate._sha256 帧读取真实作品库；前后快照走同一函数。"""
+    if not _REAL_LIBRARY.is_file():
+        return None
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "asset_gate_for_opening_test", _REAL_LIBRARY.parents[2] / "build" / "asset_gate.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module._sha256(_REAL_LIBRARY)
+
+
 class TestOpeningService(unittest.TestCase):
     def setUp(self):
         self.book_dir = make_book_dir()
         self.library_path = make_library_path()
         self.saved_cards: list = []
-        self.real_library_before = (
-            _REAL_LIBRARY.read_text(encoding="utf-8") if _REAL_LIBRARY.is_file() else None)
+        self.real_library_before = _real_library_digest()
 
     def tearDown(self):
         import shutil
@@ -73,8 +85,7 @@ class TestOpeningService(unittest.TestCase):
         shutil.rmtree(self.library_path.parent, ignore_errors=True)
         # 铁律：真实作品库一个字节都不能动。
         if self.real_library_before is not None:
-            self.assertEqual(self.real_library_before,
-                             _REAL_LIBRARY.read_text(encoding="utf-8"))
+            self.assertEqual(self.real_library_before, _real_library_digest())
 
     def _saver(self, cards):
         self.saved_cards.extend(cards)

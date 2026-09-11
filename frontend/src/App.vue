@@ -461,7 +461,8 @@ async function showUpload(): Promise<void> {
   input?.focus({ preventScroll: true })
 }
 type ChapterStartIntent = { book_id: string; chapter_no: number; source_hash: string; scene_selection: StartPayload['scene_selection'] }
-const readerChatTarget = ref<{ bookId: string; chapterNo: number } | null>(null)
+// C08：readerChatTarget.view 显式区分原著域（original）与本局分支（game）访谈。
+const readerChatTarget = ref<{ bookId: string; chapterNo: number; view?: 'original' | 'game' } | null>(null)
 const readerStartIntent = ref<ChapterStartIntent | null>(null)
 const readerIntentBusy = ref(false)
 const readerIntentError = ref('')
@@ -474,7 +475,7 @@ async function onReaderStart(target: { bookId: string; chapterNo: number }): Pro
   } catch (cause) { readerIntentError.value = cause instanceof Error ? cause.message : '章节开局定位失败' }
   finally { readerIntentBusy.value = false }
 }
-function onReaderChat(target: { bookId: string; chapterNo: number }): void {
+function onReaderChat(target: { bookId: string; chapterNo: number; view?: 'original' | 'game' }): void {
   readerChatTarget.value = target
 }
 async function confirmReaderStart(): Promise<void> {
@@ -1249,11 +1250,43 @@ function arrayOfRecords(value: unknown): Record<string, unknown>[] {
     : []
 }
 
+const enumZh: Record<string, string> = {
+  inactive: '未激活', active: '已激活', ready: '可用', cooldown: '冷却中',
+  pending: '待定', running: '进行中', done: '已完成', failed: '失败',
+  cancelled: '已取消', unknown: '未知', none: '无', normal: '正常'
+}
+const keyZh: Record<string, string> = {
+  name: '名称', status: '状态', cooldown: '冷却', cost: '代价', costs: '代价',
+  scope: '作用域', tier: '层级', type: '类型', level: '等级', count: '数量',
+  description: '说明', desc: '说明', title: '标题', label: '标签', value: '数值',
+  progress: '进度', round: '回合', chapter: '章节', gender: '性别', age: '年龄',
+  condition: '状况', fatigue: '疲劳', date: '日期', clock: '时刻',
+  blocked_for_others: '他人禁用', revision: '修订'
+}
+
+function zhKey(key: string): string {
+  return keyZh[key.toLowerCase()] ?? key
+}
+
 function text(value: unknown, fallback: unknown = '未记录'): string {
   if (value === null || value === undefined || value === '') return String(fallback)
-  if (typeof value === 'string') return value
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return enumZh[trimmed.toLowerCase()] ?? trimmed
+  }
   if (typeof value === 'number' || typeof value === 'boolean') return String(value)
-  return JSON.stringify(value, null, 2)
+  if (Array.isArray(value)) {
+    const items = value.map(item => text(item, '')).filter(Boolean)
+    return items.length ? items.join('、') : String(fallback)
+  }
+  if (typeof value === 'object') {
+    const parts = Object.entries(value as Record<string, unknown>)
+      .filter(([, item]) => item !== null && item !== undefined && item !== ''
+        && !(Array.isArray(item) && item.length === 0))
+      .map(([key, item]) => `${zhKey(key)}：${text(item, '')}`)
+    return parts.length ? parts.join('；') : String(fallback)
+  }
+  return String(value)
 }
 
 function newRosterEntry(role: RosterRole): EditableRosterEntry {
@@ -3823,13 +3856,13 @@ watch([compressionRecord, round], () => {
     <CharacterDossier v-if="dossierOpen" :card-id="dossierCardId" @close="dossierOpen = false" @create="openCharacterDesigner" />
     <OriginalReaderModal v-if="readerOpen" :key="readerInitialBookId ?? 'reader-library'" :initial-book-id="readerInitialBookId" @close="readerOpen = false; readerIntentError = ''" @start-from-chapter="onReaderStart" @chat-with-character="onReaderChat" />
     <div v-if="readerIntentError || readerIntentBusy" class="reader-intent-status" role="alert">{{ readerIntentBusy ? '正在核验章节开局边界…' : readerIntentError }}<button v-if="!readerIntentBusy" @click="readerIntentError = ''">关闭提示</button></div>
-    <ReaderChatPanel v-if="readerChatTarget" :key="`${readerChatTarget.bookId}:${readerChatTarget.chapterNo}`" :book-id="readerChatTarget.bookId" :chapter-no="readerChatTarget.chapterNo" :credentials="modelCredentials" @close="readerChatTarget = null" />
+    <ReaderChatPanel v-if="readerChatTarget" :key="`${readerChatTarget.bookId}:${readerChatTarget.chapterNo}:${readerChatTarget.view || 'original'}`" :book-id="readerChatTarget.bookId" :chapter-no="readerChatTarget.chapterNo" :view="readerChatTarget.view || 'original'" :session-id="sessionId" :credentials="modelCredentials" @close="readerChatTarget = null" />
     <div v-if="readerStartIntent" class="reader-start-backdrop" @click.self="!busy && !startWorkflowBusy && (readerStartIntent = null)">
       <section class="reader-start-dialog" role="dialog" aria-modal="true" aria-labelledby="reader-start-title">
         <p class="text-(--fe-ink-3)">原著章节开局</p><h2 id="reader-start-title">从第 {{ readerStartIntent.chapter_no }} 章出发</h2>
         <p>已核验章节边界。开始前，当前游戏和阅读记录保持不变；点击下方按钮并确认后才创建新会话。</p>
         <p>将沿用当前模型、人物和难度设置；如需调整，请先返回配置。</p>
-        <details><summary>来源与知识边界</summary><p>{{ readerStartIntent.book_id }} · 第 {{ readerStartIntent.chapter_no }} 章</p><p class="break-all">{{ readerStartIntent.source_hash }}</p><pre>{{ JSON.stringify(readerStartIntent.scene_selection?.knowledge_cutoff, null, 2) }}</pre></details>
+        <details><summary>来源与知识边界</summary><p>{{ readerStartIntent.book_id }} · 第 {{ readerStartIntent.chapter_no }} 章</p><p class="break-all">{{ readerStartIntent.source_hash }}</p><p>{{ text(readerStartIntent.scene_selection?.knowledge_cutoff, '未记录') }}</p></details>
         <p v-if="error" role="alert">{{ error }}</p>
         <p v-if="startWorkflowBusy && !busy" role="status">完整人物准备中，尚未创建会话。<button @click="cancelPendingStart">停止等待开局</button></p>
         <footer><button :disabled="busy || startWorkflowBusy" @click="readerStartIntent = null">返回，保留当前游戏</button><button :disabled="busy || startWorkflowBusy || !form.model" @click="confirmReaderStart">{{ busy ? '正在创建新会话…' : startWorkflowBusy ? '等待完整人物准备…' : '确认并开始新游戏' }}</button></footer>

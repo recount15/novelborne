@@ -48,6 +48,17 @@ class ToolRegistryTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("不可用", str(payload))
 
+    def test_game_mutations_require_endpoint_injected_actions(self):
+        """C07 动作边界：会改动对局/产物的工具必须走端点注入闭包；注册表没有直接写状态、结算任务、编造叙事或访谈库的入口。"""
+        for name in ("save_game", "load_save", "create_preparation_job",
+                     "autoplay_choice", "quest_accept", "quest_decline", "export_novel"):
+            ok, payload = cs.TOOLS[name]["run"]({}, {})
+            self.assertFalse(ok, name)
+            self.assertIn("不可用", str(payload))
+        for forbidden in ("settle_quest", "write_narrative", "grant_reward", "set_state",
+                          "update_quest", "reader_chat", "grant_wish"):
+            self.assertNotIn(forbidden, cs.TOOLS)
+
     def test_injected_action_bad_args_reports_error(self):
         def _save(save_id: str = "latest"):
             return {"saved": True}
@@ -189,8 +200,12 @@ class HandleChatLoopTests(unittest.TestCase):
         self.assertIn("未知工具", str(out["actions"][0]["result"]))
 
     def test_step_limit_produces_fallback_answer(self):
+        # 步数用尽后必须追加一次“禁用工具”的收尾合成调用：回答是模型的
+        # 最终整理结果，而不是旧版罐头结束语。
         key = _fake_key()
-        client = self._fake_client(['{"tool": "list_entries", "args": {}}'] * cs.MAX_STEPS)
+        client = self._fake_client(
+            ['{"tool": "list_entries", "args": {}}'] * cs.MAX_STEPS
+            + ["以上是全部功能入口的汇总说明。"])
         with mock.patch.object(cs.fe, "make_client", return_value=client):
             out = cs.handle_chat(
                 [{"role": "user", "content": "入口"}],
@@ -198,7 +213,37 @@ class HandleChatLoopTests(unittest.TestCase):
                 api_key=key, model="m",
             )
         self.assertEqual(len(out["actions"]), cs.MAX_STEPS)
-        self.assertIn("步数上限", out["answer"])
+        self.assertEqual(out["answer"], "以上是全部功能入口的汇总说明。")
+        # 收尾合成指令已注入：最后一次调用携带禁用工具的系统消息。
+        self.assertIn("不要再输出工具调用", client.chat.completions.calls[-1]["messages"][-1]["content"])
+
+    def test_call_model_uses_full_token_budget(self):
+        # 900 tokens 会截断长回答；模型调用必须申请完整输出预算。
+        key = _fake_key()
+        client = self._fake_client(["好的。"])
+        with mock.patch.object(cs.fe, "make_client", return_value=client):
+            cs.handle_chat(
+                [{"role": "user", "content": "你好"}],
+                ctx={}, provider="openai", base_url=None,
+                api_key=key, model="m",
+            )
+        self.assertEqual(client.chat.completions.calls[0]["max_tokens"], 4096)
+
+    def test_busy_note_reaches_system_prompt(self):
+        # 会话锁占用的降级模式：busy_note 必须进入系统提示，回答照常返回。
+        key = _fake_key()
+        client = self._fake_client(["当前处于繁忙降级模式，稍后再试操作。"])
+        with mock.patch.object(cs.fe, "make_client", return_value=client):
+            out = cs.handle_chat(
+                [{"role": "user", "content": "帮我存档"}],
+                ctx={}, provider="openai", base_url=None,
+                api_key=key, model="m",
+                busy_note="【降级模式】当前会话正在处理另一个请求。",
+            )
+        first_call = client.chat.completions.calls[0]
+        self.assertIn("【降级模式】当前会话正在处理另一个请求。",
+                      first_call["messages"][0]["content"])
+        self.assertEqual(out["answer"], "当前处于繁忙降级模式，稍后再试操作。")
 
     def test_history_only_user_assistant_and_scrubbed(self):
         key = _fake_key()
